@@ -88,7 +88,21 @@ async function apply({ reason = 'manual' } = {}) {
   state.applying = true;
   try {
     log.info(`Installing update (${reason})...`);
-    await git(['pull', '--ff-only'], 180000);
+    try {
+      await git(['pull', '--ff-only'], 180000);
+    } catch (err) {
+      // A fast-forward is impossible when the GitHub branch's history was rebuilt
+      // (e.g. an amended/squashed release), or local tracked files drifted. Match the
+      // GitHub branch exactly instead — config.json and data/ are gitignored, so nothing
+      // the user set in the panel is lost. This mirrors what update.bat does.
+      if (/fast-forward|diverge|non-fast-forward|rejected|unrelated histories/i.test(err.message)) {
+        log.warn(`Fast-forward not possible (${err.message}); resetting to the GitHub branch.`);
+        await git(['fetch', '--quiet'], 180000);
+        await git(['reset', '--hard', '@{u}'], 180000);
+      } else {
+        throw err;
+      }
+    }
     await new Promise((resolve, reject) =>
       require('child_process').exec('npm install --omit=dev --no-audit --no-fund', { cwd, timeout: 600000, windowsHide: true }, (err, _o, stderr) =>
         err ? reject(new Error(`npm install failed: ${(stderr || err.message).trim().split('\n').pop()}`)) : resolve()
