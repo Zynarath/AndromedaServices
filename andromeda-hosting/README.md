@@ -9,7 +9,7 @@ There are no monthly hosting fees; your only cost is electricity.
 
 | Game | What the panel does |
 |---|---|
-| **ARK: Survival Ascended** (Windows) | Installs/updates via SteamCMD, CurseForge mod list (search + IDs; the server auto-downloads mods on start), map/cluster/crossplay options, INI settings form, RCON console, player list |
+| **ARK: Survival Ascended** (Windows) | Installs/updates via SteamCMD, CurseForge mod list (search + IDs; the server auto-downloads mods on start), map/cluster/crossplay options, 260+ server settings in the panel (rates, XP, breeding, structures, tribes, transfers, per-level stats, events, launch flags) plus extra INI lines for engram/item/spawn overrides, RCON console, player list |
 | **Minecraft — CurseForge modpack** | Search CurseForge, pick a version, one-click install. Uses the pack's official server files when available, otherwise builds the server from the manifest. One-click **update / downgrade** with automatic backup that keeps worlds, `server.properties`, ops and whitelist |
 | **Minecraft — Vanilla / Fabric / Forge / NeoForge** | Any version + loader, add individual CurseForge mods, enable/disable mods, change versions later |
 | **Call of Duty: CoD4x, IW4x (MW2), Plutonium BO2 / BO1 / MW3** (Windows; CoD4x also Linux) | Multiplayer with bots (Bot Warfare), Domination with every base map shuffled, 4x player and weapon XP by default, RCON console, live player/bot counts. Uses your own game install. See [docs/call-of-duty.md](docs/call-of-duty.md) |

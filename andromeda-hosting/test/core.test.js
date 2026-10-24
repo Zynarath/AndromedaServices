@@ -192,6 +192,66 @@ test('ARK: Evolved launch arguments and INI', async () => {
   assert.match(gus, /ServerAdminPassword=\w{14}/);
 });
 
+test('ARK: expanded settings, launch options and extra INI lines', async () => {
+  const ark = require('../src/games/ark');
+  const server = { id: 'a2', name: 'Rex', game: 'ark', dir: path.join(tmp, 'ark2'), ark: ark.defaults({ name: 'Rex', ark: { edition: 'ase' } }) };
+  const exe = ark.exePath(server);
+  if (!exe) return;
+  fs.mkdirSync(path.dirname(exe), { recursive: true });
+  fs.writeFileSync(exe, '');
+  const cfg = path.join(server.dir, 'ShooterGame/Saved/Config', process.platform === 'win32' ? 'WindowsServer' : 'LinuxServer');
+  const read = (f) => fs.readFileSync(path.join(cfg, f), 'utf8');
+
+  // Never-set switches show ARK's default.
+  const before = ark.readSettings(server);
+  assert.equal(before['ini.AllowHitMarkers'], true);
+  assert.equal(before['ini.ServerPVE'], false);
+
+  ark.writeSettings(server, {
+    'ini.PerLevelStatsMultiplier_Player[7]': 2,
+    'ini.bAllowSpeedLeveling': true,
+    'ini.MaxTributeDinos': 40,
+    'launch.forceAllowCaveFlyers': true,
+    'launch.activeEvent': 'WinterWonderland',
+    'launch.altSaveDir': 'Rag2',
+    'extra.game': 'ConfigOverrideItemMaxQuantity=(ItemClassString="PrimalItemResource_Stone_C",Quantity=(MaxItemQuantity=1000,bIgnoreMultiplier=true))\nConfigOverrideItemMaxQuantity=(ItemClassString="PrimalItemResource_Wood_C",Quantity=(MaxItemQuantity=1000,bIgnoreMultiplier=true))',
+  }, { admin: true });
+  const launch = await ark.buildLaunch(server);
+  assert.match(launch.args[0], /\?AltSaveDirectoryName=Rag2$/);
+  assert.ok(launch.args.includes('-ForceAllowCaveFlyers'));
+  assert.ok(launch.args.includes('-ActiveEvent=WinterWonderland'));
+  let game = read('Game.ini');
+  assert.match(game, /PerLevelStatsMultiplier_Player\[7\]=2/);
+  assert.match(game, /bAllowSpeedLeveling=True/);
+  assert.equal(game.match(/ConfigOverrideItemMaxQuantity=/g).length, 2);
+  assert.match(read('GameUserSettings.ini'), /MaxTributeDinos=40/);
+
+  // Deleting a line from the box and clearing a field remove them from the files.
+  ark.writeSettings(server, {
+    'ini.MaxTributeDinos': '',
+    'extra.game': 'ConfigOverrideItemMaxQuantity=(ItemClassString="PrimalItemResource_Wood_C",Quantity=(MaxItemQuantity=1000,bIgnoreMultiplier=true))',
+  }, { admin: true });
+  await ark.buildLaunch(server);
+  game = read('Game.ini');
+  assert.equal(game.match(/ConfigOverrideItemMaxQuantity=/g).length, 1);
+  assert.match(game, /Wood_C/);
+  assert.doesNotMatch(read('GameUserSettings.ini'), /MaxTributeDinos/);
+  assert.equal(ark.readSettings(server)['ini.MaxTributeDinos'], '');
+
+  // Bad values are rejected without changing anything.
+  assert.throws(() => ark.writeSettings(server, { 'launch.maxPlayers': 50, 'launch.activeEvent': 'x -bad' }, { admin: true }), /not a valid value/);
+  assert.equal(server.ark.maxPlayers, 20);
+  assert.throws(() => ark.writeSettings(server, { 'extra.gus': 'RCONPort=1' }, { admin: true }), /set by the panel/);
+  assert.throws(() => ark.writeSettings(server, { 'extra.gus': 'just some text' }, { admin: true }), /Key=Value/);
+
+  // Schema: edition-only fields are filtered, every section has fields.
+  const schema = ark.settingsSchema(server);
+  const keys = schema.sections.flatMap((s) => s.fields.map((f) => f.key));
+  assert.ok(!keys.includes('launch.pcOnly'));
+  assert.ok(keys.includes('ini.PerLevelStatsMultiplier_DinoWild[0]'));
+  assert.equal(new Set(keys).size, keys.length);
+});
+
 test('password hashing', () => {
   const h = auth.hashPassword('correct horse');
   assert.ok(auth.verifyPassword('correct horse', h));

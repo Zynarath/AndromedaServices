@@ -57,10 +57,31 @@ class Ini {
       if (line) s.lines = s.lines.filter((l) => l !== line);
       return;
     }
-    // Strip newlines so a value can't inject extra INI lines/sections.
-    const clean = String(value).replace(/[\r\n]+/g, ' ');
+    const clean = Ini.clean(value);
     if (line) line.value = clean;
     else s.lines.push({ key, value: clean });
+  }
+
+  // Repeated keys (OverrideNamedEngramEntries, ConfigOverrideItemMaxQuantity, ...).
+  getAll(section, key) {
+    const s = this.section(section);
+    const lower = key.toLowerCase();
+    return s ? s.lines.filter((l) => l.key && l.key.toLowerCase() === lower).map((l) => l.value) : [];
+  }
+
+  removeAll(section, key) {
+    const s = this.section(section);
+    const lower = key.toLowerCase();
+    if (s) s.lines = s.lines.filter((l) => !(l.key && l.key.toLowerCase() === lower));
+  }
+
+  add(section, key, value) {
+    this.section(section, true).lines.push({ key, value: Ini.clean(value) });
+  }
+
+  // Strip newlines so a value can't inject extra INI lines/sections.
+  static clean(value) {
+    return String(value).replace(/[\r\n]+/g, ' ');
   }
 
   toString() {

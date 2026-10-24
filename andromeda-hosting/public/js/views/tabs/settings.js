@@ -4,8 +4,9 @@ import { html, $, icon, toast, confirmBox, modal } from '../../ui.js';
 function field(f, value) {
   const id = 'f-' + f.key.replace(/\W/g, '_');
   const hint = f.hint ? html`<small class="hint">${f.hint}</small>` : '';
+  const tip = f.tip ? html`title="${f.tip}"` : '';
   if (f.type === 'bool') {
-    return html`<label class="switch field-switch"><input type="checkbox" name="${f.key}" ${value ? 'checked' : ''}><span></span>${f.label}${hint}</label>`;
+    return html`<label class="switch field-switch" ${tip}><input type="checkbox" name="${f.key}" ${value ? 'checked' : ''}><span></span>${f.label}${hint}</label>`;
   }
   if (f.type === 'checklist') {
     const picked = new Set(Array.isArray(value) ? value : []);
@@ -14,21 +15,21 @@ function field(f, value) {
       <div class="btn-row"><button type="button" class="btn btn-sm btn-ghost" data-check-all="${f.key}">Select all</button><button type="button" class="btn btn-sm btn-ghost" data-check-none="${f.key}">Clear</button></div>${hint}</div>`;
   }
   if (f.type === 'textarea') {
-    return html`<label class="field span-2" for="${id}"><span>${f.label}</span><textarea id="${id}" name="${f.key}" rows="4" class="mono" spellcheck="false">${value ?? ''}</textarea>${hint}</label>`;
+    return html`<label class="field span-2" for="${id}" ${tip}><span>${f.label}</span><textarea id="${id}" name="${f.key}" rows="4" class="mono" spellcheck="false">${value ?? ''}</textarea>${hint}</label>`;
   }
   if (f.type === 'select' || f.type === 'select-custom') {
     // Options are plain strings or { value, label } pairs.
     const opts = (f.options || []).map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
     const v = value == null ? '' : String(value);
     if (v && !opts.some((o) => String(o.value) === v)) opts.push({ value: v, label: v });
-    return html`<label class="field" for="${id}"><span>${f.label}</span>
+    return html`<label class="field" for="${id}" ${tip}><span>${f.label}</span>
       ${f.type === 'select-custom'
         ? html`<input id="${id}" name="${f.key}" list="${id}-list" value="${v}"><datalist id="${id}-list">${opts.map((o) => html`<option value="${o.value}">`)}</datalist>`
         : html`<select id="${id}" name="${f.key}">${f.key === 'panel.javaMajor' ? html`<option value="">Automatic</option>` : ''}${opts.map((o) => html`<option value="${o.value}" ${String(o.value) === v ? 'selected' : ''}>${o.label}</option>`)}</select>`}
       ${hint}</label>`;
   }
-  return html`<label class="field" for="${id}"><span>${f.label}</span>
-    <input id="${id}" name="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" value="${value ?? ''}" ${f.step ? html`step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.min != null ? html`min="${f.min}"` : ''} autocomplete="off">${hint}</label>`;
+  return html`<label class="field" for="${id}" ${tip}><span>${f.label}</span>
+    <input id="${id}" name="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" value="${value ?? ''}" ${f.def != null ? html`placeholder="Default: ${f.def}"` : ''} ${f.step ? html`step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.min != null ? html`min="${f.min}"` : ''} autocomplete="off">${hint}</label>`;
 }
 
 export async function render(root, { server, can, refresh, navigate, refreshServers }) {
@@ -62,10 +63,12 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
     <form id="game" class="panel">
       <h3>Game settings</h3>
       ${schema.note ? html`<p class="muted small">${schema.note}</p>` : ''}
+      ${schema.sections.reduce((n, sec) => n + sec.fields.length, 0) > 30 ? html`<input type="search" id="settings-filter" class="filter" placeholder="Find a setting… (e.g. taming, stack, decay)" autocomplete="off">` : ''}
       ${schema.sections.map((sec) => {
         const fields = sec.fields.filter((f) => admin || !f.admin); // admin-only fields are enforced on the server too
-        return fields.length ? html`<fieldset><legend>${sec.title}</legend><div class="form-grid">${fields.map((f) => field(f, values[f.key]))}</div></fieldset>` : '';
+        return fields.length ? html`<details class="settings-sec" ${sec.collapsed ? '' : 'open'}><summary>${sec.title} <span class="count">${fields.length}</span></summary><div class="form-grid">${fields.map((f) => field(f, values[f.key]))}</div></details>` : '';
       })}
+      <p class="muted" id="settings-nomatch" hidden>No settings match.</p>
       <div class="form-actions sticky"><button class="btn btn-primary">Save game settings</button><span class="muted small">Changes apply on the next (re)start.</span></div>
     </form>
 
@@ -99,6 +102,27 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
   };
 
   const gf = $('#game');
+  const filter = $('#settings-filter');
+  if (filter) {
+    const secs = [...gf.querySelectorAll('details.settings-sec')];
+    const wasOpen = secs.map((d) => d.open);
+    filter.oninput = () => {
+      const q = filter.value.trim().toLowerCase();
+      let any = false;
+      secs.forEach((d, i) => {
+        let hits = 0;
+        for (const item of d.querySelector('.form-grid').children) {
+          const show = !q || (item.textContent + ' ' + (item.title || '')).toLowerCase().includes(q);
+          item.hidden = !show;
+          if (show) hits++;
+        }
+        d.hidden = !!q && !hits;
+        d.open = q ? hits > 0 : wasOpen[i];
+        if (hits) any = true;
+      });
+      $('#settings-nomatch').hidden = any;
+    };
+  }
   gf.addEventListener('click', (e) => {
     const all = e.target.closest('[data-check-all]');
     const none = e.target.closest('[data-check-none]');
