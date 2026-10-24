@@ -111,8 +111,10 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
       let any = false;
       secs.forEach((d, i) => {
         let hits = 0;
+        // A match on the section title shows the whole section.
+        const all = !q || d.querySelector('summary').textContent.toLowerCase().includes(q);
         for (const item of d.querySelector('.form-grid').children) {
-          const show = !q || (item.textContent + ' ' + (item.title || '')).toLowerCase().includes(q);
+          const show = all || (item.textContent + ' ' + (item.title || '')).toLowerCase().includes(q);
           item.hidden = !show;
           if (show) hits++;
         }
