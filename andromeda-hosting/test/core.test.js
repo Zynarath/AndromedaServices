@@ -262,6 +262,11 @@ test('ARK: expanded settings, launch options and extra INI lines', async () => {
   assert.match(read('GameUserSettings.ini'), /XPMultiplier=4\r\n/);
   assert.equal(server.ark.settings.XPMultiplier, 4);
   assert.equal(server.ark.settings.bAllowSpeedLeveling, false);
+  // A save from the form wins over an earlier hand edit (the form was showing it).
+  fs.writeFileSync(gusPath, read('GameUserSettings.ini').replace('XPMultiplier=4', 'XPMultiplier=6'));
+  ark.writeSettings(server, { 'ini.XPMultiplier': 3 });
+  ark.saveFiles(server);
+  assert.match(read('GameUserSettings.ini'), /XPMultiplier=3\r\n/);
 
   // Unreal writes UTF-16 once a value has non-ASCII text; read it and keep that encoding.
   const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(read('GameUserSettings.ini').replace('SessionName=Rex', 'SessionName=Rëx 🦖'), 'utf16le')]);
@@ -274,6 +279,30 @@ test('ARK: expanded settings, launch options and extra INI lines', async () => {
   const text = raw.toString('utf16le', 2);
   assert.match(text, /SessionName=Rëx 🦖/);
   assert.match(text, /XPMultiplier=5/);
+
+  // Engram points per level: one OverridePlayerLevelEngramPoints line per level.
+  const engramLines = () => (read('Game.ini').match(/^OverridePlayerLevelEngramPoints=.*$/gm) || []).map((l) => Number(l.split('=')[1]));
+  ark.writeSettings(server, { 'engram.mode': 'same', 'engram.levels': '', 'engram.points': 30, 'engram.custom': '' });
+  ark.saveFiles(server);
+  assert.deepEqual(engramLines(), new Array(105).fill(30));
+  ark.writeSettings(server, { 'engram.mode': 'custom', 'engram.levels': 120, 'engram.points': 50, 'engram.custom': '1-10 = 8\n11-60 = 20\n100 = 99' });
+  ark.saveFiles(server);
+  let list = engramLines();
+  assert.equal(list.length, 120);
+  assert.deepEqual([list[0], list[9], list[10], list[59], list[60], list[99], list[119]], [8, 8, 20, 20, 50, 99, 50]);
+  assert.equal(ark.readSettings(server)['engram.custom'], '1-10 = 8\n11-60 = 20\n100 = 99');
+  // Bad input is rejected; editing the lines in Game.ini by hand shows up as ranges.
+  assert.throws(() => ark.writeSettings(server, { 'engram.mode': 'custom', 'engram.custom': '10-5 = 3' }), /low to high/);
+  assert.throws(() => ark.writeSettings(server, { 'engram.mode': 'custom', 'engram.custom': 'lots' }), /1-10 = 8/);
+  assert.throws(() => ark.writeSettings(server, { 'engram.mode': 'same', 'engram.points': '' }), /Enter the engram points/);
+  fs.writeFileSync(path.join(cfg, 'Game.ini'), read('Game.ini').replace(/^OverridePlayerLevelEngramPoints=.*\r\n/gm, '') + ['5', '5', '7'].map((n) => `OverridePlayerLevelEngramPoints=${n}\r\n`).join(''));
+  const fromFile = ark.readSettings(server);
+  assert.equal(fromFile['engram.mode'], 'custom');
+  assert.equal(fromFile['engram.custom'], '1-2 = 5\n3 = 7');
+  // Choosing ARK's default in the form (after seeing the edit) removes the lines.
+  ark.writeSettings(server, { 'engram.mode': 'default' });
+  ark.saveFiles(server);
+  assert.deepEqual(engramLines(), []);
 
   // Schema: edition-only fields are filtered, every section has fields.
   const schema = ark.settingsSchema(server);

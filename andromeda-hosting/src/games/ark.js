@@ -274,7 +274,7 @@ const FIELDS = [
 ];
 
 // Section order and which ones start collapsed in the panel.
-const GROUPS = ['Launch', 'Launch options', 'General', 'Rules', 'PvP', 'Rates', 'XP', 'Survival', 'Day & night', 'Dinos', 'Breeding', 'Structures', 'Tribes', 'Limits', 'Cluster & transfers', 'Chat & logs'];
+const GROUPS = ['Launch', 'Launch options', 'General', 'Rules', 'PvP', 'Rates', 'XP', 'Engram points', 'Survival', 'Day & night', 'Dinos', 'Breeding', 'Structures', 'Tribes', 'Limits', 'Cluster & transfers', 'Chat & logs'];
 const OPEN_GROUPS = new Set(['Launch', 'General', 'Rules', 'Rates']);
 
 const EVENTS = ['Easter', 'Summer', 'FearEvolved', 'TurkeyTrial', 'WinterWonderland', 'vday', 'birthday', 'Arkaeology', 'ExtinctionChronicles', 'PAX'];
@@ -369,6 +369,74 @@ function iniValue(field, v) {
 
 // "Extra INI lines" boxes, for settings ARK repeats per line (engram/item/spawn overrides).
 // Key=Value lines go into the file's main section; a [Section] line switches section.
+// Engram points per level: Game.ini repeats OverridePlayerLevelEngramPoints once per level, in
+// order (line 1 = level 1). The panel builds those lines from one value for every level plus
+// optional level ranges, so nobody has to type 105+ lines.
+const ENGRAM_KEY = 'OverridePlayerLevelEngramPoints';
+const ENGRAM_LEVELS = 105; // ARK's normal player level cap
+const ENGRAM_MAX_LEVELS = 5000;
+const ENGRAM_MODES = ['default', 'same', 'custom'];
+
+function parseEngramRanges(text) {
+  const ranges = [];
+  String(text || '').split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    const m = /^(\d+)\s*(?:-\s*(\d+))?\s*[=:]\s*(\d+)$/.exec(line);
+    if (!m) throw new HttpError(400, `Engram points, line ${i + 1}: write it like 1-10 = 8 or 25 = 12`);
+    const from = Number(m[1]);
+    const to = m[2] ? Number(m[2]) : from;
+    if (from < 1 || to < from || to > ENGRAM_MAX_LEVELS) throw new HttpError(400, `Engram points, line ${i + 1}: levels must go from low to high, between 1 and ${ENGRAM_MAX_LEVELS}`);
+    ranges.push({ from, to, points: Number(m[3]) });
+  });
+  return ranges;
+}
+
+// The points for each level (index 0 = level 1), or null for ARK's own table.
+function engramList(e) {
+  if (!e || e.mode === 'default' || !ENGRAM_MODES.includes(e.mode)) return null;
+  const ranges = e.mode === 'custom' ? parseEngramRanges(e.custom) : [];
+  const levels = e.levels || Math.max(ENGRAM_LEVELS, ...ranges.map((r) => r.to));
+  const list = new Array(levels).fill(e.points || 0);
+  for (const r of ranges) for (let l = r.from; l <= Math.min(r.to, levels); l++) list[l - 1] = r.points;
+  return list;
+}
+
+// The other way round, for lines found in Game.ini: one value, or ranges of equal values.
+function engramsFromList(list) {
+  if (list.every((n) => n === list[0])) return { mode: 'same', levels: list.length, points: list[0], custom: '' };
+  const lines = [];
+  for (let i = 0; i < list.length; ) {
+    let j = i;
+    while (j + 1 < list.length && list[j + 1] === list[i]) j++;
+    lines.push(`${i === j ? i + 1 : `${i + 1}-${j + 1}`} = ${list[i]}`);
+    i = j + 1;
+  }
+  return { mode: 'custom', levels: list.length, points: null, custom: lines.join('\n') };
+}
+
+// The panel's engram settings, unless the lines in Game.ini were edited by hand since the panel
+// last wrote them (same rule as the other settings): then the file wins.
+function engramState(server, game) {
+  const a = server.ark;
+  const inFile = game.getAll(GM, ENGRAM_KEY).map((v) => Number(String(v).trim()));
+  const written = (a.engramsWritten || []).map(Number);
+  const edited = inFile.length && (inFile.length !== written.length || inFile.some((n, i) => n !== written[i]));
+  if (edited && inFile.every((n) => Number.isInteger(n) && n >= 0)) return engramsFromList(inFile);
+  return a.engrams || { mode: 'default', levels: null, points: null, custom: '' };
+}
+
+function engramSummary(e) {
+  let list;
+  try {
+    list = engramList(e);
+  } catch {
+    return '';
+  }
+  if (!list) return 'Currently using ARK\'s own engram points.';
+  return `Currently: ${list.length} levels, ${list.reduce((n, x) => n + x, 0)} engram points in total.`;
+}
+
 const EXTRA = {
   gus: { file: 'GameUserSettings.ini', section: 'ServerSettings' },
   game: { file: 'Game.ini', section: GM },
@@ -491,12 +559,20 @@ const ark = {
       const v = editedInFile(server, files, f);
       if (v !== undefined) a.settings[f.key] = v;
     }
+    a.engrams = engramState(server, game);
     // Lines deleted from the extra boxes since the last write.
     for (const r of a.extraRemove || []) files[r.file].removeAll(r.section, r.key);
     const s = a.settings;
     for (const f of FIELDS) {
       if (!(f.key in s)) continue;
       files[f.file].set(f.section, f.iniKey || f.key, iniValue(f, s[f.key]));
+    }
+    const engrams = engramList(a.engrams);
+    if (engrams) {
+      game.removeAll(GM, ENGRAM_KEY);
+      for (const n of engrams) game.add(GM, ENGRAM_KEY, n);
+    } else if (a.engramsWritten && a.engramsWritten.length) {
+      game.removeAll(GM, ENGRAM_KEY); // switched back to ARK's default
     }
     // Extra lines come after the form, so they win over a form field with the same key.
     for (const which of Object.keys(EXTRA)) {
@@ -515,6 +591,7 @@ const ark = {
     // What the files now say, to tell hand edits apart from the panel's own writes next time.
     a.iniWritten = {};
     for (const f of FIELDS) a.iniWritten[f.key] = files[f.file].get(f.section, f.iniKey || f.key) ?? null;
+    a.engramsWritten = game.getAll(GM, ENGRAM_KEY);
   },
 
   // Called after the settings form is saved while the server is stopped, so the files match
@@ -639,6 +716,24 @@ const ark = {
       if (f.name === 'map') field.options = edition(server).maps;
       groups.get(f.group).push(field);
     }
+    const eng = engramState(server, loadIni(server, 'game'));
+    groups.set('Engram points', [
+      {
+        key: 'engram.mode',
+        label: 'Engram points per level',
+        type: 'select',
+        options: [
+          { value: 'default', label: 'ARK default' },
+          { value: 'same', label: 'Same points every level' },
+          { value: 'custom', label: 'Different points for some levels' },
+        ],
+        hint: engramSummary(eng),
+        tip: `Game.ini [${GM}] ${ENGRAM_KEY} (one line per level)`,
+      },
+      { key: 'engram.levels', label: 'Number of levels', type: 'number', min: 1, step: 1, def: ENGRAM_LEVELS, hint: 'Your max player level. Raise it if you raised the level cap (LevelExperienceRampOverrides).' },
+      { key: 'engram.points', label: 'Points per level', type: 'number', min: 0, step: 1, hint: 'Every level gets this, except levels listed below.' },
+      { key: 'engram.custom', label: 'Points for specific levels', type: 'textarea', hint: 'With "Different points for some levels": one line per level or range, e.g. 1-10 = 8, then 11-60 = 20, then 61-105 = 40.' },
+    ]);
     groups.set('Advanced: extra INI lines', [
       { key: 'extra.gus', label: 'Extra GameUserSettings.ini lines', type: 'textarea', admin: true, hint: 'Admin only. Key=Value per line, added to [ServerSettings]; start a block with [SectionName] to target another section.' },
       { key: 'extra.game', label: 'Extra Game.ini lines', type: 'textarea', admin: true, hint: 'Admin only. For repeated settings such as ConfigOverrideItemMaxQuantity, OverrideNamedEngramEntries, ConfigOverrideSupplyCrateItems, LevelExperienceRampOverrides. Added to [/script/shootergame.shootergamemode].' },
@@ -662,6 +757,11 @@ const ark = {
       out['ini.' + f.key] = v ?? '';
     }
     for (const which of Object.keys(EXTRA)) out['extra.' + which] = (a.extraIni && a.extraIni[which]) || '';
+    const eng = engramState(server, files.game);
+    out['engram.mode'] = eng.mode || 'default';
+    out['engram.levels'] = eng.levels ?? '';
+    out['engram.points'] = eng.points ?? '';
+    out['engram.custom'] = eng.custom || '';
     return out;
   },
 
@@ -669,8 +769,23 @@ const ark = {
     const a = server.ark;
     // Check everything before changing anything, so a bad value doesn't leave half the form saved.
     const changes = [];
+    let engrams = null;
     for (const [k, v] of Object.entries(values)) {
-      if (k.startsWith('launch.')) {
+      if (k.startsWith('engram.')) {
+        engrams = engrams || { ...(a.engrams || { mode: 'default', levels: null, points: null, custom: '' }) };
+        const name = k.slice(7);
+        const blank = v === '' || v === null || v === undefined;
+        if (name === 'mode') engrams.mode = ENGRAM_MODES.includes(v) ? v : 'default';
+        else if (name === 'custom') engrams.custom = String(v ?? '').replace(/\r\n?/g, '\n').trim();
+        else if (name === 'levels' || name === 'points') {
+          const n = blank ? null : Number(v);
+          const max = name === 'levels' ? ENGRAM_MAX_LEVELS : 100000;
+          if (n !== null && (!Number.isInteger(n) || n < (name === 'levels' ? 1 : 0) || n > max)) {
+            throw new HttpError(400, name === 'levels' ? `Number of levels must be a whole number from 1 to ${ENGRAM_MAX_LEVELS}` : 'Engram points per level must be a whole number, 0 or more');
+          }
+          engrams[name] = n;
+        }
+      } else if (k.startsWith('launch.')) {
         const f = LAUNCH_FIELDS.find((x) => x.key === k);
         // extraArgs becomes the server's command line, so admin only.
         if (!f || (f.admin && !opts.admin)) continue;
@@ -705,6 +820,26 @@ const ark = {
           a.extraIni[which] = text;
         });
       }
+    }
+    if (engrams) {
+      if (engrams.mode === 'same' && engrams.points == null) throw new HttpError(400, 'Enter the engram points per level');
+      if (engrams.mode === 'custom' && engrams.points == null && !parseEngramRanges(engrams.custom).length) {
+        throw new HttpError(400, 'Enter points per level, or levels like 1-10 = 8');
+      }
+      parseEngramRanges(engrams.custom);
+      changes.push(() => (a.engrams = engrams));
+    }
+    // The form showed what the files say, hand edits included, so what it sends is newer than
+    // those edits: mark them as seen so the next write doesn't bring them back over the save.
+    const sent = FIELDS.filter((f) => 'ini.' + f.key in values);
+    if (sent.length || engrams) {
+      const files = { gus: loadIni(server, 'gus'), game: loadIni(server, 'game') };
+      if (!a.iniWritten) {
+        a.iniWritten = {};
+        for (const f of FIELDS) if (f.key in a.settings) a.iniWritten[f.key] = iniValue(f, a.settings[f.key]);
+      }
+      for (const f of sent) a.iniWritten[f.key] = files[f.file].get(f.section, f.iniKey || f.key) ?? null;
+      if (engrams) a.engramsWritten = files.game.getAll(GM, ENGRAM_KEY);
     }
     for (const apply of changes) apply();
     if (!a.settings.ServerAdminPassword) a.settings.ServerAdminPassword = randomPassword(14);
