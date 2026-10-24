@@ -244,6 +244,37 @@ test('ARK: expanded settings, launch options and extra INI lines', async () => {
   assert.throws(() => ark.writeSettings(server, { 'extra.gus': 'RCONPort=1' }, { admin: true }), /set by the panel/);
   assert.throws(() => ark.writeSettings(server, { 'extra.gus': 'just some text' }, { admin: true }), /Key=Value/);
 
+  // Saving with the server stopped writes the files right away.
+  ark.writeSettings(server, { 'ini.XPMultiplier': 2 });
+  ark.saveFiles(server);
+  assert.match(read('GameUserSettings.ini'), /XPMultiplier=2\r\n/);
+
+  // ARK rewriting the same value on shutdown is not a hand edit...
+  const gusPath = path.join(cfg, 'GameUserSettings.ini');
+  fs.writeFileSync(gusPath, read('GameUserSettings.ini').replace('XPMultiplier=2', 'XPMultiplier=2.000000'));
+  assert.equal(ark.readSettings(server)['ini.XPMultiplier'], 2);
+  // ...but changing it in the file is: the panel shows it and keeps it on the next start.
+  fs.writeFileSync(gusPath, read('GameUserSettings.ini').replace('XPMultiplier=2.000000', 'XPMultiplier=4'));
+  fs.writeFileSync(path.join(cfg, 'Game.ini'), read('Game.ini').replace('bAllowSpeedLeveling=True', 'bAllowSpeedLeveling=False'));
+  assert.equal(ark.readSettings(server)['ini.XPMultiplier'], 4);
+  assert.equal(ark.readSettings(server)['ini.bAllowSpeedLeveling'], false);
+  await ark.buildLaunch(server);
+  assert.match(read('GameUserSettings.ini'), /XPMultiplier=4\r\n/);
+  assert.equal(server.ark.settings.XPMultiplier, 4);
+  assert.equal(server.ark.settings.bAllowSpeedLeveling, false);
+
+  // Unreal writes UTF-16 once a value has non-ASCII text; read it and keep that encoding.
+  const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(read('GameUserSettings.ini').replace('SessionName=Rex', 'SessionName=Rëx 🦖'), 'utf16le')]);
+  fs.writeFileSync(gusPath, utf16);
+  assert.equal(ark.readSettings(server)['ini.SessionName'], 'Rëx 🦖');
+  ark.writeSettings(server, { 'ini.XPMultiplier': 5 });
+  ark.saveFiles(server);
+  const raw = fs.readFileSync(gusPath);
+  assert.deepEqual([...raw.subarray(0, 2)], [0xff, 0xfe]);
+  const text = raw.toString('utf16le', 2);
+  assert.match(text, /SessionName=Rëx 🦖/);
+  assert.match(text, /XPMultiplier=5/);
+
   // Schema: edition-only fields are filtered, every section has fields.
   const schema = ark.settingsSchema(server);
   const keys = schema.sections.flatMap((s) => s.fields.map((f) => f.key));

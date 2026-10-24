@@ -145,7 +145,8 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
     }
     try {
       const r = await api.put(`/api/servers/${server.id}/settings`, { values: out });
-      toast(r.restartRequired ? 'Saved — restart the server to apply' : 'Saved', 'ok');
+      if (r.warning) toast(r.warning, 'warn', 8000);
+      else toast(r.restartRequired ? 'Saved — restart the server to apply' : 'Saved', 'ok');
     } catch (err) {
       toast(err.message, 'error');
     }

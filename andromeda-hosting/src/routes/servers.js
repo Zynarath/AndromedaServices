@@ -190,8 +190,17 @@ router.put('/servers/:id/settings', (req, res) => {
     inst.server[key] = JSON.parse(before);
     throw err;
   }
+  // Write the game's config files now, unless the server is running and would overwrite them.
+  let warning = null;
+  if (inst.game.saveFiles && !inst.child) {
+    try {
+      inst.game.saveFiles(inst.server);
+    } catch (err) {
+      warning = `Saved in the panel, but the config files couldn't be written yet (${err.message}). They are written on the next start.`;
+    }
+  }
   db.save();
-  res.json({ ok: true, restartRequired: !!(result.restartRequired && inst.child), values: inst.game.readSettings(inst.server) });
+  res.json({ ok: true, warning, restartRequired: !!(result.restartRequired && inst.child), values: inst.game.readSettings(inst.server) });
 });
 
 // ---- install / update ----
