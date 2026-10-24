@@ -324,9 +324,42 @@ function configDir(server) {
 function iniPath(server, which) {
   return path.join(configDir(server), which === 'game' ? 'Game.ini' : 'GameUserSettings.ini');
 }
+// Unreal saves an INI as UTF-16 (with a BOM) once it holds any non-ASCII character, e.g. an
+// accented server name or an emoji in the message of the day. Read both, and write the same way.
 function loadIni(server, which) {
   const p = iniPath(server, which);
-  return new Ini(fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
+  const buf = fs.existsSync(p) ? fs.readFileSync(p) : Buffer.alloc(0);
+  const utf16 = buf[0] === 0xff && buf[1] === 0xfe;
+  const ini = new Ini(utf16 ? buf.toString('utf16le', 2) : buf.toString('utf8'));
+  ini.utf16 = utf16;
+  return ini;
+}
+function saveIni(server, which, ini) {
+  const text = ini.toString();
+  const utf16 = ini.utf16 || /[^\x00-\x7f]/.test(text);
+  fs.writeFileSync(iniPath(server, which), utf16 ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]) : text);
+}
+function sameValue(field, x, y) {
+  if (x == null || y == null) return x == y;
+  if (field.type === 'number') return Number(x) === Number(y); // ARK rewrites 2 as 2.000000
+  return String(x).trim().toLowerCase() === String(y).trim().toLowerCase();
+}
+function parseIniValue(field, v) {
+  if (field.type === 'bool') return String(v).trim().toLowerCase() === 'true';
+  if (field.type === 'number') return Number.isFinite(Number(v)) ? Number(v) : undefined;
+  return String(v);
+}
+// A value in the file that differs from what the panel last wrote there was edited by hand
+// (Files tab, Notepad), so it wins over the panel's copy. Returns undefined when nothing changed.
+// ARK rewrites the files on shutdown with the values it started with, which still match.
+function editedInFile(server, files, f) {
+  const a = server.ark;
+  const inFile = files[f.file].get(f.section, f.iniKey || f.key);
+  if (inFile === undefined) return undefined;
+  const stored = a.settings[f.key];
+  const last = a.iniWritten ? a.iniWritten[f.key] : stored === undefined ? undefined : iniValue(f, stored);
+  if (last === undefined || sameValue(f, inFile, last)) return undefined;
+  return parseIniValue(f, inFile);
 }
 function iniValue(field, v) {
   if (v === null || v === undefined) return null; // cleared: remove the line so ARK uses its default
@@ -453,7 +486,12 @@ const ark = {
     const a = server.ark;
     const files = { gus: loadIni(server, 'gus'), game: loadIni(server, 'game') };
     const { gus, game } = files;
-    // Lines deleted from the extra boxes since the last start.
+    // Keep hand edits made to the files since the panel last wrote them.
+    for (const f of FIELDS) {
+      const v = editedInFile(server, files, f);
+      if (v !== undefined) a.settings[f.key] = v;
+    }
+    // Lines deleted from the extra boxes since the last write.
     for (const r of a.extraRemove || []) files[r.file].removeAll(r.section, r.key);
     const s = a.settings;
     for (const f of FIELDS) {
@@ -472,8 +510,17 @@ const ark = {
     gus.set('ServerSettings', 'RCONPort', server.ark.rconPort);
     gus.set('SessionSettings', 'Port', server.ark.port);
     if (server.ark.edition === 'ase') gus.set('SessionSettings', 'QueryPort', server.ark.queryPort);
-    fs.writeFileSync(iniPath(server, 'gus'), gus.toString());
-    fs.writeFileSync(iniPath(server, 'game'), game.toString());
+    saveIni(server, 'gus', gus);
+    saveIni(server, 'game', game);
+    // What the files now say, to tell hand edits apart from the panel's own writes next time.
+    a.iniWritten = {};
+    for (const f of FIELDS) a.iniWritten[f.key] = files[f.file].get(f.section, f.iniKey || f.key) ?? null;
+  },
+
+  // Called after the settings form is saved while the server is stopped, so the files match
+  // the panel right away. While it runs, ARK would overwrite them on shutdown; the next start writes them.
+  saveFiles(server) {
+    this.applyIni(server);
   },
 
   async buildLaunch(server) {
@@ -597,7 +644,7 @@ const ark = {
       { key: 'extra.game', label: 'Extra Game.ini lines', type: 'textarea', admin: true, hint: 'Admin only. For repeated settings such as ConfigOverrideItemMaxQuantity, OverrideNamedEngramEntries, ConfigOverrideSupplyCrateItems, LevelExperienceRampOverrides. Added to [/script/shootergame.shootergamemode].' },
     ]);
     return {
-      note: 'These values are written into GameUserSettings.ini / Game.ini every time the server starts. Leave a field blank to use ARK\'s default (shown greyed out). Hover a label to see the INI key.',
+      note: 'Saved straight into GameUserSettings.ini / Game.ini (and again on every start, since ARK rewrites them on shutdown). Changes you make to those files by hand show up here. Leave a field blank to use ARK\'s default (shown greyed out). Hover a label to see the INI key.',
       sections: [...groups].filter(([, fields]) => fields.length).map(([title, fields]) => ({ title, fields, collapsed: !OPEN_GROUPS.has(title) })),
     };
   },
@@ -608,7 +655,8 @@ const ark = {
     for (const f of LAUNCH_FIELDS) out[f.key] = a[f.name] ?? (f.type === 'bool' ? false : '');
     const files = { gus: loadIni(server, 'gus'), game: loadIni(server, 'game') };
     for (const f of FIELDS) {
-      let v = a.settings[f.key];
+      let v = editedInFile(server, files, f);
+      if (v === undefined) v = a.settings[f.key];
       if (v === undefined) v = files[f.file].get(f.section, f.iniKey || f.key);
       if (f.type === 'bool') v = v == null ? !!f.def : v === true || String(v).toLowerCase() === 'true';
       out['ini.' + f.key] = v ?? '';
