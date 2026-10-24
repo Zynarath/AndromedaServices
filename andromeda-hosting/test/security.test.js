@@ -38,6 +38,10 @@ test('ARK: extra command-line arguments are admin-only', () => {
   assert.equal(s.ark.extraArgs, '');
   ark.writeSettings(s, { 'launch.extraArgs': '-ForceAllowCaveFlyers' }, { admin: true });
   assert.equal(s.ark.extraArgs, '-ForceAllowCaveFlyers');
+  ark.writeSettings(s, { 'extra.game': 'bAutoUnlockAllEngrams=True' }, { admin: false });
+  assert.equal(s.ark.extraIni.game, '');
+  ark.writeSettings(s, { 'extra.game': 'bAutoUnlockAllEngrams=True' }, { admin: true });
+  assert.equal(s.ark.extraIni.game, 'bAutoUnlockAllEngrams=True');
 });
 
 test('CoD: game folder / Plutonium key / extra config are admin-only, and reject UNC', () => {

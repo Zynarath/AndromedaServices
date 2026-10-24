@@ -24,52 +24,295 @@ const EDITIONS = {
 
 // Settings stored on the server record and written into the INI files before every start,
 // so ARK can't overwrite them when it saves its config on shutdown.
+// `def` is ARK's own default: shown as the placeholder, and used for switches that were never set.
+// A blank number/text field removes the line from the INI so ARK uses its default.
+const GM = '/script/shootergame.shootergamemode';
+const gus = (key, label, type, def, extra) => ({ key, file: 'gus', section: 'ServerSettings', label, type, def, ...extra });
+const gm = (key, label, type, def, extra) => ({ key, file: 'game', section: GM, label, type, def, ...extra });
+const inGroup = (group, fields) => fields.map((f) => ({ ...f, group }));
+
+// Per-level stat multipliers: Game.ini keys like PerLevelStatsMultiplier_Player[7] (weight).
+const STATS = [[0, 'Health'], [1, 'Stamina'], [3, 'Oxygen'], [4, 'Food'], [5, 'Water'], [7, 'Weight'], [8, 'Melee damage'], [9, 'Movement speed'], [10, 'Fortitude'], [11, 'Crafting skill']];
+const DINO_STATS = [0, 1, 3, 4, 7, 8, 9];
+const perLevel = (suffix, group, stats, def) =>
+  STATS.filter(([i]) => stats.includes(i)).map(([i, name]) => ({ ...gm(`PerLevelStatsMultiplier_${suffix}[${i}]`, name, 'number', def, { step: 0.1 }), group }));
+
 const FIELDS = [
-  { key: 'SessionName', file: 'gus', section: 'SessionSettings', label: 'Server name (shown in server list)', type: 'text', group: 'General' },
-  { key: 'ServerPassword', file: 'gus', section: 'ServerSettings', label: 'Join password (blank = public)', type: 'text', group: 'General' },
-  { key: 'ServerAdminPassword', file: 'gus', section: 'ServerSettings', label: 'Admin password (also used by the panel for RCON)', type: 'text', group: 'General' },
-  { key: 'MessageOfTheDay', file: 'gus', section: 'MessageOfTheDay', iniKey: 'Message', label: 'Message of the day', type: 'text', group: 'General' },
-  { key: 'ServerPVE', file: 'gus', section: 'ServerSettings', label: 'PvE mode', type: 'bool', group: 'Rules' },
-  { key: 'AllowThirdPersonPlayer', file: 'gus', section: 'ServerSettings', label: 'Allow third person', type: 'bool', group: 'Rules' },
-  { key: 'ServerCrosshair', file: 'gus', section: 'ServerSettings', label: 'Crosshair', type: 'bool', group: 'Rules' },
-  { key: 'ShowMapPlayerLocation', file: 'gus', section: 'ServerSettings', label: 'Show player on map', type: 'bool', group: 'Rules' },
-  { key: 'AllowFlyerCarryPvE', file: 'gus', section: 'ServerSettings', label: 'Flyers can carry in PvE', type: 'bool', group: 'Rules' },
-  { key: 'AlwaysAllowStructurePickup', file: 'gus', section: 'ServerSettings', label: 'Always allow structure pickup', type: 'bool', group: 'Rules' },
-  { key: 'DisableStructureDecayPvE', file: 'gus', section: 'ServerSettings', label: 'Disable structure decay (PvE)', type: 'bool', group: 'Rules' },
-  { key: 'bAllowUnlimitedRespecs', file: 'game', section: '/script/shootergame.shootergamemode', label: 'Unlimited mindwipes', type: 'bool', group: 'Rules' },
-  { key: 'DifficultyOffset', file: 'gus', section: 'ServerSettings', label: 'Difficulty offset (0–1)', type: 'number', step: 0.1, group: 'Rates' },
-  { key: 'OverrideOfficialDifficulty', file: 'gus', section: 'ServerSettings', label: 'Override difficulty (5 = max wild level 150)', type: 'number', step: 0.5, group: 'Rates' },
-  { key: 'XPMultiplier', file: 'gus', section: 'ServerSettings', label: 'XP multiplier', type: 'number', step: 0.5, group: 'Rates' },
-  { key: 'TamingSpeedMultiplier', file: 'gus', section: 'ServerSettings', label: 'Taming speed', type: 'number', step: 0.5, group: 'Rates' },
-  { key: 'HarvestAmountMultiplier', file: 'gus', section: 'ServerSettings', label: 'Harvest amount', type: 'number', step: 0.5, group: 'Rates' },
-  { key: 'ItemStackSizeMultiplier', file: 'gus', section: 'ServerSettings', label: 'Stack size multiplier', type: 'number', step: 1, group: 'Rates' },
-  { key: 'ResourcesRespawnPeriodMultiplier', file: 'gus', section: 'ServerSettings', label: 'Resource respawn period (lower = faster)', type: 'number', step: 0.1, group: 'Rates' },
-  { key: 'DayCycleSpeedScale', file: 'gus', section: 'ServerSettings', label: 'Day cycle speed', type: 'number', step: 0.1, group: 'Rates' },
-  { key: 'PlayerDamageMultiplier', file: 'gus', section: 'ServerSettings', label: 'Player damage', type: 'number', step: 0.1, group: 'Rates' },
-  { key: 'DinoDamageMultiplier', file: 'gus', section: 'ServerSettings', label: 'Dino damage', type: 'number', step: 0.1, group: 'Rates' },
-  { key: 'StructureDamageMultiplier', file: 'gus', section: 'ServerSettings', label: 'Structure damage', type: 'number', step: 0.1, group: 'Rates' },
-  { key: 'MatingIntervalMultiplier', file: 'game', section: '/script/shootergame.shootergamemode', label: 'Mating interval (lower = faster)', type: 'number', step: 0.1, group: 'Breeding' },
-  { key: 'EggHatchSpeedMultiplier', file: 'game', section: '/script/shootergame.shootergamemode', label: 'Egg hatch speed', type: 'number', step: 1, group: 'Breeding' },
-  { key: 'BabyMatureSpeedMultiplier', file: 'game', section: '/script/shootergame.shootergamemode', label: 'Baby mature speed', type: 'number', step: 1, group: 'Breeding' },
-  { key: 'BabyCuddleIntervalMultiplier', file: 'game', section: '/script/shootergame.shootergamemode', label: 'Imprint interval (lower = more often)', type: 'number', step: 0.1, group: 'Breeding' },
-  { key: 'MaxTamedDinos', file: 'gus', section: 'ServerSettings', label: 'Max tamed dinos', type: 'number', group: 'Limits' },
-  { key: 'MaxPersonalTamedDinos', file: 'gus', section: 'ServerSettings', label: 'Max tamed dinos per tribe', type: 'number', group: 'Limits' },
-  { key: 'AutoSavePeriodMinutes', file: 'gus', section: 'ServerSettings', label: 'Autosave every (minutes)', type: 'number', group: 'Limits' },
-  { key: 'KickIdlePlayersPeriod', file: 'gus', section: 'ServerSettings', label: 'Kick idle players after (seconds)', type: 'number', group: 'Limits' },
+  ...inGroup('General', [
+    { key: 'SessionName', file: 'gus', section: 'SessionSettings', label: 'Server name (shown in server list)', type: 'text' },
+    gus('ServerPassword', 'Join password (blank = public)', 'text'),
+    gus('ServerAdminPassword', 'Admin password (also used by the panel for RCON)', 'text'),
+    gus('SpectatorPassword', 'Spectator password', 'text'),
+    { key: 'MessageOfTheDay', file: 'gus', section: 'MessageOfTheDay', iniKey: 'Message', label: 'Message of the day', type: 'text' },
+    { key: 'MessageOfTheDayDuration', file: 'gus', section: 'MessageOfTheDay', iniKey: 'Duration', label: 'Message of the day duration (seconds)', type: 'number', def: 20 },
+    gus('AdminLogging', 'Log admin commands to in-game chat', 'bool', false),
+    gus('BanListURL', 'Ban list URL', 'text', undefined, { hint: 'Blank uses the official ban list' }),
+  ]),
+  ...inGroup('Rules', [
+    gus('ServerPVE', 'PvE mode', 'bool', false),
+    gus('ServerHardcore', 'Hardcore (respawn as a new level 1 character)', 'bool', false),
+    gus('AllowThirdPersonPlayer', 'Allow third person', 'bool'),
+    gus('ServerCrosshair', 'Crosshair', 'bool'),
+    gus('ShowMapPlayerLocation', 'Show player on map', 'bool'),
+    gus('ServerForceNoHUD', 'Force HUD off', 'bool', false),
+    gus('AllowHitMarkers', 'Hit markers', 'bool', true),
+    gus('ShowFloatingDamageText', 'Floating damage numbers', 'bool', false),
+    gus('DisableWeatherFog', 'Disable fog', 'bool', false),
+    gus('AllowFlyerCarryPvE', 'Flyers can carry in PvE', 'bool', false),
+    gus('AllowFlyingStaminaRecovery', 'Flyers recover stamina while flying', 'bool', false),
+    gus('AlwaysAllowStructurePickup', 'Always allow structure pickup', 'bool', false),
+    gus('AllowCaveBuildingPvE', 'Allow building in caves (PvE)', 'bool', false),
+    gus('AllowCaveBuildingPvP', 'Allow building in caves (PvP)', 'bool', true),
+    gus('PreventDiseases', 'Disable diseases', 'bool', false),
+    gus('NonPermanentDiseases', 'Diseases cured on respawn', 'bool', false),
+    gus('PreventSpawnAnimations', 'Skip the wake-up animation on spawn', 'bool', false),
+    gus('RandomSupplyCratePoints', 'Random supply drop locations', 'bool', false),
+    gus('PvEAllowStructuresAtSupplyDrops', 'Allow building near supply drops (PvE)', 'bool', false),
+    gus('ClampResourceHarvestDamage', 'Clamp harvest damage (official behaviour)', 'bool', false),
+    gm('bAllowUnlimitedRespecs', 'Unlimited mindwipes', 'bool', false),
+    gm('bAutoUnlockAllEngrams', 'Unlock all engrams', 'bool', false),
+    gm('bAllowCustomRecipes', 'Allow custom recipes', 'bool', true),
+    gm('bUseCorpseLocator', 'Show corpse location beam', 'bool', true),
+    gm('bShowCreativeMode', 'Creative mode (admin cheat menu for all)', 'bool', false),
+    gm('bUseSingleplayerSettings', 'Use single-player balance settings', 'bool', false),
+    gm('bDisableLootCrates', 'Disable loot crates', 'bool', false),
+    gm('bDisablePhotoMode', 'Disable photo mode', 'bool', false, { editions: ['asa'] }),
+  ]),
+  ...inGroup('PvP', [
+    gus('PreventOfflinePvP', 'Offline raid protection (ORP)', 'bool', false),
+    gus('PreventOfflinePvPInterval', 'ORP kicks in after (seconds offline)', 'number', 0),
+    gm('bDisableFriendlyFire', 'Disable friendly fire (PvP)', 'bool', false),
+    gm('bPvEDisableFriendlyFire', 'Disable friendly fire (PvE)', 'bool', false),
+    gus('EnablePvPGamma', 'Allow gamma changes (PvP)', 'bool', false),
+    gus('DisablePvEGamma', 'Block gamma changes (PvE)', 'bool', false),
+    gm('bIncreasePvPRespawnInterval', 'Longer respawn timer after repeated PvP deaths', 'bool', true),
+    gm('bPassiveDefensesDamageRiderlessDinos', 'Spikes/turrets hurt riderless dinos', 'bool', false),
+    gus('AllowMultipleAttachedC4', 'Allow multiple C4 on one dino', 'bool', false),
+    gm('bAutoPvETimer', 'Scheduled PvE (switch to PvE at set times)', 'bool', false),
+    gm('bAutoPvEUseSystemTime', 'Scheduled PvE uses real clock (not in-game time)', 'bool', false),
+    gm('AutoPvEStartTimeSeconds', 'Scheduled PvE starts at (seconds into the day)', 'number', 0),
+    gm('AutoPvEStopTimeSeconds', 'Scheduled PvE stops at (seconds into the day)', 'number', 0),
+  ]),
+  ...inGroup('Rates', [
+    gus('DifficultyOffset', 'Difficulty offset (0–1)', 'number', undefined, { step: 0.1 }),
+    gus('OverrideOfficialDifficulty', 'Override difficulty (5 = max wild level 150)', 'number', undefined, { step: 0.5 }),
+    gus('XPMultiplier', 'XP multiplier', 'number', 1, { step: 0.5 }),
+    gus('TamingSpeedMultiplier', 'Taming speed', 'number', 1, { step: 0.5 }),
+    gus('HarvestAmountMultiplier', 'Harvest amount', 'number', 1, { step: 0.5 }),
+    gus('HarvestHealthMultiplier', 'Harvest health (resource node durability)', 'number', 1, { step: 0.1 }),
+    gus('ItemStackSizeMultiplier', 'Stack size multiplier', 'number', 1, { step: 1 }),
+    gus('ResourcesRespawnPeriodMultiplier', 'Resource respawn period (lower = faster)', 'number', 1, { step: 0.1 }),
+    gus('DinoCountMultiplier', 'Wild dino count', 'number', 1, { step: 0.1 }),
+    gus('PlayerDamageMultiplier', 'Player damage', 'number', 1, { step: 0.1 }),
+    gus('PlayerResistanceMultiplier', 'Player resistance (lower = tougher)', 'number', 1, { step: 0.1 }),
+    gus('DinoDamageMultiplier', 'Dino damage', 'number', 1, { step: 0.1 }),
+    gus('DinoResistanceMultiplier', 'Dino resistance (lower = tougher)', 'number', 1, { step: 0.1 }),
+    gus('StructureDamageMultiplier', 'Structure damage', 'number', 1, { step: 0.1 }),
+    gus('StructureResistanceMultiplier', 'Structure resistance (lower = tougher)', 'number', 1, { step: 0.1 }),
+    gm('DinoHarvestingDamageMultiplier', 'Dino harvesting damage', 'number', 3.2, { step: 0.1 }),
+    gm('PlayerHarvestingDamageMultiplier', 'Player harvesting damage', 'number', 1, { step: 0.1 }),
+    gm('CraftingSkillBonusMultiplier', 'Crafting skill bonus', 'number', 1, { step: 0.1 }),
+    gm('CustomRecipeEffectivenessMultiplier', 'Custom recipe effectiveness', 'number', 1, { step: 0.1 }),
+    gm('SupplyCrateLootQualityMultiplier', 'Supply crate loot quality', 'number', 1, { step: 0.1 }),
+    gm('FishingLootQualityMultiplier', 'Fishing loot quality', 'number', 1, { step: 0.1 }),
+  ]),
+  ...inGroup('XP', [
+    gm('KillXPMultiplier', 'Kill XP', 'number', 1, { step: 0.5 }),
+    gm('HarvestXPMultiplier', 'Harvest XP', 'number', 1, { step: 0.5 }),
+    gm('CraftXPMultiplier', 'Craft XP', 'number', 1, { step: 0.5 }),
+    gm('GenericXPMultiplier', 'Generic XP (passive)', 'number', 1, { step: 0.5 }),
+    gm('SpecialXPMultiplier', 'Special XP', 'number', 1, { step: 0.5 }),
+    gm('ExplorerNoteXPMultiplier', 'Explorer note XP', 'number', 1, { step: 0.5 }),
+    gm('BossKillXPMultiplier', 'Boss kill XP', 'number', 1, { step: 0.5 }),
+    gm('AlphaKillXPMultiplier', 'Alpha kill XP', 'number', 1, { step: 0.5 }),
+    gm('WildKillXPMultiplier', 'Wild kill XP', 'number', 1, { step: 0.5 }),
+    gm('CaveKillXPMultiplier', 'Cave kill XP', 'number', 1, { step: 0.5 }),
+    gm('TamedKillXPMultiplier', 'Tamed kill XP', 'number', 1, { step: 0.5 }),
+    gm('UnclaimedKillXPMultiplier', 'Unclaimed kill XP', 'number', 1, { step: 0.5 }),
+    gm('OverrideMaxExperiencePointsPlayer', 'Max player XP (raise with a level ramp override)', 'number'),
+    gm('OverrideMaxExperiencePointsDino', 'Max dino XP', 'number'),
+  ]),
+  ...inGroup('Survival', [
+    gus('PlayerCharacterFoodDrainMultiplier', 'Player food drain', 'number', 1, { step: 0.1 }),
+    gus('PlayerCharacterWaterDrainMultiplier', 'Player water drain', 'number', 1, { step: 0.1 }),
+    gus('PlayerCharacterStaminaDrainMultiplier', 'Player stamina drain', 'number', 1, { step: 0.1 }),
+    gus('PlayerCharacterHealthRecoveryMultiplier', 'Player health recovery', 'number', 1, { step: 0.1 }),
+    gus('OxygenSwimSpeedStatMultiplier', 'Oxygen stat → swim speed', 'number', 1, { step: 0.1 }),
+    gus('DinoCharacterFoodDrainMultiplier', 'Dino food drain', 'number', 1, { step: 0.1 }),
+    gus('DinoCharacterStaminaDrainMultiplier', 'Dino stamina drain', 'number', 1, { step: 0.1 }),
+    gus('DinoCharacterHealthRecoveryMultiplier', 'Dino health recovery', 'number', 1, { step: 0.1 }),
+    gm('GlobalSpoilingTimeMultiplier', 'Food spoil time (higher = slower)', 'number', 1, { step: 0.1 }),
+    gm('GlobalItemDecompositionTimeMultiplier', 'Dropped item lifetime', 'number', 1, { step: 0.1 }),
+    gm('GlobalCorpseDecompositionTimeMultiplier', 'Corpse lifetime', 'number', 1, { step: 0.1 }),
+    gm('FuelConsumptionIntervalMultiplier', 'Fuel burn interval (higher = lasts longer)', 'number', 1, { step: 0.1 }),
+    gm('CropGrowthSpeedMultiplier', 'Crop growth speed', 'number', 1, { step: 0.1 }),
+    gm('CropDecaySpeedMultiplier', 'Crop decay speed', 'number', 1, { step: 0.1 }),
+    gm('PoopIntervalMultiplier', 'Poop interval', 'number', 1, { step: 0.1 }),
+    gm('HairGrowthSpeedMultiplier', 'Hair growth speed', 'number', 1, { step: 0.1 }),
+    gus('ResourceNoReplenishRadiusPlayers', 'No-regrowth radius around players', 'number', 1, { step: 0.1 }),
+    gus('ResourceNoReplenishRadiusStructures', 'No-regrowth radius around structures', 'number', 1, { step: 0.1 }),
+  ]),
+  ...inGroup('Day & night', [
+    gus('DayCycleSpeedScale', 'Day cycle speed', 'number', 1, { step: 0.1 }),
+    gus('DayTimeSpeedScale', 'Daytime speed', 'number', 1, { step: 0.1 }),
+    gus('NightTimeSpeedScale', 'Night speed', 'number', 1, { step: 0.1 }),
+  ]),
+  ...inGroup('Dinos', [
+    gm('WildDinoCharacterFoodDrainMultiplier', 'Wild dino food drain', 'number', 1, { step: 0.1 }),
+    gm('WildDinoTorporDrainMultiplier', 'Wild dino torpor drain (lower = stays knocked out longer)', 'number', 1, { step: 0.1 }),
+    gm('TamedDinoCharacterFoodDrainMultiplier', 'Tamed dino food drain', 'number', 1, { step: 0.1 }),
+    gm('TamedDinoTorporDrainMultiplier', 'Tamed dino torpor drain', 'number', 1, { step: 0.1 }),
+    gm('PassiveTameIntervalMultiplier', 'Passive tame feeding interval', 'number', 1, { step: 0.1 }),
+    gus('AllowRaidDinoFeeding', 'Titanosaurs can be fed (permanent tame)', 'bool', false),
+    gus('RaidDinoCharacterFoodDrainMultiplier', 'Raid dino food drain', 'number', 1, { step: 0.1 }),
+    gm('bAllowSpeedLeveling', 'Allow movement speed leveling', 'bool', false),
+    gm('bAllowFlyerSpeedLeveling', 'Allow flyer speed leveling', 'bool', false),
+    gm('bAllowUnclaimDinos', 'Allow unclaiming dinos', 'bool', true),
+    gm('bDisableDinoRiding', 'Disable dino riding', 'bool', false),
+    gm('bDisableDinoTaming', 'Disable dino taming', 'bool', false),
+    gus('DisableDinoDecayPvE', 'Disable dino decay (PvE)', 'bool', false),
+    gus('PvEDinoDecayPeriodMultiplier', 'Dino decay period (PvE)', 'number', 1, { step: 0.1 }),
+    gus('PvPDinoDecay', 'Dino decay (PvP)', 'bool', false),
+    gus('AutoDestroyDecayedDinos', 'Delete decayed dinos', 'bool', false),
+    gus('AllowCryoFridgeOnSaddle', 'Cryofridge on saddles', 'bool', false),
+    gus('DisableCryopodEnemyCheck', 'Cryopods work near enemies', 'bool', false),
+    gus('DisableCryopodFridgeRequirement', 'Cryopods work without a cryofridge', 'bool', false),
+    gus('ServerAutoForceRespawnWildDinosInterval', 'Wipe wild dinos every (seconds, 0 = never)', 'number', 0),
+  ]),
+  ...inGroup('Breeding', [
+    gm('MatingIntervalMultiplier', 'Mating interval (lower = faster)', 'number', 1, { step: 0.1 }),
+    gm('MatingSpeedMultiplier', 'Mating speed', 'number', 1, { step: 0.1 }),
+    gm('LayEggIntervalMultiplier', 'Egg laying interval', 'number', 1, { step: 0.1 }),
+    gm('EggHatchSpeedMultiplier', 'Egg hatch speed', 'number', 1, { step: 1 }),
+    gm('BabyMatureSpeedMultiplier', 'Baby mature speed', 'number', 1, { step: 1 }),
+    gm('BabyFoodConsumptionSpeedMultiplier', 'Baby food consumption', 'number', 1, { step: 0.1 }),
+    gm('BabyCuddleIntervalMultiplier', 'Imprint interval (lower = more often)', 'number', 1, { step: 0.1 }),
+    gm('BabyCuddleGracePeriodMultiplier', 'Imprint grace period', 'number', 1, { step: 0.1 }),
+    gm('BabyCuddleLoseImprintQualitySpeedMultiplier', 'Imprint loss speed when missed', 'number', 1, { step: 0.1 }),
+    gm('BabyImprintAmountMultiplier', 'Imprint amount per cuddle', 'number', 1, { step: 0.1 }),
+    gm('BabyImprintingStatScaleMultiplier', 'Imprint stat bonus', 'number', 1, { step: 0.1 }),
+    gus('AllowAnyoneBabyImprintCuddle', 'Anyone can imprint (not just the claimer)', 'bool', false),
+    gus('DisableImprintDinoBuff', 'Disable imprint rider buff', 'bool', false),
+    gus('PreventMateBoost', 'Disable mate boost', 'bool', false),
+    gm('bDisableDinoBreeding', 'Disable breeding', 'bool', false),
+  ]),
+  ...inGroup('Structures', [
+    gus('DisableStructureDecayPvE', 'Disable structure decay (PvE)', 'bool', false),
+    gus('PvEStructureDecayPeriodMultiplier', 'Structure decay period (PvE)', 'number', 1, { step: 0.1 }),
+    gus('PvPStructureDecay', 'Structure decay (PvP)', 'bool', false),
+    gus('AutoDestroyOldStructuresMultiplier', 'Auto-destroy abandoned structures (0 = off)', 'number', 0, { step: 0.1 }),
+    gus('OnlyAutoDestroyCoreStructures', 'Auto-destroy only core structures', 'bool', false),
+    gus('OnlyDecayUnsnappedCoreStructures', 'Decay only unsnapped core structures', 'bool', false),
+    gus('FastDecayUnsnappedCoreStructures', 'Unsnapped core structures decay fast', 'bool', false),
+    gus('DestroyUnconnectedWaterPipes', 'Destroy unconnected water pipes', 'bool', false),
+    gus('TheMaxStructuresInRange', 'Max structures in range', 'number', 10500),
+    gus('PerPlatformMaxStructuresMultiplier', 'Platform saddle structure limit multiplier', 'number', 1, { step: 0.1 }),
+    gus('MaxPlatformSaddleStructureLimit', 'Max platform saddles', 'number'),
+    gus('MaxGateFrameOnSaddles', 'Max gateways on platform saddles', 'number', 0),
+    gm('bAllowPlatformSaddleMultiFloors', 'Multi-floor platform saddles', 'bool', false),
+    gm('bFlyerPlatformAllowUnalignedDinoBasing', 'Dinos can stand on flyer platforms', 'bool', false),
+    gus('OverrideStructurePlatformPrevention', 'Allow turrets/spikes on platforms', 'bool', false),
+    gus('EnableExtraStructurePreventionVolumes', 'Extra no-build zones (official)', 'bool', false),
+    gm('bDisableStructurePlacementCollision', 'Disable structure placement collision', 'bool', false),
+    gus('StructurePickupTimeAfterPlacement', 'Pickup window after placing (seconds)', 'number', 30),
+    gus('StructurePickupHoldDuration', 'Pickup hold time (seconds)', 'number', 0.5, { step: 0.1 }),
+    gus('StructurePreventResourceRadiusMultiplier', 'Structure no-regrowth radius', 'number', 1, { step: 0.1 }),
+    gm('StructureDamageRepairCooldown', 'Repair cooldown after damage (seconds)', 'number', 180),
+    gus('ForceAllStructureLocking', 'Lock all structures by default', 'bool', false),
+    gm('bLimitTurretsInRange', 'Limit turrets in range', 'bool', true),
+    gm('LimitTurretsNum', 'Max turrets in range', 'number', 100),
+    gm('LimitTurretsRange', 'Turret limit range (units)', 'number', 10000),
+    gm('bHardLimitTurretsInRange', 'Hard turret limit (disable extras)', 'bool', false),
+  ]),
+  ...inGroup('Tribes', [
+    gm('MaxNumberOfPlayersInTribe', 'Max players per tribe (0 = unlimited)', 'number', 0),
+    gus('TribeNameChangeCooldown', 'Tribe rename cooldown (minutes)', 'number', 15),
+    gus('PreventTribeAlliances', 'Disable alliances', 'bool', false),
+    gm('MaxAlliancesPerTribe', 'Max alliances per tribe', 'number'),
+    gm('MaxTribesPerAlliance', 'Max tribes per alliance', 'number'),
+    gm('bPvEAllowTribeWar', 'Allow tribe wars (PvE)', 'bool', true),
+    gm('bPvEAllowTribeWarCancel', 'Allow cancelling tribe wars (PvE)', 'bool', false),
+    gus('TribeLogDestroyedEnemyStructures', 'Log destroyed enemy structures', 'bool', false),
+  ]),
+  ...inGroup('Limits', [
+    gus('MaxTamedDinos', 'Max tamed dinos', 'number', 5000),
+    gus('MaxPersonalTamedDinos', 'Max tamed dinos per tribe (0 = unlimited)', 'number', 0),
+    gus('MaxTamedDinos_SoftTameLimit', 'Soft tame limit per tribe', 'number', 5000, { editions: ['asa'] }),
+    gus('MaxTamedDinos_SoftTameLimit_CountdownForDeletionDuration', 'Soft tame limit grace period (seconds)', 'number', 604800, { editions: ['asa'] }),
+    gus('DestroyTamesOverTheSoftTameLimit', 'Delete tames over the soft limit', 'bool', false, { editions: ['asa'] }),
+    gus('AutoSavePeriodMinutes', 'Autosave every (minutes)', 'number', 15),
+    gus('KickIdlePlayersPeriod', 'Kick idle players after (seconds)', 'number', 3600, { hint: 'Needs "Kick idle players" under Launch options' }),
+  ]),
+  ...inGroup('Cluster & transfers', [
+    gus('NoTributeDownloads', 'Block all downloads from other servers', 'bool', false),
+    gus('PreventDownloadSurvivors', 'Block survivor downloads', 'bool', false),
+    gus('PreventDownloadItems', 'Block item downloads', 'bool', false),
+    gus('PreventDownloadDinos', 'Block dino downloads', 'bool', false),
+    gus('PreventUploadSurvivors', 'Block survivor uploads', 'bool', false),
+    gus('PreventUploadItems', 'Block item uploads', 'bool', false),
+    gus('PreventUploadDinos', 'Block dino uploads', 'bool', false),
+    gus('CrossARKAllowForeignDinoDownloads', 'Allow non-native dinos to transfer in', 'bool', false),
+    gus('MaxTributeDinos', 'Max uploaded dinos', 'number', 20),
+    gus('MaxTributeItems', 'Max uploaded items', 'number', 50),
+    gus('MinimumDinoReuploadInterval', 'Dino re-upload cooldown (seconds)', 'number', 0),
+    gus('TributeItemExpirationSeconds', 'Uploaded items expire after (seconds)', 'number', 86400),
+    gus('TributeDinoExpirationSeconds', 'Uploaded dinos expire after (seconds)', 'number', 86400),
+    gus('TributeCharacterExpirationSeconds', 'Uploaded survivors expire after (seconds, 0 = never)', 'number', 0),
+  ]),
+  ...inGroup('Chat & logs', [
+    gus('globalVoiceChat', 'Global voice chat', 'bool', false),
+    gus('proximityChat', 'Proximity text chat', 'bool', false),
+    gus('alwaysNotifyPlayerLeft', 'Announce players leaving', 'bool', false),
+    gus('DontAlwaysNotifyPlayerJoined', 'Hide player join messages', 'bool', false),
+    gus('AllowHideDamageSourceFromLogs', 'Hide damage source in tribe logs', 'bool', true),
+  ]),
+  ...perLevel('Player', 'Per-level stats: players', [0, 1, 3, 4, 5, 7, 8, 9, 10, 11], 1),
+  ...perLevel('DinoWild', 'Per-level stats: wild dinos', DINO_STATS, 1),
+  ...perLevel('DinoTamed', 'Per-level stats: tamed dinos', DINO_STATS),
+  ...perLevel('DinoTamed_Add', 'Per-level stats: tamed dinos (taming bonus add)', DINO_STATS),
+  ...perLevel('DinoTamed_Affinity', 'Per-level stats: tamed dinos (taming effectiveness)', DINO_STATS),
 ];
 
+// Section order and which ones start collapsed in the panel.
+const GROUPS = ['Launch', 'Launch options', 'General', 'Rules', 'PvP', 'Rates', 'XP', 'Survival', 'Day & night', 'Dinos', 'Breeding', 'Structures', 'Tribes', 'Limits', 'Cluster & transfers', 'Chat & logs'];
+const OPEN_GROUPS = new Set(['Launch', 'General', 'Rules', 'Rates']);
+
+const EVENTS = ['Easter', 'Summer', 'FearEvolved', 'TurkeyTrial', 'WinterWonderland', 'vday', 'birthday', 'Arkaeology', 'ExtinctionChronicles', 'PAX'];
+
+// Stored on server.ark. `flag` = command-line switch added when the box is ticked.
+// Only fixed switches and pattern-checked values are open to "settings" friends; free text is admin only.
 const LAUNCH_FIELDS = [
-  { key: 'launch.map', label: 'Map', type: 'select-custom', group: 'Launch' },
-  { key: 'launch.maxPlayers', label: 'Max players', type: 'number', group: 'Launch' },
-  { key: 'launch.port', label: 'Game port (UDP)', type: 'number', group: 'Launch' },
-  { key: 'launch.queryPort', label: 'Query port (UDP, ARK: SE only)', type: 'number', group: 'Launch' },
-  { key: 'launch.rconPort', label: 'RCON port (TCP, local only)', type: 'number', group: 'Launch' },
-  { key: 'launch.battleye', label: 'BattlEye anti-cheat', type: 'bool', group: 'Launch' },
-  { key: 'launch.pcOnly', label: 'PC players only (disable crossplay)', type: 'bool', group: 'Launch', hint: 'ARK: Survival Ascended only' },
-  { key: 'launch.clusterId', label: 'Cluster ID (servers with the same ID allow transfers)', type: 'text', group: 'Launch' },
-  { key: 'launch.showConsole', label: 'Open ARK console window (-log)', type: 'bool', group: 'Launch' },
-  { key: 'launch.extraArgs', label: 'Extra command-line arguments', type: 'text', group: 'Launch', admin: true, hint: 'Admin only — e.g. -ForceAllowCaveFlyers -NoTransferFromFiltering' },
-];
+  { name: 'map', label: 'Map', type: 'select-custom' },
+  { name: 'maxPlayers', label: 'Max players', type: 'number' },
+  { name: 'port', label: 'Game port (UDP)', type: 'number' },
+  { name: 'queryPort', label: 'Query port (UDP, ARK: SE only)', type: 'number' },
+  { name: 'rconPort', label: 'RCON port (TCP, local only)', type: 'number' },
+  { name: 'battleye', label: 'BattlEye anti-cheat', type: 'bool' },
+  { name: 'pcOnly', label: 'PC players only (disable crossplay)', type: 'bool', editions: ['asa'] },
+  { name: 'clusterId', label: 'Cluster ID (servers with the same ID allow transfers)', type: 'text' },
+  { name: 'showConsole', label: 'Open ARK console window (-log)', type: 'bool' },
+  { name: 'activeEvent', label: 'Active event', type: 'select-custom', options: EVENTS, pattern: /^\w*$/, hint: 'Seasonal event to run (-ActiveEvent). Blank = none.' },
+  { name: 'passiveMods', label: 'Passive mods (IDs, comma-separated)', type: 'text', pattern: /^[\d,\s]*$/, editions: ['asa'], hint: 'Loaded for their content (e.g. a map\'s dependencies) without being active' },
+  { name: 'altSaveDir', label: 'Save folder name', type: 'text', pattern: /^[\w-]*$/, hint: 'AltSaveDirectoryName — use a different name to keep a separate world on the same map' },
+  { name: 'culture', label: 'Server language', type: 'text', pattern: /^([a-z]{2}(-[A-Za-z]{2})?)?$/, hint: 'e.g. en, de, fr, pt-BR (-culture)' },
+  { name: 'extraArgs', label: 'Extra command-line arguments', type: 'text', admin: true, hint: 'Admin only — e.g. -NoBiomeWalls' },
+  ...[
+    ['forceAllowCaveFlyers', '-ForceAllowCaveFlyers', 'Allow flyers in caves'],
+    ['noTransferFromFiltering', '-NoTransferFromFiltering', 'Allow transfers from any cluster/server'],
+    ['forceRespawnDinos', '-ForceRespawnDinos', 'Wipe wild dinos on every start'],
+    ['enableIdlePlayerKick', '-EnableIdlePlayerKick', 'Kick idle players'],
+    ['exclusiveJoin', '-exclusivejoin', 'Whitelist only (PlayersExclusiveJoinList.txt)'],
+    ['useDynamicConfig', '-UseDynamicConfig', 'Use dynamic config (official live tuning)'],
+    ['structureStasisGrid', '-UseStructureStasisGrid', 'Structure stasis grid (better performance with big bases)'],
+    ['stasisKeepControllers', '-StasisKeepControllers', 'Keep AI controllers in stasis (less CPU spike when loading)'],
+    ['noUndermeshChecking', '-noundermeshchecking', 'Disable under-mesh checking'],
+    ['noUndermeshKilling', '-noundermeshkilling', 'Don\'t kill players found under the map'],
+    ['autoDestroyStructures', '-AutoDestroyStructures', 'Run abandoned structure auto-destroy'],
+    ['noHangDetection', '-NoHangDetection', 'Disable hang detection (helps slow mod loading)'],
+    ['tribeLogs', '-servergamelogincludetribelogs', 'Include tribe logs in the server log'],
+    ['allowAnsel', '-ServerAllowAnsel', 'Allow NVIDIA Ansel'],
+  ].map(([name, flag, label]) => ({ name, flag, label, type: 'bool', group: 'Launch options' })),
+].map((f) => ({ group: 'Launch', ...f, key: 'launch.' + f.name }));
 
 function edition(server) {
   return EDITIONS[server.ark.edition] || EDITIONS.asa;
@@ -86,8 +329,38 @@ function loadIni(server, which) {
   return new Ini(fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
 }
 function iniValue(field, v) {
+  if (v === null || v === undefined) return null; // cleared: remove the line so ARK uses its default
   if (field.type === 'bool') return v ? 'True' : 'False';
   return v;
+}
+
+// "Extra INI lines" boxes, for settings ARK repeats per line (engram/item/spawn overrides).
+// Key=Value lines go into the file's main section; a [Section] line switches section.
+const EXTRA = {
+  gus: { file: 'GameUserSettings.ini', section: 'ServerSettings' },
+  game: { file: 'Game.ini', section: GM },
+};
+// The panel needs these for RCON (console, player list, graceful shutdown) and the port check.
+const PANEL_KEYS = new Set(['rconenabled', 'rconport', 'port', 'queryport', 'serveradminpassword']);
+function parseExtra(which, text) {
+  let section = EXTRA[which].section;
+  const lines = [];
+  String(text || '').split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line || line.startsWith(';') || line.startsWith('#')) return;
+    const sec = /^\[([^\]]+)\]$/.exec(line);
+    if (sec) {
+      section = sec[1].trim();
+      return;
+    }
+    const eq = line.indexOf('=');
+    const key = eq > 0 ? line.slice(0, eq).trim() : '';
+    const where = `Extra ${EXTRA[which].file} lines, line ${i + 1}`;
+    if (!/^[\w.[\]]+$/.test(key)) throw new HttpError(400, `${where}: expected Key=Value`);
+    if (PANEL_KEYS.has(key.toLowerCase())) throw new HttpError(400, `${where}: ${key} is set by the panel`);
+    lines.push({ section, key, value: line.slice(eq + 1) });
+  });
+  return lines;
 }
 
 const rconClients = new Map();
@@ -117,7 +390,7 @@ const ark = {
   defaults(input) {
     const a = input.ark || {};
     const ed = EDITIONS[a.edition] ? a.edition : 'asa';
-    return {
+    const out = {
       edition: ed,
       map: a.map || EDITIONS[ed].maps[0],
       maxPlayers: Number(a.maxPlayers) || 20,
@@ -137,7 +410,10 @@ const ark = {
         ServerPassword: a.serverPassword || '',
         ServerAdminPassword: a.adminPassword || randomPassword(14),
       },
+      extraIni: { gus: '', game: '' },
     };
+    for (const f of LAUNCH_FIELDS) if (!(f.name in out)) out[f.name] = f.type === 'bool' ? false : '';
+    return out;
   },
 
   ports(server) {
@@ -174,13 +450,23 @@ const ark = {
 
   applyIni(server) {
     fs.mkdirSync(configDir(server), { recursive: true });
-    const gus = loadIni(server, 'gus');
-    const game = loadIni(server, 'game');
-    const s = server.ark.settings;
+    const a = server.ark;
+    const files = { gus: loadIni(server, 'gus'), game: loadIni(server, 'game') };
+    const { gus, game } = files;
+    // Lines deleted from the extra boxes since the last start.
+    for (const r of a.extraRemove || []) files[r.file].removeAll(r.section, r.key);
+    const s = a.settings;
     for (const f of FIELDS) {
       if (!(f.key in s)) continue;
-      (f.file === 'game' ? game : gus).set(f.section, f.iniKey || f.key, iniValue(f, s[f.key]));
+      files[f.file].set(f.section, f.iniKey || f.key, iniValue(f, s[f.key]));
     }
+    // Extra lines come after the form, so they win over a form field with the same key.
+    for (const which of Object.keys(EXTRA)) {
+      const lines = parseExtra(which, a.extraIni && a.extraIni[which]);
+      for (const l of lines) files[which].removeAll(l.section, l.key);
+      for (const l of lines) files[which].add(l.section, l.key, l.value);
+    }
+    a.extraRemove = [];
     // RCON must be on for the panel console, player list and graceful shutdown.
     gus.set('ServerSettings', 'RCONEnabled', 'True');
     gus.set('ServerSettings', 'RCONPort', server.ark.rconPort);
@@ -201,11 +487,14 @@ const ark = {
     if (a.edition === 'ase') {
       url += `?QueryPort=${a.queryPort}?MaxPlayers=${a.maxPlayers}`;
       if (a.mods.length) url += `?GameModIds=${a.mods.join(',')}`;
+      if (a.altSaveDir) url += `?AltSaveDirectoryName=${a.altSaveDir}`;
       args.push(url, '-server');
       if (a.mods.length) args.push('-automanagedmods');
     } else {
+      if (a.altSaveDir) url += `?AltSaveDirectoryName=${a.altSaveDir}`;
       args.push(url, `-WinLiveMaxPlayers=${a.maxPlayers}`);
       if (a.mods.length) args.push(`-mods=${a.mods.join(',')}`);
+      if (a.passiveMods) args.push(`-passivemods=${a.passiveMods}`);
       if (a.pcOnly) args.push('-ServerPlatform=PC');
     }
     if (!a.battleye) args.push('-NoBattlEye');
@@ -215,6 +504,9 @@ const ark = {
       args.push(`-clusterid=${a.clusterId}`, `-ClusterDirOverride=${clusterDir}`);
     }
     if (a.showConsole) args.push('-log');
+    if (a.activeEvent) args.push(`-ActiveEvent=${a.activeEvent}`);
+    if (a.culture) args.push(`-culture=${a.culture}`);
+    for (const f of LAUNCH_FIELDS) if (f.flag && a[f.name]) args.push(f.flag);
     args.push('-servergamelog');
     args.push(...splitArgs(a.extraArgs));
     return {
@@ -280,51 +572,93 @@ const ark = {
   },
 
   settingsSchema(server) {
-    const groups = new Map();
+    const ed = server.ark.edition;
+    const groups = new Map(GROUPS.map((g) => [g, []]));
     for (const f of [...LAUNCH_FIELDS, ...FIELDS]) {
+      if (f.editions && !f.editions.includes(ed)) continue;
       if (!groups.has(f.group)) groups.set(f.group, []);
-      const field = { key: f.file ? 'ini.' + f.key : f.key, label: f.label, type: f.type, step: f.step, hint: f.hint, admin: f.admin };
-      if (f.key === 'launch.map') field.options = edition(server).maps;
+      const field = {
+        key: f.file ? 'ini.' + f.key : f.key,
+        label: f.label,
+        type: f.type,
+        step: f.step,
+        hint: f.hint,
+        admin: f.admin,
+        def: f.def,
+        options: f.options,
+        // Where the value ends up, so it can be matched against the ARK wiki.
+        tip: f.file ? `${EXTRA[f.file].file} [${f.section}] ${f.iniKey || f.key}` : f.flag,
+      };
+      if (f.name === 'map') field.options = edition(server).maps;
       groups.get(f.group).push(field);
     }
+    groups.set('Advanced: extra INI lines', [
+      { key: 'extra.gus', label: 'Extra GameUserSettings.ini lines', type: 'textarea', admin: true, hint: 'Admin only. Key=Value per line, added to [ServerSettings]; start a block with [SectionName] to target another section.' },
+      { key: 'extra.game', label: 'Extra Game.ini lines', type: 'textarea', admin: true, hint: 'Admin only. For repeated settings such as ConfigOverrideItemMaxQuantity, OverrideNamedEngramEntries, ConfigOverrideSupplyCrateItems, LevelExperienceRampOverrides. Added to [/script/shootergame.shootergamemode].' },
+    ]);
     return {
-      note: 'These values are written into GameUserSettings.ini / Game.ini every time the server starts. Other INI settings can be edited in the Files tab.',
-      sections: [...groups].map(([title, fields]) => ({ title, fields })),
+      note: 'These values are written into GameUserSettings.ini / Game.ini every time the server starts. Leave a field blank to use ARK\'s default (shown greyed out). Hover a label to see the INI key.',
+      sections: [...groups].filter(([, fields]) => fields.length).map(([title, fields]) => ({ title, fields, collapsed: !OPEN_GROUPS.has(title) })),
     };
   },
 
   readSettings(server) {
     const a = server.ark;
     const out = {};
-    for (const k of ['map', 'maxPlayers', 'port', 'queryPort', 'rconPort', 'battleye', 'pcOnly', 'clusterId', 'showConsole', 'extraArgs']) out['launch.' + k] = a[k];
-    const gus = loadIni(server, 'gus');
-    const game = loadIni(server, 'game');
+    for (const f of LAUNCH_FIELDS) out[f.key] = a[f.name] ?? (f.type === 'bool' ? false : '');
+    const files = { gus: loadIni(server, 'gus'), game: loadIni(server, 'game') };
     for (const f of FIELDS) {
       let v = a.settings[f.key];
-      if (v === undefined) v = (f.file === 'game' ? game : gus).get(f.section, f.iniKey || f.key);
-      if (f.type === 'bool') v = v === true || String(v).toLowerCase() === 'true';
+      if (v === undefined) v = files[f.file].get(f.section, f.iniKey || f.key);
+      if (f.type === 'bool') v = v == null ? !!f.def : v === true || String(v).toLowerCase() === 'true';
       out['ini.' + f.key] = v ?? '';
     }
+    for (const which of Object.keys(EXTRA)) out['extra.' + which] = (a.extraIni && a.extraIni[which]) || '';
     return out;
   },
 
   writeSettings(server, values, opts = {}) {
     const a = server.ark;
+    // Check everything before changing anything, so a bad value doesn't leave half the form saved.
+    const changes = [];
     for (const [k, v] of Object.entries(values)) {
       if (k.startsWith('launch.')) {
-        const key = k.slice(7);
-        if (['maxPlayers', 'port', 'queryPort', 'rconPort'].includes(key)) a[key] = Number(v) || a[key];
-        else if (['battleye', 'pcOnly', 'showConsole'].includes(key)) a[key] = !!v;
-        else if (['map', 'clusterId'].includes(key)) a[key] = String(v || '').trim();
+        const f = LAUNCH_FIELDS.find((x) => x.key === k);
         // extraArgs becomes the server's command line, so admin only.
-        else if (key === 'extraArgs' && opts.admin) a[key] = String(v || '').trim();
+        if (!f || (f.admin && !opts.admin)) continue;
+        let val;
+        if (f.type === 'number') val = Number(v) || a[f.name];
+        else if (f.type === 'bool') val = !!v;
+        else {
+          val = String(v ?? '').trim();
+          if (f.pattern && !f.pattern.test(val)) throw new HttpError(400, `${f.label}: "${val}" is not a valid value`);
+          if (f.name === 'passiveMods') val = val.split(/[\s,]+/).filter(Boolean).join(',');
+        }
+        changes.push(() => (a[f.name] = val));
       } else if (k.startsWith('ini.')) {
         const f = FIELDS.find((x) => x.key === k.slice(4));
         if (!f) continue;
-        if (v === '' || v === null || v === undefined) delete a.settings[f.key];
-        else a.settings[f.key] = f.type === 'bool' ? !!v : f.type === 'number' ? Number(v) : String(v);
+        const blank = v === '' || v === null || v === undefined;
+        // null (not delete) so applyIni removes the line instead of keeping an old value.
+        const val = blank ? null : f.type === 'bool' ? !!v : f.type === 'number' ? Number(v) : String(v);
+        if (f.type === 'number' && !blank && !Number.isFinite(val)) throw new HttpError(400, `${f.label}: must be a number`);
+        changes.push(() => (a.settings[f.key] = val));
+      } else if (k.startsWith('extra.') && EXTRA[k.slice(6)]) {
+        if (!opts.admin) continue;
+        const which = k.slice(6);
+        const text = String(v ?? '').replace(/\r\n?/g, '\n').trim();
+        parseExtra(which, text);
+        changes.push(() => {
+          a.extraIni = a.extraIni || { gus: '', game: '' };
+          if (a.extraIni[which] === text) return;
+          // Clear the old block's keys on the next start, so deleting a line removes it from the file.
+          const old = parseExtra(which, a.extraIni[which]).map((l) => ({ file: which, section: l.section, key: l.key }));
+          a.extraRemove = [...(a.extraRemove || []), ...old];
+          a.extraIni[which] = text;
+        });
       }
     }
+    for (const apply of changes) apply();
     if (!a.settings.ServerAdminPassword) a.settings.ServerAdminPassword = randomPassword(14);
     if (!a.map) a.map = edition(server).maps[0];
     return { restartRequired: true };

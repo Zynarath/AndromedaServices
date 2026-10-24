@@ -135,6 +135,10 @@ input[type='range'] { padding: 0; accent-color: var(--accent); border: 0; backgr
 fieldset { border: 0; border-top: 1px solid var(--border); margin: 6px 0 0; padding: 14px 0 4px; }
 legend { font-weight: 650; color: var(--text-2); padding-right: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
 details.adv { margin: 4px 0 12px; }
+details.settings-sec { border-top: 1px solid var(--border); padding: 4px 0; }
+details.settings-sec > summary { cursor: pointer; font-weight: 650; color: var(--text-2); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; padding: 10px 0; }
+details.settings-sec[open] > summary { margin-bottom: 6px; }
+details.settings-sec > summary .count { text-transform: none; letter-spacing: 0; }
 details.adv > summary { cursor: pointer; color: var(--text-2); font-weight: 600; padding: 6px 0; }
 .filter { margin-bottom: 10px; }
 
