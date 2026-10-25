@@ -189,8 +189,9 @@ function rotationString(t, gametype, maps, gtsCfg) {
     const dsr = { war: 'TDM', dm: 'FFA' }[gametype] || gametype.toUpperCase();
     return `dsr ${dsr}_default ` + maps.map((m) => `map ${m}`).join(' ');
   }
-  // Plutonium T6 rotation tokens: "execgts <file>" loads storage/t6/gamesettings/<file> (mode + rules).
-  if (t === TITLES.t6) return maps.map((m) => `execgts ${gtsCfg || gametype + '.cfg'} map ${m}`).join(' ');
+  // Plutonium T6 rotation tokens (from its server configs): "gametype <mode>" sets the mode and must
+  // come first; "execgts <file>" loads storage/t6/gamesettings/<file> (the panel's rules); then "map".
+  if (t === TITLES.t6) return maps.map((m) => `gametype ${gametype} execgts ${gtsCfg || gametype + '.cfg'} map ${m}`).join(' ');
   return `gametype ${gametype} ` + maps.map((m) => `map ${m}`).join(' ');
 }
 

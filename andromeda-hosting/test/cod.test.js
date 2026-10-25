@@ -68,7 +68,7 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP and bots
     const maps = [...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]);
     assert.deepEqual([...maps].sort(), t.maps.filter((m) => !m[2]).map((m) => m[0]).sort(), `${key} has every base map exactly once`);
     if (key === 'iw5') assert.match(rot, /^dsr DOM_default /);
-    else if (key === 't6') assert.match(rot, /^execgts hp_abc123_dom\.cfg map /);
+    else if (key === 't6') assert.match(rot, /^gametype dom execgts hp_abc123_dom\.cfg map /);
     else assert.match(rot, /^gametype dom map /);
   }
   assert.equal(cod.TITLES.cod4x.maps.length, 16);
@@ -109,7 +109,7 @@ test('BO2: NukeJacked playlist rotates Nuketown 2025 and Hijacked; DLC maps stay
   const cfg = cod.buildConfig(s);
   const rot = /sv_mapRotation "([^"]+)"/.exec(cfg)[1];
   assert.deepEqual([...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]).sort(), ['mp_hijacked', 'mp_nuketown_2020']);
-  assert.match(rot, /^execgts hp_abc123_tdm\.cfg map /);
+  assert.match(rot, /^gametype tdm execgts hp_abc123_tdm\.cfg map /);
   assert.match(cfg, /\/\/ Map rotation \(NukeJacked/);
   assert.equal(cod.readSettings(s)['cod.playlist'], 'nukejacked');
   // Unknown playlists fall back to the ticked maps; other titles have no playlists.
@@ -296,5 +296,5 @@ test('BO2 start writes the mode file where "execgts" looks (Plutonium storage/t6
   await assert.rejects(cod.buildLaunch(s), /Plutonium is not installed/);
   const file = path.join(tools.plutoStorage('t6'), 'gamesettings', 'hp_abc123_dom.cfg');
   assert.match(fs.readFileSync(file, 'utf8'), /set_gametype dom\r\ngts autoTeamBalance "1"\r\ngts scoreLimit "200"\r\n$/);
-  assert.match(fs.readFileSync(path.join(s.cod.gameDir, 'main', 'hp_abc123.cfg'), 'utf8'), /sv_mapRotation "execgts hp_abc123_dom\.cfg map /);
+  assert.match(fs.readFileSync(path.join(s.cod.gameDir, 'main', 'hp_abc123.cfg'), 'utf8'), /sv_mapRotation "gametype dom execgts hp_abc123_dom\.cfg map /);
 });
