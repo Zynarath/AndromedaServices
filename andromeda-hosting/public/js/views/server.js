@@ -8,6 +8,7 @@ import * as schedulesTab from './tabs/schedules.js';
 import * as accessTab from './tabs/access.js';
 import * as playersTab from './tabs/players.js';
 import * as accountsTab from './tabs/accounts.js';
+import * as modConfigTab from './tabs/modconfig.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: 'activity' },
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'players', label: 'Players', icon: 'users', perm: 'settings', mod: playersTab, game: 'minecraft' },
   { id: 'accounts', label: 'Accounts', icon: 'users', perm: 'settings', mod: accountsTab, game: 'wow' },
   { id: 'mods', label: 'Mods', icon: 'box', perm: 'mods', mod: modsTab, notGame: 'wow' },
+  { id: 'modconfig', label: 'Mod configuration', icon: 'edit', perm: 'settings', mod: modConfigTab, games: ['ark', 'minecraft'] },
   { id: 'files', label: 'Files', icon: 'folder', perm: 'files', mod: filesTab },
   { id: 'backups', label: 'Backups', icon: 'archive', perm: 'backups', mod: backupsTab },
   { id: 'schedules', label: 'Schedules', icon: 'clock', perm: 'schedules', mod: schedulesTab },
@@ -36,7 +38,7 @@ export async function render(root, ctx) {
   const { server: initial } = await api.get(`/api/servers/${id}`);
   let s = initial;
   const can = (p) => s.perms.includes(p) || s.perms.includes('admin');
-  const tabs = TABS.filter((t) => (!t.perm || can(t.perm)) && (!t.game || t.game === s.game) && t.notGame !== s.game);
+  const tabs = TABS.filter((t) => (!t.perm || can(t.perm)) && (!t.game || t.game === s.game) && (!t.games || t.games.includes(s.game)) && t.notGame !== s.game);
   const tab = tabs.find((t) => t.id === tabParam) || tabs[0];
   let consoleLines = [];
   let tabCleanup = null;

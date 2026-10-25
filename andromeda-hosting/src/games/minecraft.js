@@ -9,6 +9,8 @@ const modpack = require('../services/modpack');
 const cf = require('../services/curseforge');
 const { downloadFile } = require('../util/download');
 const { HttpError } = require('../util/misc');
+const modconfig = require('../util/modconfig');
+const { readEntry } = require('../util/zip');
 
 // Well-known G1GC tuning for Minecraft servers (Aikar's flags).
 const AIKAR_FLAGS = [
@@ -487,6 +489,69 @@ function gameruleField(g) {
   return field;
 }
 
+// ---- Mod configuration: every mod's own config files, as forms ----
+const CONFIG_EXT = /\.(toml|json|json5|properties|cfg|ya?ml|txt)$/i;
+const MAX_CONFIG_BYTES = 512 * 1024;
+const jarInfoCache = new Map(); // jar path -> { mtime, mods: [{ id, name }] }
+
+// Mod ids and display names from each jar (META-INF/mods.toml, neoforge.mods.toml, fabric.mod.json).
+async function jarMods(file) {
+  const st = fs.statSync(file);
+  const hit = jarInfoCache.get(file);
+  if (hit && hit.mtime === st.mtimeMs) return hit.mods;
+  const mods = [];
+  try {
+    const e = await readEntry(file, (n) => n === 'META-INF/mods.toml' || n === 'META-INF/neoforge.mods.toml' || n === 'fabric.mod.json' || n === 'quilt.mod.json');
+    if (e && e.name.endsWith('.json')) {
+      const j = JSON.parse(e.data.toString('utf8'));
+      const q = j.quilt_loader || j;
+      if (q.id) mods.push({ id: String(q.id), name: String((q.metadata && q.metadata.name) || j.name || q.id) });
+    } else if (e) {
+      // [[mods]] blocks: modId="create" ... displayName="Create"
+      for (const block of e.data.toString('utf8').split(/\[\[mods\]\]/).slice(1)) {
+        const id = /^\s*modId\s*=\s*["']([^"']+)["']/m.exec(block);
+        const name = /^\s*displayName\s*=\s*["']([^"']+)["']/m.exec(block);
+        if (id) mods.push({ id: id[1], name: name ? name[1] : id[1] });
+      }
+    }
+  } catch {
+    /* not a readable jar: the config just shows its file name */
+  }
+  jarInfoCache.set(file, { mtime: st.mtimeMs, mods });
+  return mods;
+}
+
+function listConfigFiles(server) {
+  const roots = [['config', 'config']];
+  const level = readProps(server).get('level-name') || 'world';
+  if (/^[\w .-]+$/.test(level)) roots.push([path.join(level, 'serverconfig'), 'world']);
+  const out = [];
+  const walk = (rel, depth, where) => {
+    const abs = path.join(server.dir, rel);
+    let entries = [];
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const r = path.join(rel, e.name);
+      if (e.isDirectory() && depth < 3) walk(r, depth + 1, where);
+      else if (e.isFile() && CONFIG_EXT.test(e.name) && fs.statSync(path.join(server.dir, r)).size <= MAX_CONFIG_BYTES) out.push({ file: r.split(path.sep).join('/'), where });
+    }
+  };
+  for (const [rel, where] of roots) walk(rel, 0, where);
+  return out;
+}
+
+// The mod a config file belongs to: config/<modid>/... or config/<modid>[-common|-server|-client].toml
+function modKeyOf(file) {
+  const parts = file.split('/');
+  const inner = parts[0] === 'config' ? parts.slice(1) : parts.slice(2); // world/serverconfig/...
+  const first = inner.length > 1 ? inner[0] : inner[0].replace(/\.[^.]+$/, '');
+  return first.toLowerCase().replace(/[-_](common|server|client|startup|config|settings)$/, '');
+}
+
 function groupFields(fields) {
   const groups = new Map();
   for (const f of fields) {
@@ -495,6 +560,58 @@ function groupFields(fields) {
   }
   return [...groups].map(([title, fs]) => ({ title, fields: fs }));
 }
+
+minecraft.listModConfigs = async function (server) {
+  const names = new Map();
+  const modsDir = path.join(server.dir, 'mods');
+  if (fs.existsSync(modsDir)) {
+    for (const f of fs.readdirSync(modsDir).filter((n) => /\.jar$/i.test(n))) {
+      for (const m of await jarMods(path.join(modsDir, f))) names.set(m.id.toLowerCase(), m.name);
+    }
+  }
+  const ids = [...names.keys()].sort((a, b) => b.length - a.length);
+  const groups = new Map();
+  for (const c of listConfigFiles(server)) {
+    const key = modKeyOf(c.file);
+    const id = names.has(key) ? key : ids.find((i) => key.startsWith(i) || key.replace(/[-_]/g, '').startsWith(i.replace(/[-_]/g, ''))) || key;
+    const g = groups.get(id) || { id, name: names.get(id) || key, files: [] };
+    g.files.push({ file: c.file, where: c.where, client: /client/i.test(c.file.split('/').pop()), format: modconfig.formatOf(c.file) });
+    groups.set(id, g);
+  }
+  return {
+    kind: 'files',
+    note: 'Config files the mods wrote in config/ and the world\'s serverconfig/. Mods create them the first time they load, so start the server once after adding mods. Changes apply on the next restart.',
+    mods: [...groups.values()].sort((a, b) => a.name.localeCompare(b.name)),
+  };
+};
+
+function configPath(server, file) {
+  // Only files the scan lists: no other paths can be read or written this way.
+  if (!listConfigFiles(server).some((c) => c.file === file)) throw new HttpError(404, 'Config file not found');
+  return path.join(server.dir, ...file.split('/'));
+}
+
+minecraft.readModConfig = function (server, file) {
+  const text = fs.readFileSync(configPath(server, file), 'utf8');
+  const d = modconfig.describe(file, text);
+  return { file, format: d.format, raw: text, fields: d.fields && d.fields.map(({ line, start, raw, path: p, ...f }) => f) };
+};
+
+minecraft.writeModConfig = function (server, file, { values, raw }) {
+  const full = configPath(server, file);
+  if (typeof raw === 'string') {
+    fs.writeFileSync(full, raw);
+    return { changed: 1 };
+  }
+  let r;
+  try {
+    r = modconfig.apply(file, fs.readFileSync(full, 'utf8'), values || {});
+  } catch (err) {
+    throw new HttpError(400, err.message);
+  }
+  if (r.changed) fs.writeFileSync(full, r.text);
+  return { changed: r.changed };
+};
 
 module.exports = minecraft;
 module.exports.splitArgs = splitArgs;

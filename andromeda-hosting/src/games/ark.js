@@ -848,4 +848,79 @@ const ark = {
   },
 };
 
+// ---- Mod configuration: mods keep their settings in their own INI sections ----
+// ARK's own sections; everything else in the two files belongs to a mod (e.g. [AnnunakiGenesis]).
+const VANILLA_SECTION = /^(ServerSettings|SessionSettings|MessageOfTheDay|ScalabilityGroups|Player\.Info|\/script\/.*)$/i;
+const SECTION_RE = /^[A-Za-z0-9_. -]{1,64}$/;
+const MOD_KEY_RE = /^[\w.()\[\]-]{1,128}$/;
+
+function modSections(server) {
+  const out = [];
+  for (const which of ['gus', 'game']) {
+    for (const sec of loadIni(server, which).sections) {
+      if (VANILLA_SECTION.test(sec.name)) continue;
+      out.push({ file: which, section: sec.name, keys: sec.lines.filter((l) => l.key).length });
+    }
+  }
+  return out;
+}
+
+const modId = (file, section) => `${file}:${section}`;
+
+ark.listModConfigs = function (server) {
+  return {
+    kind: 'ini',
+    note: 'ARK mods keep their settings in their own sections of GameUserSettings.ini or Game.ini. A section shows up here once the mod (or you) has written it; most mods write theirs on the first start with the mod, some only list their options on their mod page — add those with "Add setting" or "New mod section".',
+    loadedMods: server.ark.mods,
+    mods: modSections(server).map((m) => ({ id: modId(m.file, m.section), name: m.section, files: [{ file: modId(m.file, m.section), where: EXTRA[m.file].file, keys: m.keys }] })),
+  };
+};
+
+ark.readModConfig = function (server, id) {
+  const [which, section] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  if (!EXTRA[which]) throw new HttpError(404, 'Unknown file');
+  const ini = loadIni(server, which);
+  const sec = ini.section(section);
+  const fields = [];
+  if (sec) {
+    const seen = new Map();
+    for (const l of sec.lines) if (l.key) seen.set(l.key, [...(seen.get(l.key) || []), l.value]);
+    for (const [key, vals] of seen) {
+      if (vals.length > 1) fields.push({ id: key, label: key, type: 'textarea', value: vals.join('\n'), hint: 'Repeated setting: one value per line' });
+      else if (/^(true|false)$/i.test(vals[0].trim())) fields.push({ id: key, label: key, type: 'bool', value: /^true$/i.test(vals[0].trim()) });
+      else fields.push({ id: key, label: key, type: /^-?\d+(\.\d+)?$/.test(vals[0].trim()) ? 'number' : 'text', value: vals[0] });
+    }
+  }
+  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields, canAdd: true };
+};
+
+// values: { key: value } (existing or new keys). Only while the server is stopped: ARK writes its
+// settings back on shutdown and would undo the change.
+ark.writeModConfig = function (server, id, { values }, opts = {}) {
+  if (opts.running) throw new HttpError(409, 'Stop the server first: ARK rewrites its INI files when it shuts down, which would undo the change.');
+  const [which, section] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  if (!EXTRA[which]) throw new HttpError(404, 'Unknown file');
+  if (!SECTION_RE.test(section) || VANILLA_SECTION.test(section)) throw new HttpError(400, 'Use a mod section name like AnnunakiGenesis (ARK\'s own sections are in the Settings tab)');
+  const ini = loadIni(server, which);
+  const sec = ini.section(section);
+  const current = new Map();
+  if (sec) for (const l of sec.lines) if (l.key) current.set(l.key, [...(current.get(l.key) || []), l.value]);
+  let changed = 0;
+  for (const [key, raw] of Object.entries(values || {})) {
+    if (!MOD_KEY_RE.test(key)) throw new HttpError(400, `"${key}" isn't a valid setting name`);
+    const vals = (typeof raw === 'boolean' ? [raw ? 'True' : 'False'] : String(raw ?? '').split(/\r?\n/)).map((v) => v.trim()).filter((v, i, a) => v !== '' || a.length === 1);
+    const before = current.get(key) || [];
+    if (JSON.stringify(before) === JSON.stringify(vals)) continue;
+    ini.removeAll(section, key);
+    for (const v of vals) if (v !== '') ini.add(section, key, v);
+    changed++;
+  }
+  if (!sec && !changed) ini.section(section, true); // a new, still empty mod section
+  if (changed || !sec) {
+    fs.mkdirSync(configDir(server), { recursive: true });
+    saveIni(server, which, ini);
+  }
+  return { changed };
+};
+
 module.exports = ark;
