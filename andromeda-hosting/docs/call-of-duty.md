@@ -37,13 +37,17 @@ team balance, player health, health regeneration and the pre-match countdown. Be
 rules section for the selected game mode sets its time limit, score limit, lives and respawn
 delay, plus rounds for Search & Destroy, Demolition and Capture the Flag. Anything left on
 *Game default* / blank isn't written, so the game mode's normal value applies. The panel writes
-these into `hp_<id>_<mode>.cfg`, which runs the game's own `<mode>.cfg` first; the map
-rotation runs that file before each map.
+these into Plutonium's `storage\t6\gamesettings\hp_<id>_<mode>.cfg`, laid out like
+Plutonium's own mode files (the game's default and mode settings, `set_gametype <mode>`, then the
+panel's rules). The map rotation loads it with `execgts` before each map. *Auto-balance teams*
+is on unless you turn it off, as in Plutonium's own configs.
 
 **BO2 bots:** besides how many bots and how hard they are, you can set how the player count
 works, which team bots join (or a custom split), forced team balance, bot rank and prestige,
 whether bots throw grenades, jump/drop shot and aim, kicking bots at the end of a match, and
-how long to wait before adding them.
+how long to wait before adding them. *Keep teams even by moving bots* is on by default: when a
+friend joins, Bot Warfare kicks a bot from the team with the most bots (it doesn't count people),
+so without it the teams can end up uneven.
 
 **BO2 playlists and DLC maps:** under **Settings → Game mode & maps**, the *Playlist* setting has
 **NukeJacked**: a rotation of just Nuketown 2025 and Hijacked, using whichever game mode you
@@ -109,20 +113,19 @@ The BO2 bot options (team, split, rank, prestige, grenades, jump/drop shot, aim,
 end, wait time, fill mode, spectators) use the dvars documented in the
 [t6_bot_warfare README](https://github.com/ineedbots/t6_bot_warfare).
 
+The BO2 rotation format (`execgts <file> map …`), the gamesettings file layout and every
+`gts` rule name come from Plutonium's T6 server configs
+([T6ServerConfigs](https://github.com/xerxes-at/T6ServerConfigs)).
+
 These follow the standard community server configs, but haven't been run against the real games
 yet. If something doesn't take, use **Settings → Extra config lines** to override it, and tell me
 what the console says:
 
-- **BO2 match rules**: written as `gts <setting> "<value>"` (`timeLimit`, `scoreLimit`,
-  `roundLimit`, `roundWinLimit`, `playerNumLives`, `playerRespawnDelay`, `hardcoreMode`,
-  `friendlyfiretype`, `allowKillcam`, `allowFinalKillcam`, `autoTeamBalance`, `playerMaxHealth`,
-  `playerHealthRegenTime`, `prematchPeriod`). Score limits use the game's own units. If a rule
-  doesn't take, check the console for an unknown-setting message.
 - **Map pictures**: the wiki search picks the page whose title matches the map's name. A card can
   end up with a wrong or missing picture if the wiki names a page differently.
 - **XP dvars**: `scr_xpscale` everywhere; `scr_weaponxpscale` on MW3/BO1/BO2. Check a match's
   end-of-game XP.
-- **Map rotation format**: `gametype dom map …` for CoD4x/IW4x/BO1; `exec dom.cfg map …` for BO2;
+- **Map rotation format**: `gametype dom map …` for CoD4x/IW4x/BO1;
   `dsr DOM_default map …` for MW3. MW3 needs the stock DSR files (`admin/DOM_default.dsr`), which
   come with Plutonium's IW5 server configs.
 - **Where Plutonium reads the config**: Andromeda Hosting writes `hp_<id>.cfg` into `main/` (and `admin/`

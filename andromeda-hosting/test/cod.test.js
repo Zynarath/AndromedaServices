@@ -68,7 +68,7 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP and bots
     const maps = [...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]);
     assert.deepEqual([...maps].sort(), t.maps.filter((m) => !m[2]).map((m) => m[0]).sort(), `${key} has every base map exactly once`);
     if (key === 'iw5') assert.match(rot, /^dsr DOM_default /);
-    else if (key === 't6') assert.match(rot, /^exec hp_abc123_dom\.cfg map /);
+    else if (key === 't6') assert.match(rot, /^execgts hp_abc123_dom\.cfg map /);
     else assert.match(rot, /^gametype dom map /);
   }
   assert.equal(cod.TITLES.cod4x.maps.length, 16);
@@ -94,7 +94,7 @@ test('settings validation and injection-safe config values', () => {
   const cfg = cod.buildConfig(s);
   // Quotes and semicolons are stripped, so the name can't break out into its own command.
   assert.match(cfg, /set sv_hostname "Evil quit"\r\n/);
-  assert.match(cfg, /exec hp_abc123_tdm\.cfg map mp_raid"/);
+  assert.match(cfg, /execgts hp_abc123_tdm\.cfg map mp_raid"/);
   assert.equal(s.cod.bots.fill, 64);
   assert.equal(s.cod.xpScale, 1);
   assert.throws(() => cod.writeSettings(s, { 'cod.maps': [] }), /at least one map/);
@@ -109,12 +109,12 @@ test('BO2: NukeJacked playlist rotates Nuketown 2025 and Hijacked; DLC maps stay
   const cfg = cod.buildConfig(s);
   const rot = /sv_mapRotation "([^"]+)"/.exec(cfg)[1];
   assert.deepEqual([...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]).sort(), ['mp_hijacked', 'mp_nuketown_2020']);
-  assert.match(rot, /^exec hp_abc123_tdm\.cfg map /);
+  assert.match(rot, /^execgts hp_abc123_tdm\.cfg map /);
   assert.match(cfg, /\/\/ Map rotation \(NukeJacked/);
   assert.equal(cod.readSettings(s)['cod.playlist'], 'nukejacked');
   // Unknown playlists fall back to the ticked maps; other titles have no playlists.
   cod.writeSettings(s, { 'cod.playlist': 'nope', 'cod.maps': ['mp_raid'] });
-  assert.match(cod.buildConfig(s), /exec hp_abc123_tdm\.cfg map mp_raid"/);
+  assert.match(cod.buildConfig(s), /execgts hp_abc123_tdm\.cfg map mp_raid"/);
   const mw2 = server('iw4x');
   cod.writeSettings(mw2, { 'cod.playlist': 'nukejacked' });
   assert.equal(mw2.cod.playlist, '');
@@ -123,9 +123,9 @@ test('BO2: NukeJacked playlist rotates Nuketown 2025 and Hijacked; DLC maps stay
 
 test('BO2: match rules, per-mode rules and Bot Warfare settings', () => {
   const s = server('t6');
-  // Untouched rules write nothing beyond the mode's own config.
-  assert.equal(cod.buildGtsConfig(s).split('\r\n').filter((l) => l.startsWith('gts')).length, 0);
-  assert.match(cod.buildGtsConfig(s), /\r\nexec dom\.cfg\r\n/);
+  // Laid out like Plutonium's own gamesettings files; untouched rules write only auto-balance.
+  assert.match(cod.buildGtsConfig(s), /\r\nexecgts gamesettings_default\.cfg\r\nexecgts gamesettings_dom\.cfg\r\nexecgts gamesettings_default\.cfg\r\nexecgts gamesettings_dom\.cfg\r\nset_gametype dom\r\ngts autoTeamBalance "1"\r\n$/);
+  assert.match(cod.buildConfig(s), /set bots_team_force "1"/);
   cod.writeSettings(s, {
     'cod.gametype': 'tdm',
     'cod.match.hardcoreMode': '1',
@@ -140,7 +140,7 @@ test('BO2: match rules, per-mode rules and Bot Warfare settings', () => {
     'cod.bots.rank': 999,
   });
   const gts = cod.buildGtsConfig(s);
-  assert.match(gts, /exec tdm\.cfg\r\ngts hardcoreMode "1"\r\ngts friendlyfiretype "2"\r\ngts timeLimit "0"\r\ngts scoreLimit "100"\r\n$/);
+  assert.match(gts, /set_gametype tdm\r\ngts hardcoreMode "1"\r\ngts friendlyfiretype "2"\r\ngts autoTeamBalance "1"\r\ngts timeLimit "0"\r\ngts scoreLimit "100"\r\n$/);
   assert.doesNotMatch(gts, /allowKillcam|300/);
   const cfg = cod.buildConfig(s);
   assert.match(cfg, /set bots_team "custom"/);
@@ -286,4 +286,15 @@ test('map previews: wiki look-up picks the map page, caches the picture, and rem
   } finally {
     global.fetch = realFetch;
   }
+});
+
+test('BO2 start writes the mode file where "execgts" looks (Plutonium storage/t6/gamesettings)', async () => {
+  const s = server('t6');
+  fs.mkdirSync(path.join(s.cod.gameDir, 'zone'), { recursive: true });
+  cod.writeSettings(s, { 'cod.gametype': 'dom', 'cod.mode.dom.scoreLimit': 200 });
+  // Plutonium itself isn't installed in the test, so the launch stops after writing the configs.
+  await assert.rejects(cod.buildLaunch(s), /Plutonium is not installed/);
+  const file = path.join(tools.plutoStorage('t6'), 'gamesettings', 'hp_abc123_dom.cfg');
+  assert.match(fs.readFileSync(file, 'utf8'), /set_gametype dom\r\ngts autoTeamBalance "1"\r\ngts scoreLimit "200"\r\n$/);
+  assert.match(fs.readFileSync(path.join(s.cod.gameDir, 'main', 'hp_abc123.cfg'), 'utf8'), /sv_mapRotation "execgts hp_abc123_dom\.cfg map /);
 });
