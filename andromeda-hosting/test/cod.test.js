@@ -66,7 +66,7 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP and bots
     assert.match(cfg, /set g_password "rex-1234"/, key);
     const rot = /set sv_mapRotation "([^"]+)"/.exec(cfg)[1];
     const maps = [...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]);
-    assert.deepEqual([...maps].sort(), t.maps.map((m) => m[0]).sort(), `${key} has every base map exactly once`);
+    assert.deepEqual([...maps].sort(), t.maps.filter((m) => !m[2]).map((m) => m[0]).sort(), `${key} has every base map exactly once`);
     if (key === 'iw5') assert.match(rot, /^dsr DOM_default /);
     else if (key === 't6') assert.match(rot, /^exec dom\.cfg map /);
     else assert.match(rot, /^gametype dom map /);
@@ -75,7 +75,7 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP and bots
   assert.equal(cod.TITLES.iw4x.maps.length, 16);
   assert.equal(cod.TITLES.iw5.maps.length, 16);
   assert.equal(cod.TITLES.t5.maps.length, 14);
-  assert.equal(cod.TITLES.t6.maps.length, 14);
+  assert.equal(cod.TITLES.t6.maps.filter((m) => !m[2]).length, 14);
 });
 
 test('rotation is reshuffled on each config write', () => {
@@ -100,6 +100,25 @@ test('settings validation and injection-safe config values', () => {
   assert.throws(() => cod.writeSettings(s, { 'cod.maps': [] }), /at least one map/);
   cod.writeSettings(s, { 'cod.bots.enabled': false });
   assert.match(cod.buildConfig(s), /bots_manage_fill "0"/);
+});
+
+test('BO2: NukeJacked playlist rotates Nuketown 2025 and Hijacked; DLC maps stay out of defaults', () => {
+  const s = server('t6');
+  assert.ok(!s.cod.maps.includes('mp_nuketown_2020'));
+  cod.writeSettings(s, { 'cod.playlist': 'nukejacked', 'cod.gametype': 'tdm' });
+  const cfg = cod.buildConfig(s);
+  const rot = /sv_mapRotation "([^"]+)"/.exec(cfg)[1];
+  assert.deepEqual([...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]).sort(), ['mp_hijacked', 'mp_nuketown_2020']);
+  assert.match(rot, /^exec tdm\.cfg map /);
+  assert.match(cfg, /\/\/ Map rotation \(NukeJacked/);
+  assert.equal(cod.readSettings(s)['cod.playlist'], 'nukejacked');
+  // Unknown playlists fall back to the ticked maps; other titles have no playlists.
+  cod.writeSettings(s, { 'cod.playlist': 'nope', 'cod.maps': ['mp_raid'] });
+  assert.match(cod.buildConfig(s), /exec tdm\.cfg map mp_raid"/);
+  const mw2 = server('iw4x');
+  cod.writeSettings(mw2, { 'cod.playlist': 'nukejacked' });
+  assert.equal(mw2.cod.playlist, '');
+  assert.ok(!cod.settingsSchema(mw2).sections.some((sec) => sec.fields.some((f) => f.key === 'cod.playlist')));
 });
 
 test('CoD4x launch runs from the server folder with the bot mod', async () => {
