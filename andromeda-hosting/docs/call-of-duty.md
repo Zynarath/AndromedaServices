@@ -26,6 +26,12 @@ Every new server starts as:
 All of it can be changed per server under **Settings** (game mode, map checklist, shuffle, XP,
 bot count and difficulty, password, extra config lines).
 
+**BO2 playlists and DLC maps:** under **Settings → Game mode & maps**, the *Playlist* setting has
+**NukeJacked**: a rotation of just Nuketown 2025 and Hijacked, using whichever game mode you
+pick (Team Deathmatch is the usual choice). Nuketown 2025 and the DLC maps are also in the
+map checklist, marked as bonus map/DLC. They're never in a default rotation, because everyone
+who joins needs those map files.
+
 ## What you need
 
 **You must own each game.** None of the clients include game files. Andromeda Hosting runs the server
