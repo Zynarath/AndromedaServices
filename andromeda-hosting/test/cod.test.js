@@ -68,7 +68,7 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP and bots
     const maps = [...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]);
     assert.deepEqual([...maps].sort(), t.maps.filter((m) => !m[2]).map((m) => m[0]).sort(), `${key} has every base map exactly once`);
     if (key === 'iw5') assert.match(rot, /^dsr DOM_default /);
-    else if (key === 't6') assert.match(rot, /^exec dom\.cfg map /);
+    else if (key === 't6') assert.match(rot, /^exec hp_abc123_dom\.cfg map /);
     else assert.match(rot, /^gametype dom map /);
   }
   assert.equal(cod.TITLES.cod4x.maps.length, 16);
@@ -94,7 +94,7 @@ test('settings validation and injection-safe config values', () => {
   const cfg = cod.buildConfig(s);
   // Quotes and semicolons are stripped, so the name can't break out into its own command.
   assert.match(cfg, /set sv_hostname "Evil quit"\r\n/);
-  assert.match(cfg, /exec tdm\.cfg map mp_raid"/);
+  assert.match(cfg, /exec hp_abc123_tdm\.cfg map mp_raid"/);
   assert.equal(s.cod.bots.fill, 64);
   assert.equal(s.cod.xpScale, 1);
   assert.throws(() => cod.writeSettings(s, { 'cod.maps': [] }), /at least one map/);
@@ -109,16 +109,65 @@ test('BO2: NukeJacked playlist rotates Nuketown 2025 and Hijacked; DLC maps stay
   const cfg = cod.buildConfig(s);
   const rot = /sv_mapRotation "([^"]+)"/.exec(cfg)[1];
   assert.deepEqual([...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]).sort(), ['mp_hijacked', 'mp_nuketown_2020']);
-  assert.match(rot, /^exec tdm\.cfg map /);
+  assert.match(rot, /^exec hp_abc123_tdm\.cfg map /);
   assert.match(cfg, /\/\/ Map rotation \(NukeJacked/);
   assert.equal(cod.readSettings(s)['cod.playlist'], 'nukejacked');
   // Unknown playlists fall back to the ticked maps; other titles have no playlists.
   cod.writeSettings(s, { 'cod.playlist': 'nope', 'cod.maps': ['mp_raid'] });
-  assert.match(cod.buildConfig(s), /exec tdm\.cfg map mp_raid"/);
+  assert.match(cod.buildConfig(s), /exec hp_abc123_tdm\.cfg map mp_raid"/);
   const mw2 = server('iw4x');
   cod.writeSettings(mw2, { 'cod.playlist': 'nukejacked' });
   assert.equal(mw2.cod.playlist, '');
   assert.ok(!cod.settingsSchema(mw2).sections.some((sec) => sec.fields.some((f) => f.key === 'cod.playlist')));
+});
+
+test('BO2: match rules, per-mode rules and Bot Warfare settings', () => {
+  const s = server('t6');
+  // Untouched rules write nothing beyond the mode's own config.
+  assert.equal(cod.buildGtsConfig(s).split('\r\n').filter((l) => l.startsWith('gts')).length, 0);
+  assert.match(cod.buildGtsConfig(s), /\r\nexec dom\.cfg\r\n/);
+  cod.writeSettings(s, {
+    'cod.gametype': 'tdm',
+    'cod.match.hardcoreMode': '1',
+    'cod.match.friendlyfiretype': '2',
+    'cod.match.allowKillcam': '',
+    'cod.mode.tdm.timeLimit': 0,
+    'cod.mode.tdm.scoreLimit': 100,
+    'cod.mode.dom.scoreLimit': 300,
+    'cod.bots.team': 'custom',
+    'cod.bots.teamAmount': 4,
+    'cod.bots.aim': false,
+    'cod.bots.rank': 999,
+  });
+  const gts = cod.buildGtsConfig(s);
+  assert.match(gts, /exec tdm\.cfg\r\ngts hardcoreMode "1"\r\ngts friendlyfiretype "2"\r\ngts timeLimit "0"\r\ngts scoreLimit "100"\r\n$/);
+  assert.doesNotMatch(gts, /allowKillcam|300/);
+  const cfg = cod.buildConfig(s);
+  assert.match(cfg, /set bots_team "custom"/);
+  assert.match(cfg, /set bots_team_amount "4"/);
+  assert.match(cfg, /set bots_play_aim "0"/);
+  assert.match(cfg, /set bots_loadout_rank "64"/);
+  assert.match(cfg, /set bots_play_nade "1"/);
+  const values = cod.readSettings(s);
+  assert.equal(values['cod.mode.tdm.scoreLimit'], '100');
+  assert.equal(values['cod.match.allowKillcam'], '');
+  assert.equal(values['cod.bots.aim'], false);
+  // Bad numbers are refused without changing anything; injection attempts can't pick values.
+  assert.throws(() => cod.writeSettings(s, { 'cod.mode.tdm.timeLimit': 'lots', 'cod.match.hardcoreMode': '0' }), /enter a number/);
+  assert.equal(s.cod.match.hardcoreMode, 1);
+  cod.writeSettings(s, { 'cod.match.friendlyfiretype': '1"; quit' });
+  assert.equal(s.cod.match.friendlyfiretype, null);
+  // Schema: round settings only on round modes; rule sections follow the game mode; maps carry previews.
+  const sections = cod.settingsSchema(s).sections;
+  const tdm = sections.find((x) => x.title === 'Team Deathmatch rules');
+  assert.deepEqual(tdm.showIf, { key: 'cod.gametype', value: 'tdm' });
+  assert.ok(!tdm.fields.some((f) => f.key.includes('round')));
+  assert.ok(sections.find((x) => x.title === 'Search & Destroy rules').fields.some((f) => f.key === 'cod.mode.sd.roundLimit'));
+  const maps = sections.flatMap((x) => x.fields).find((f) => f.key === 'cod.maps');
+  assert.equal(maps.type, 'maps');
+  assert.equal(maps.options.find((o) => o.value === 'mp_nuketown_2020').image, '/api/servers/abc123/map-image/mp_nuketown_2020');
+  // Other titles keep their simpler form.
+  assert.ok(!cod.settingsSchema(server('iw4x')).sections.some((x) => x.showIf));
 });
 
 test('CoD4x launch runs from the server folder with the bot mod', async () => {
@@ -194,4 +243,47 @@ test('Bot Warfare source is packed the way each game loads it', async () => {
   await tools.packBotWarfare(src, { title: 't5', storage: 't5' }, log);
   assert.deepEqual(fs.readdirSync(tools.plutoStorage('t5')).sort(), ['maps', 'mp', 'scripts']);
   await assert.rejects(tools.packBotWarfare(path.join(tmp, 'empty-src-' + Date.now()), { title: 't6', storage: 't6' }, log), /expected maps/);
+});
+
+test('map previews: wiki look-up picks the map page, caches the picture, and remembers misses', async () => {
+  const mapImages = require('../src/services/mapimages');
+  const png = Buffer.from('89504e470d0a1a0a', 'hex');
+  const calls = [];
+  const realFetch = global.fetch;
+  global.fetch = async (url) => {
+    calls.push(String(url));
+    const u = new URL(url);
+    if (u.hostname === 'callofduty.fandom.com') {
+      const q = u.searchParams.get('gsrsearch');
+      const pages = q.startsWith('Hijacked')
+        ? {
+            1: { index: 1, title: 'Hijacked (Zombies)', thumbnail: { source: 'https://static.wikia.nocookie.net/wrong.png' } },
+            2: { index: 2, title: 'Hijacked', thumbnail: { source: 'https://static.wikia.nocookie.net/callofduty/hijacked.png' } },
+          }
+        : q.startsWith('Evil')
+          ? { 1: { index: 1, title: 'Evil', thumbnail: { source: 'https://attacker.example/x.png' } } }
+          : {};
+      return new Response(JSON.stringify({ query: { pages } }), { headers: { 'content-type': 'application/json' } });
+    }
+    if (u.pathname.endsWith('/hijacked.png')) return new Response(png, { headers: { 'content-type': 'image/png' } });
+    return new Response('nope', { status: 404 });
+  };
+  try {
+    const img = await mapImages.get('t6', 'mp_hijacked', 'Black Ops II', 'Hijacked');
+    assert.equal(img.type, 'image/png');
+    assert.deepEqual(fs.readFileSync(img.file), png);
+    assert.ok(calls.some((c) => c.endsWith('/callofduty/hijacked.png')), 'exact title wins over "Hijacked (Zombies)"');
+    const before = calls.length;
+    assert.equal((await mapImages.get('t6', 'mp_hijacked', 'Black Ops II', 'Hijacked')).file, img.file);
+    assert.equal(calls.length, before, 'second request is served from the cache');
+    // No page found, or an image outside the wiki: no picture, and no retry until tomorrow.
+    assert.equal(await mapImages.get('t6', 'mp_nowhere', 'Black Ops II', 'Nowhere'), null);
+    assert.equal(await mapImages.get('t6', 'mp_evil', 'Black Ops II', 'Evil'), null);
+    assert.ok(!calls.some((c) => c.includes('attacker.example')));
+    const n = calls.length;
+    assert.equal(await mapImages.get('t6', 'mp_nowhere', 'Black Ops II', 'Nowhere'), null);
+    assert.equal(calls.length, n);
+  } finally {
+    global.fetch = realFetch;
+  }
 });

@@ -8,6 +8,21 @@ function field(f, value) {
   if (f.type === 'bool') {
     return html`<label class="switch field-switch" ${tip}><input type="checkbox" name="${f.key}" ${value ? 'checked' : ''}><span></span>${f.label}${hint}</label>`;
   }
+  if (f.type === 'maps') {
+    // Map picker: one card per map with its preview picture. Uses the same checklist plumbing.
+    const picked = new Set(Array.isArray(value) ? value : []);
+    const opts = f.options || [];
+    const inactive = f.inactiveIf ? html`data-inactive-key="${f.inactiveIf.key}"` : '';
+    return html`<div class="field span-2 map-field" ${inactive}><span>${f.label}</span>
+      ${f.inactiveIf ? html`<p class="map-inactive-note">${f.inactiveIf.note}</p>` : ''}
+      <div class="map-grid" data-checklist="${f.key}">${opts.map(
+        (o) => html`<label class="map-card" title="${o.value}"><input type="checkbox" value="${o.value}" ${picked.has(o.value) ? 'checked' : ''} ${o.tag ? html`data-tag="${o.tag}"` : ''}>
+          <span class="map-img"><img src="${o.image}" alt="" loading="lazy"><span class="map-fallback">${o.label}</span></span>
+          <span class="map-name"><span>${o.label}</span>${o.tag ? html`<span class="pill pill-tag">${o.tag}</span>` : ''}</span></label>`
+      )}</div>
+      <div class="btn-row"><button type="button" class="btn btn-sm btn-ghost" data-check-all="${f.key}">Select all</button>${opts.some((o) => o.tag) ? html`<button type="button" class="btn btn-sm btn-ghost" data-check-base="${f.key}">Base game only</button>` : ''}<button type="button" class="btn btn-sm btn-ghost" data-check-none="${f.key}">Clear</button><span class="muted small map-count" data-map-count="${f.key}"></span></div>
+      ${hint}<small class="hint">Map pictures from the Call of Duty Wiki (Fandom), downloaded once by the panel.</small></div>`;
+  }
   if (f.type === 'checklist') {
     const picked = new Set(Array.isArray(value) ? value : []);
     return html`<div class="field span-2"><span>${f.label}</span>
@@ -66,7 +81,8 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
       ${schema.sections.reduce((n, sec) => n + sec.fields.length, 0) > 30 ? html`<input type="search" id="settings-filter" class="filter" placeholder="Find a setting… (e.g. taming, stack, decay)" autocomplete="off">` : ''}
       ${schema.sections.map((sec) => {
         const fields = sec.fields.filter((f) => admin || !f.admin); // admin-only fields are enforced on the server too
-        return fields.length ? html`<details class="settings-sec" ${sec.collapsed ? '' : 'open'}><summary>${sec.title} <span class="count">${fields.length}</span></summary><div class="form-grid">${fields.map((f) => field(f, values[f.key]))}</div></details>` : '';
+        const cond = sec.showIf ? html`data-show-key="${sec.showIf.key}" data-show-value="${sec.showIf.value}"` : '';
+        return fields.length ? html`<details class="settings-sec" ${cond} ${sec.collapsed ? '' : 'open'}><summary>${sec.title} <span class="count">${fields.length}</span></summary><div class="form-grid">${fields.map((f) => field(f, values[f.key]))}</div></details>` : '';
       })}
       <p class="muted" id="settings-nomatch" hidden>No settings match.</p>
       <div class="form-actions sticky"><button class="btn btn-primary">Save game settings</button><span class="muted small">Changes apply on the next (re)start.</span></div>
@@ -102,6 +118,41 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
   };
 
   const gf = $('#game');
+  // Sections tied to another field (e.g. one game mode's rules) only show while it has that value.
+  const conditionMet = (d) => !d.dataset.showKey || (gf.elements[d.dataset.showKey] && gf.elements[d.dataset.showKey].value === d.dataset.showValue);
+  const applyConditions = () => {
+    gf.querySelectorAll('details[data-show-key]').forEach((d) => (d.hidden = !conditionMet(d)));
+    // A field that another field overrides while it has a value (the map grid vs. a playlist).
+    gf.querySelectorAll('[data-inactive-key]').forEach((el) => el.classList.toggle('inactive', !!(gf.elements[el.dataset.inactiveKey] || {}).value));
+  };
+  const countMaps = () =>
+    gf.querySelectorAll('[data-map-count]').forEach((el) => {
+      const n = gf.querySelectorAll(`[data-checklist="${CSS.escape(el.dataset.mapCount)}"] input:checked`).length;
+      el.textContent = `${n} map${n === 1 ? '' : 's'} picked`;
+    });
+  applyConditions();
+  countMaps();
+  gf.addEventListener('change', (e) => {
+    if (e.target.name && gf.querySelector(`[data-show-key="${CSS.escape(e.target.name)}"], [data-inactive-key="${CSS.escape(e.target.name)}"]`)) applyConditions();
+    if (e.target.closest('[data-checklist]')) countMaps();
+  });
+  // A preview that isn't ready shows the map's name instead. The panel fetches it in the background,
+  // so ask again a few times ("error"/"load" don't bubble, hence capture).
+  gf.addEventListener(
+    'error',
+    (e) => {
+      const img = e.target;
+      if (img.tagName !== 'IMG' || !img.closest('.map-img')) return;
+      img.closest('.map-img').classList.add('noimg');
+      const tries = Number(img.dataset.tries || 0);
+      if (tries < 3) {
+        img.dataset.tries = tries + 1;
+        setTimeout(() => img.isConnected && (img.src = img.src.replace(/\?.*$/, '') + '?try=' + (tries + 1)), [4000, 10000, 30000][tries]);
+      }
+    },
+    true
+  );
+  gf.addEventListener('load', (e) => e.target.tagName === 'IMG' && e.target.closest('.map-img')?.classList.remove('noimg'), true);
   const filter = $('#settings-filter');
   if (filter) {
     const secs = [...gf.querySelectorAll('details.settings-sec')];
@@ -118,7 +169,7 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
           item.hidden = !show;
           if (show) hits++;
         }
-        d.hidden = !!q && !hits;
+        d.hidden = (!!q && !hits) || !conditionMet(d);
         d.open = q ? hits > 0 : wasOpen[i];
         if (hits) any = true;
       });
@@ -128,15 +179,18 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
   gf.addEventListener('click', (e) => {
     const all = e.target.closest('[data-check-all]');
     const none = e.target.closest('[data-check-none]');
-    const key = (all || none)?.dataset.checkAll || (all || none)?.dataset.checkNone;
-    if (key) gf.querySelectorAll(`[data-checklist="${key}"] input`).forEach((c) => (c.checked = !!all));
+    const base = e.target.closest('[data-check-base]');
+    const key = all?.dataset.checkAll || none?.dataset.checkNone || base?.dataset.checkBase;
+    if (!key) return;
+    gf.querySelectorAll(`[data-checklist="${key}"] input`).forEach((c) => (c.checked = base ? !c.dataset.tag : !!all));
+    countMaps();
   });
   gf.onsubmit = async (e) => {
     e.preventDefault();
     const out = {};
     for (const sec of schema.sections) {
       for (const f of sec.fields) {
-        if (f.type === 'checklist') {
+        if (f.type === 'checklist' || f.type === 'maps') {
           out[f.key] = [...gf.querySelectorAll(`[data-checklist="${f.key}"] input:checked`)].map((c) => c.value);
           continue;
         }
