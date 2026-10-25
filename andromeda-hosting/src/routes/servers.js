@@ -9,6 +9,7 @@ const backups = require('../manager/backups');
 const scheduler = require('../manager/scheduler');
 const { games, templates, CONFIG_KEY } = require('../games');
 const cf = require('../services/curseforge');
+const mapImages = require('../services/mapimages');
 const { HttpError, randomId } = require('../util/misc');
 const { parseCpuList, PRIORITIES, CORES } = require('../util/procstats');
 
@@ -201,6 +202,19 @@ router.put('/servers/:id/settings', (req, res) => {
   }
   db.save();
   res.json({ ok: true, warning, restartRequired: !!(result.restartRequired && inst.child), values: inst.game.readSettings(inst.server) });
+});
+
+// Map preview for the CoD map picker (looked up on the CoD wiki once, then cached).
+router.get('/servers/:id/map-image/:map', (req, res) => {
+  const inst = load(req);
+  const t = inst.server.game === 'cod' && games.cod.TITLES[inst.server.cod.title];
+  const m = t && t.maps.find((x) => x[0] === req.params.map);
+  if (!m) throw new HttpError(404, 'Unknown map');
+  const img = mapImages.peek(inst.server.cod.title, m[0], t.wikiGame, m[1]);
+  // Not cached (yet): answer at once; the page shows the map's name and asks again shortly.
+  if (!img) return res.status(404).set('Retry-After', '5').json({ error: 'No preview yet' });
+  res.set('Cache-Control', 'private, max-age=604800');
+  res.type(img.type).sendFile(img.file);
 });
 
 // ---- install / update ----

@@ -26,6 +26,25 @@ Every new server starts as:
 All of it can be changed per server under **Settings** (game mode, map checklist, shuffle, XP,
 bot count and difficulty, password, extra config lines).
 
+**Map picker:** the map list is a grid of cards with each map's picture. Click a map to add or
+remove it; *Base game only* picks just the maps everyone has. The pictures come from the
+[Call of Duty Wiki](https://callofduty.fandom.com): the panel looks each map up the first time
+you open the page, keeps the picture in its cache folder, and serves it itself. Until a picture
+is downloaded (or if the wiki has none), the card shows the map's name.
+
+**BO2 match rules:** *Match rules (all game modes)* covers hardcore, friendly fire, killcams,
+team balance, player health, health regeneration and the pre-match countdown. Below it, a
+rules section for the selected game mode sets its time limit, score limit, lives and respawn
+delay, plus rounds for Search & Destroy, Demolition and Capture the Flag. Anything left on
+*Game default* / blank isn't written, so the game mode's normal value applies. The panel writes
+these into `hp_<id>_<mode>.cfg`, which runs the game's own `<mode>.cfg` first; the map
+rotation runs that file before each map.
+
+**BO2 bots:** besides how many bots and how hard they are, you can set how the player count
+works, which team bots join (or a custom split), forced team balance, bot rank and prestige,
+whether bots throw grenades, jump/drop shot and aim, kicking bots at the end of a match, and
+how long to wait before adding them.
+
 **BO2 playlists and DLC maps:** under **Settings → Game mode & maps**, the *Playlist* setting has
 **NukeJacked**: a rotation of just Nuketown 2025 and Hijacked, using whichever game mode you
 pick (Team Deathmatch is the usual choice). Nuketown 2025 and the DLC maps are also in the
@@ -86,10 +105,21 @@ by tests:
 - The CoD4x setup (game `.iwd` and `zone` files in the server folder, `+set dedicated 2`)
 - The `rcon` / `getstatus` protocol
 
+The BO2 bot options (team, split, rank, prestige, grenades, jump/drop shot, aim, kick at match
+end, wait time, fill mode, spectators) use the dvars documented in the
+[t6_bot_warfare README](https://github.com/ineedbots/t6_bot_warfare).
+
 These follow the standard community server configs, but haven't been run against the real games
 yet. If something doesn't take, use **Settings → Extra config lines** to override it, and tell me
 what the console says:
 
+- **BO2 match rules**: written as `gts <setting> "<value>"` (`timeLimit`, `scoreLimit`,
+  `roundLimit`, `roundWinLimit`, `playerNumLives`, `playerRespawnDelay`, `hardcoreMode`,
+  `friendlyfiretype`, `allowKillcam`, `allowFinalKillcam`, `autoTeamBalance`, `playerMaxHealth`,
+  `playerHealthRegenTime`, `prematchPeriod`). Score limits use the game's own units. If a rule
+  doesn't take, check the console for an unknown-setting message.
+- **Map pictures**: the wiki search picks the page whose title matches the map's name. A card can
+  end up with a wrong or missing picture if the wiki names a page differently.
 - **XP dvars**: `scr_xpscale` everywhere; `scr_weaponxpscale` on MW3/BO1/BO2. Check a match's
   end-of-game XP.
 - **Map rotation format**: `gametype dom map …` for CoD4x/IW4x/BO1; `exec dom.cfg map …` for BO2;
