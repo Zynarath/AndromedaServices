@@ -125,14 +125,15 @@ const TITLES = {
   },
 };
 
-// BO2 match rules. Plutonium T6 takes them as "gts" (game type setting) commands, the same names
-// the game's own gamesettings files use. Blank = the game mode's default.
+// BO2 match rules: "gts" (game type setting) names from Plutonium's T6 server configs
+// (storage/t6/gamesettings/*.cfg). Blank = the game mode's default; `always` = written even when blank.
 const T6_MATCH = [
   { key: 'hardcoreMode', label: 'Hardcore', type: 'bool' },
   { key: 'friendlyfiretype', label: 'Friendly fire', type: 'select', options: [['0', 'Off'], ['1', 'On'], ['2', 'Reflect'], ['3', 'Shared']] },
-  { key: 'allowKillcam', label: 'Killcam', type: 'bool', def: true },
-  { key: 'allowFinalKillcam', label: 'Final killcam', type: 'bool', def: true },
-  { key: 'autoTeamBalance', label: 'Auto-balance teams', type: 'bool', def: true },
+  { key: 'allowKillcam', label: 'Killcam', type: 'bool' },
+  { key: 'allowFinalKillcam', label: 'Final killcam', type: 'bool' },
+  // Plutonium's own mode files turn this on explicitly, so the panel does too unless it's set to off.
+  { key: 'autoTeamBalance', label: 'Auto-balance teams', type: 'bool', always: true, def: true },
   { key: 'playerMaxHealth', label: 'Player health', type: 'number', hint: '100 is normal; Hardcore uses 30' },
   { key: 'playerHealthRegenTime', label: 'Health regeneration delay (seconds)', type: 'number' },
   { key: 'prematchPeriod', label: 'Pre-match countdown (seconds)', type: 'number' },
@@ -151,7 +152,9 @@ const T6_BOTS = [
   { key: 'fillSpec', dvar: 'bots_manage_fill_spec', label: 'Count spectators as players', type: 'bool', def: true },
   { key: 'team', dvar: 'bots_team', label: 'Bot team', type: 'select', options: [['autoassign', 'Auto-assign'], ['allies', 'All on one team (allies)'], ['axis', 'All on the other team (axis)'], ['custom', 'Custom split']], def: 'autoassign' },
   { key: 'teamAmount', dvar: 'bots_team_amount', label: 'Custom split: bots on the axis team', type: 'number', def: 0, hint: 'The rest go to allies' },
-  { key: 'teamForce', dvar: 'bots_team_force', label: 'Force bot teams (keeps auto-assign balanced)', type: 'bool', def: false },
+  // When a player joins, Bot Warfare kicks a bot from the team with the most bots, ignoring people,
+  // so teams end up uneven unless this moves bots across (it checks every 1.5 s).
+  { key: 'teamForce', dvar: 'bots_team_force', label: 'Keep teams even by moving bots', type: 'bool', def: true },
   { key: 'rank', dvar: 'bots_loadout_rank', label: 'Bot rank', type: 'number', def: -1, hint: '-1 = average of the players, 0 = random, or a rank' },
   { key: 'prestige', dvar: 'bots_loadout_prestige', label: 'Bot prestige', type: 'number', def: -1, hint: '-1 = same as the host, -2 = random, or a prestige' },
   { key: 'nade', dvar: 'bots_play_nade', label: 'Bots throw grenades', type: 'bool', def: true },
@@ -162,6 +165,8 @@ const T6_BOTS = [
 ];
 const ROUND_MODES = new Set(['sd', 'dem', 'ctf']);
 const gtsCfgName = (server, gametype) => `hp_${server.id}_${gametype}.cfg`;
+// "execgts <file>" in the map rotation loads <file> from Plutonium's storage/t6/gamesettings folder.
+const gtsDir = () => path.join(tools.plutoStorage('t6'), 'gamesettings');
 
 const title = (server) => TITLES[server.cod.title];
 const baseMaps = (t) => t.maps.filter((m) => !m[2]).map((m) => m[0]);
@@ -184,7 +189,8 @@ function rotationString(t, gametype, maps, gtsCfg) {
     const dsr = { war: 'TDM', dm: 'FFA' }[gametype] || gametype.toUpperCase();
     return `dsr ${dsr}_default ` + maps.map((m) => `map ${m}`).join(' ');
   }
-  if (t === TITLES.t6) return maps.map((m) => `exec ${gtsCfg || gametype + '.cfg'} map ${m}`).join(' ');
+  // Plutonium T6 rotation tokens: "execgts <file>" loads storage/t6/gamesettings/<file> (mode + rules).
+  if (t === TITLES.t6) return maps.map((m) => `execgts ${gtsCfg || gametype + '.cfg'} map ${m}`).join(' ');
   return `gametype ${gametype} ` + maps.map((m) => `map ${m}`).join(' ');
 }
 
@@ -240,8 +246,7 @@ function buildConfig(server) {
   }
   if (c.extraConfig) lines.push('// Extra config lines from the panel', ...String(c.extraConfig).split(/\r?\n/));
   const gametype = c.gametype || 'dom';
-  // BO2 match rules go in a small per-mode file that runs the mode's own config first, so the
-  // panel's rules apply on top of it for every map in the rotation.
+  // BO2 picks the mode and its rules from a gamesettings file the rotation loads before each map.
   const gtsCfg = c.title === 't6' ? gtsCfgName(server, gametype) : null;
   lines.push(`// Map rotation (${list ? list.label : 'selected maps'}${c.shuffle !== false ? ', shuffled' : ''})`, `set sv_mapRotation "${rotationString(t, gametype, maps, gtsCfg)}"`, `set sv_mapRotationCurrent ""`);
   return lines.join('\r\n') + '\r\n';
@@ -252,23 +257,36 @@ function dvarValue(f, v) {
   return clean(v);
 }
 
-// BO2: "exec <mode>.cfg" (the game's defaults), then the panel's rules for that mode.
+// BO2 gamesettings file, laid out like Plutonium's own (storage/t6/gamesettings/<mode>.cfg): the
+// game's default and mode settings, then set_gametype, then the panel's rules for that mode.
 function buildGtsConfig(server) {
   const c = server.cod;
   const gametype = c.gametype || 'dom';
-  const lines = [`// Generated by Andromeda Hosting: ${gametype} rules for "${clean(server.name)}". Rewritten on every start.`, `exec ${gametype}.cfg`];
+  const lines = [
+    `// Generated by Andromeda Hosting: ${gametype} rules for "${clean(server.name)}". Rewritten on every start.`,
+    `execgts gamesettings_default.cfg`,
+    `execgts gamesettings_${gametype}.cfg`,
+    `execgts gamesettings_default.cfg`,
+    `execgts gamesettings_${gametype}.cfg`,
+    `set_gametype ${gametype}`,
+  ];
   const rules = [...T6_MATCH.map((f) => [f, (c.match || {})[f.key]]), ...T6_MODE.map((f) => [f, ((c.modes || {})[gametype] || {})[f.key]])];
-  for (const [f, v] of rules) if (v !== undefined && v !== null && v !== '') lines.push(`gts ${f.key} "${dvarValue(f, v)}"`);
+  for (const [f, set] of rules) {
+    const v = set === undefined || set === null || set === '' ? (f.always ? f.def : null) : set;
+    if (v !== null && v !== undefined) lines.push(`gts ${f.key} "${dvarValue(f, v)}"`);
+  }
   return lines.join('\r\n') + '\r\n';
 }
 
 function writeConfig(server) {
   const text = buildConfig(server);
-  const gts = server.cod.title === 't6' ? buildGtsConfig(server) : null;
   for (const dir of configDirs(server)) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, cfgName(server)), text);
-    if (gts) fs.writeFileSync(path.join(dir, gtsCfgName(server, server.cod.gametype || 'dom')), gts);
+  }
+  if (server.cod.title === 't6') {
+    fs.mkdirSync(gtsDir(), { recursive: true });
+    fs.writeFileSync(path.join(gtsDir(), gtsCfgName(server, server.cod.gametype || 'dom')), buildGtsConfig(server));
   }
   fs.mkdirSync(server.dir, { recursive: true });
   fs.writeFileSync(path.join(server.dir, 'generated-server.cfg'), text); // visible copy in the Files tab
@@ -295,7 +313,7 @@ function ruleField(key, f) {
   if (f.type === 'select') field.options = [{ value: '', label: 'Game default' }, ...field.options];
   if (f.type === 'bool') {
     field.type = 'select';
-    field.options = [{ value: '', label: `Game default${f.def === undefined ? '' : f.def ? ' (on)' : ' (off)'}` }, { value: '1', label: 'On' }, { value: '0', label: 'Off' }];
+    field.options = [{ value: '', label: f.always ? `Default (${f.def ? 'on' : 'off'})` : 'Game default' }, { value: '1', label: 'On' }, { value: '0', label: 'Off' }];
   }
   if (f.type === 'number') field.hint = [f.hint, 'Blank = game default'].filter(Boolean).join('. ');
   return field;
