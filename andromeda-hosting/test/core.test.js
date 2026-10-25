@@ -317,3 +317,45 @@ test('password hashing', () => {
   assert.ok(auth.verifyPassword('correct horse', h));
   assert.ok(!auth.verifyPassword('wrong', h));
 });
+
+test('Minecraft: full server.properties, game rules and operators', () => {
+  const mc = require('../src/games/minecraft');
+  const dir = path.join(tmp, 'mc-settings');
+  fs.mkdirSync(dir, { recursive: true });
+  const server = { id: 'm1', name: 'Pack', dir, mc: mc.defaults({ name: 'Pack', mc: {} }) };
+  const v = mc.readSettings(server);
+  assert.equal(v['view-distance'], '10');
+  assert.equal(v['region-file-compression'], 'deflate');
+  assert.equal(v['enable-status'], true);
+  assert.equal(v['gamerule.keepInventory'], '');
+  mc.writeSettings(server, {
+    'max-tick-time': -1,
+    'op-permission-level': '3',
+    difficulty: 'nightmare',
+    'gamerule.keepInventory': 'true',
+    'gamerule.randomTickSpeed': 6,
+    'gamerule.mobGriefing': '',
+    'panel.ops': 'Alex, Steve, not a name!',
+    'panel.minMemoryMb': 8192,
+  }, { admin: true });
+  const props = fs.readFileSync(path.join(dir, 'server.properties'), 'utf8');
+  assert.match(props, /max-tick-time=-1/);
+  assert.match(props, /op-permission-level=3/);
+  assert.doesNotMatch(props, /nightmare/, 'select values outside the list are ignored');
+  assert.deepEqual(server.mc.gamerules, { keepInventory: true, randomTickSpeed: 6 });
+  assert.deepEqual(server.mc.ops, ['Alex', 'Steve']);
+  assert.equal(server.mc.minMemoryMb, 8192);
+  assert.throws(() => mc.writeSettings(server, { 'gamerule.randomTickSpeed': 'fast' }), /whole number/);
+  // Operators are admin only.
+  mc.writeSettings(server, { 'panel.ops': 'Mallory' }, { admin: false });
+  assert.deepEqual(server.mc.ops, ['Alex', 'Steve']);
+  // On ready: ops, then game rules; a removed op is de-opped next time.
+  const sent = [];
+  const inst = { writeStdin: (l) => sent.push(l), appendConsole() {} };
+  mc.onReady(server, inst);
+  assert.deepEqual(sent, ['op Alex', 'op Steve', 'gamerule keepInventory true', 'gamerule randomTickSpeed 6']);
+  mc.writeSettings(server, { 'panel.ops': 'Alex' }, { admin: true });
+  sent.length = 0;
+  mc.onReady(server, inst);
+  assert.deepEqual(sent.slice(0, 2), ['deop Steve', 'op Alex']);
+});

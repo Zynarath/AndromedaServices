@@ -11,6 +11,7 @@ const net = require('net');
 const { spawn } = require('child_process');
 const db = require('../db');
 const { Conf, parseDbInfo } = require('../util/conf');
+const { describeConf, looksBoolean } = require('../util/confdoc');
 const { findFiles } = require('../util/paths');
 const { HttpError, sleep } = require('../util/misc');
 
@@ -198,6 +199,23 @@ const FIELDS = [
   { file: 'mangosd.conf', key: 'Rate.Drop.Item.Epic', label: 'Item drops (epic)', type: 'number', step: 0.5, group: 'Rates' },
   { file: 'mangosd.conf', key: 'Rate.Reputation.Gain', label: 'Reputation gain', type: 'number', step: 0.5, group: 'Rates' },
   { file: 'mangosd.conf', key: 'Rate.Honor', label: 'Honor gain', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Uncommon', label: 'Item drops (uncommon/green)', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Legendary', label: 'Item drops (legendary)', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Quest', label: 'Quest item drops', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Rest.Offline.InTavernOrCity', label: 'Rested XP while offline in an inn/city', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Rest.Offline.InWilderness', label: 'Rested XP while offline in the wild', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Talent', label: 'Talent points per level', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'SkillGain.Crafting', label: 'Skill points per crafting skill-up', type: 'number', group: 'Rates' },
+  { file: 'mangosd.conf', key: 'SkillGain.Gathering', label: 'Skill points per gathering skill-up', type: 'number', group: 'Rates' },
+  { file: 'mangosd.conf', key: 'SkillGain.Weapon', label: 'Skill points per weapon skill-up', type: 'number', group: 'Rates' },
+  { file: 'mangosd.conf', key: 'SkillGain.Defense', label: 'Skill points per defense skill-up', type: 'number', group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Mining.Amount', label: 'Ore per mining node', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Health', label: 'Health regeneration', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Mana', label: 'Mana regeneration', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Damage.Fall', label: 'Fall damage', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Auction.Time', label: 'Auction duration', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Auction.Deposit', label: 'Auction deposit', type: 'number', step: 0.5, group: 'Rates' },
+  { file: 'mangosd.conf', key: 'Rate.Auction.Cut', label: 'Auction house cut', type: 'number', step: 0.5, group: 'Rates' },
   { file: 'mangosd.conf', key: 'GameType', label: 'Realm type', type: 'select', options: [{ value: '1', label: 'PvP' }, { value: '0', label: 'Normal (PvE)' }, { value: '6', label: 'RP' }, { value: '8', label: 'RP-PvP' }], group: 'World' },
   { file: 'mangosd.conf', key: 'MaxPlayerLevel', label: 'Max level', type: 'number', group: 'World' },
   { file: 'mangosd.conf', key: 'StartPlayerLevel', label: 'Starting level', type: 'number', group: 'World' },
@@ -208,6 +226,26 @@ const FIELDS = [
   { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Group', label: 'Cross-faction groups', type: BOOL, group: 'World' },
   { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Guild', label: 'Cross-faction guilds', type: BOOL, group: 'World' },
   { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Chat', label: 'Cross-faction chat', type: BOOL, group: 'World' },
+  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Auction', label: 'Shared auction house', type: BOOL, group: 'World' },
+  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Mail', label: 'Cross-faction mail', type: BOOL, group: 'World' },
+  { file: 'mangosd.conf', key: 'Motd', label: 'Message of the day', type: 'text', group: 'World', hint: "Shown at login. Use @ for a new line" },
+  { file: 'mangosd.conf', key: 'ActivateWeather', label: 'Weather', type: BOOL, group: 'World' },
+  { file: 'mangosd.conf', key: 'CharactersPerRealm', label: 'Characters per account on this realm (1–10)', type: 'number', group: 'Characters' },
+  { file: 'mangosd.conf', key: 'StartHeroicPlayerLevel', label: 'Death Knight starting level', type: 'number', group: 'Characters' },
+  { file: 'mangosd.conf', key: 'MinLevelForHeroicCharacterCreating', label: 'Level needed to create a Death Knight', type: 'number', group: 'Characters' },
+  { file: 'mangosd.conf', key: 'AllFlightPaths', label: 'Start with every flight path', type: BOOL, group: 'Characters' },
+  { file: 'mangosd.conf', key: 'AlwaysMaxSkillForLevel', label: 'Weapon/defense skills always maxed', type: BOOL, group: 'Characters' },
+  { file: 'mangosd.conf', key: 'MaxPrimaryTradeSkill', label: 'Primary professions per character', type: 'number', group: 'Characters' },
+  { file: 'mangosd.conf', key: 'Death.SicknessLevel', label: 'Resurrection sickness from level', type: 'number', group: 'Characters' },
+  { file: 'mangosd.conf', key: 'Instance.IgnoreLevel', label: 'Enter instances below the required level', type: BOOL, group: 'Instances & PvP' },
+  { file: 'mangosd.conf', key: 'Instance.IgnoreRaid', label: 'Enter raids without a raid group', type: BOOL, group: 'Instances & PvP' },
+  { file: 'mangosd.conf', key: 'Quests.IgnoreRaid', label: 'Allow non-raid quests in raids', type: BOOL, group: 'Instances & PvP' },
+  { file: 'mangosd.conf', key: 'Battleground.CastDeserter', label: 'Deserter debuff for leaving battlegrounds', type: BOOL, group: 'Instances & PvP' },
+  { file: 'mangosd.conf', key: 'Battlefield.WGEnabled', label: 'Wintergrasp battles', type: BOOL, group: 'Instances & PvP' },
+  { file: 'mangosd.conf', key: 'Arena.AutoDistributePoints', label: 'Hand out arena points automatically', type: BOOL, group: 'Instances & PvP' },
+  { file: 'mangosd.conf', key: 'MapUpdate.Threads', label: 'Map update threads', type: 'number', group: 'Performance', hint: 'At most your CPU threads minus one' },
+  { file: 'mangosd.conf', key: 'PlayerSave.Interval', label: 'Save players every (ms)', type: 'number', group: 'Performance' },
+  { file: 'mangosd.conf', key: 'Visibility.Distance.Continents', label: 'View distance on continents (yards)', type: 'number', group: 'Performance' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.Enabled', label: 'Bots enabled', type: BOOL, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotAutologin', label: 'Random bots log in automatically', type: BOOL, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MinRandomBots', label: 'Minimum random bots', type: 'number', group: 'Bots', hint: 'SPP default 1000. Lower it if the server lags. Changing the count later needs a random bot reset.' },
@@ -223,6 +261,50 @@ const FIELDS = [
   { file: 'mangosd.conf', key: 'WorldServerPort', label: 'World port (TCP)', type: 'number', group: 'Network' },
   { file: 'realmd.conf', key: 'RealmServerPort', label: 'Login port (TCP)', type: 'number', group: 'Network' },
 ];
+
+// Every other option in the server's own .conf files, as "All options" sections (admin only).
+// Left out: database logins, folders, the remote admin/SOAP interfaces, the console the panel talks
+// to, the ports the panel manages, and keys the curated sections above already cover.
+const CONF_FILES = ['mangosd.conf', 'realmd.conf', 'aiplayerbot.conf'];
+const NEVER = /^(ConfVersion|RealmID|DataDir|LogsDir|BindIP|PidFile|Console\.Enable|WorldServerPort|RealmServerPort|.*DatabaseInfo|.*DatabaseConnections|Ra\..*|SOAP\..*|Metric\..*|Dummy\..*)$/i;
+const BOT_GROUPS = [
+  [/Premade/i, 'Premade specs & gear'],
+  [/ClassRaceProb|^AiPlayerbot\.Class/i, 'Class & race mix'],
+  [/Respawn/i, 'Respawn'],
+  [/LLM|Toxic|Thunderfury|Greet|Repl/i, 'Chat'],
+  [/Guild/i, 'Guilds'],
+  [/Arena|BG|Battleground|PvP|Honor/i, 'PvP'],
+  [/Equip|Gear|Item|Tabard|Loot|Enchant|Gem|Roll|Cloak/i, 'Gear & loot'],
+  [/Teleport|Map|Zone|Travel|Rpg|Move|Walk|Speed|Mount|Flight/i, 'Movement & travel'],
+  [/Chat|Say|Emote|Talk|Broadcast|Whisper|Yell/i, 'Chat'],
+  [/Level|Xp|Talent|Spell|Learn|Quest|Skill/i, 'Leveling, spells & quests'],
+  [/RandomBot|Account|Login|Logout|Online|Count/i, 'Random bots'],
+];
+const humanize = (key) => key.replace(/^AiPlayerbot\./, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\./g, ' · ');
+
+function confOptions(server) {
+  const dir = paths(server).confDir;
+  const curated = new Set(FIELDS.map((f) => `${f.file}|${f.key}`.toLowerCase()));
+  const out = [];
+  for (const file of CONF_FILES) {
+    const full = path.join(dir, file);
+    if (!fs.existsSync(full)) continue;
+    for (const e of describeConf(fs.readFileSync(full, 'utf8'))) {
+      if (NEVER.test(e.key) || curated.has(`${file}|${e.key}`.toLowerCase())) continue;
+      const group = file === 'aiplayerbot.conf' ? (BOT_GROUPS.find(([re]) => re.test(e.key)) || [null, 'Other'])[1] : e.section || 'Other';
+      out.push({ ...e, file, group: `All options: ${group} (${file})`, bool: looksBoolean(e) });
+    }
+  }
+  return out;
+}
+
+// "1.0" and 1 are the same setting; don't rewrite a line just to change how its number looks.
+function sameConfValue(current, next) {
+  if (current === undefined) return false;
+  const a = String(current).trim();
+  const b = String(next).trim();
+  return a === b || (a !== '' && b !== '' && Number.isFinite(Number(a)) && Number(a) === Number(b));
+}
 
 function confPort(server, file, key, def) {
   try {
@@ -474,11 +556,25 @@ const wow = {
     for (const f of FIELDS) {
       if (f.file === 'aiplayerbot.conf' && !fs.existsSync(path.join(p.confDir, 'aiplayerbot.conf'))) continue;
       if (!groups.has(f.group)) groups.set(f.group, []);
-      groups.get(f.group).push({ key: `conf.${f.file}.${f.key}`, label: f.label, type: f.type, options: f.options, step: f.step, hint: f.hint });
+      groups.get(f.group).push({ key: `conf.${f.file}.${f.key}`, label: f.label, type: f.type, options: f.options, step: f.step, hint: f.hint, tip: `${f.file}: ${f.key}` });
+    }
+    const curatedCount = groups.size;
+    for (const e of confOptions(server)) {
+      if (!groups.has(e.group)) groups.set(e.group, []);
+      const numeric = /^-?\d+(\.\d+)?$/.test(e.value ?? e.def ?? '');
+      const field = { key: `conf.${e.file}.${e.key}`, label: humanize(e.key), tip: `${e.file}: ${e.key}`, admin: true, hint: (e.doc || '').split('\n').slice(0, 6).join(' · ').slice(0, 400) || undefined };
+      if (e.bool) {
+        field.type = 'select';
+        field.options = [...(e.value === undefined ? [{ value: '', label: `Not set (default ${e.def === '1' ? 'on' : 'off'})` }] : []), { value: '1', label: 'On (1)' }, { value: '0', label: 'Off (0)' }];
+      } else {
+        field.type = numeric ? 'number' : 'text';
+        if (e.value === undefined) field.def = e.def;
+      }
+      groups.get(e.group).push(field);
     }
     return {
-      note: `Saved straight into mangosd.conf / aiplayerbot.conf / realmd.conf in ${p.confDir}. Every other option is editable in the Files tab.`,
-      sections: [...groups].map(([title, fields]) => ({ title, fields })),
+      note: `Saved straight into mangosd.conf / aiplayerbot.conf / realmd.conf in ${p.confDir}. The "All options" sections (admins only) list every other setting in those files, with the files' own descriptions; blank = leave as is.`,
+      sections: [...groups].map(([title, fields], i) => ({ title, fields, collapsed: i >= curatedCount })),
     };
   },
 
@@ -491,10 +587,11 @@ const wow = {
       const v = cache[f.file].get(f.key);
       out[`conf.${f.file}.${f.key}`] = f.type === BOOL ? v === '1' : v ?? '';
     }
+    for (const e of confOptions(server)) out[`conf.${e.file}.${e.key}`] = e.value ?? '';
     return out;
   },
 
-  writeSettings(server, values) {
+  writeSettings(server, values, opts = {}) {
     const p = paths(server);
     if ('wow.realmName' in values) server.wow.realmName = String(values['wow.realmName'] || '').replace(/['"\\]/g, '').trim().slice(0, 32) || server.name;
     if ('wow.address' in values) {
@@ -515,7 +612,22 @@ const wow = {
         v = Number(v);
       } else if (f.type === 'select' && !f.options.some((o) => o.value === String(v))) continue;
       files[f.file] = files[f.file] || readConf(p.confDir, f.file);
+      if (sameConfValue(files[f.file].get(f.key), v)) continue; // leave untouched lines exactly as they are
       files[f.file].set(f.key, v);
+    }
+    // "All options": only keys that are really in the file (set or commented out), admins only.
+    if (opts.admin) {
+      for (const e of confOptions(server)) {
+        const k = `conf.${e.file}.${e.key}`;
+        if (!(k in values)) continue;
+        let v = values[k];
+        if (v === '' || v === null || v === undefined) continue; // blank = leave the file as it is
+        v = String(v).trim();
+        if (e.bool && v !== '0' && v !== '1') continue;
+        if (sameConfValue(e.value, v)) continue;
+        files[e.file] = files[e.file] || readConf(p.confDir, e.file);
+        files[e.file].set(e.key, v);
+      }
     }
     for (const [file, conf] of Object.entries(files)) writeConf(p.confDir, file, conf);
     return { restartRequired: true };
