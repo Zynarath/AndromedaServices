@@ -32,20 +32,28 @@ remove it; *Base game only* picks just the maps everyone has. The pictures come 
 you open the page, keeps the picture in its cache folder, and serves it itself. Until a picture
 is downloaded (or if the wiki has none), the card shows the map's name.
 
-**BO2 match rules:** *Match rules (all game modes)* covers hardcore, friendly fire, killcams,
-team balance, player health, health regeneration and the pre-match countdown. Below it, a
+**Match rules (BO2, CoD4x, MW2, BO1):** *Match rules (all game modes)* covers hardcore, friendly fire, killcams,
+team balance, player health and health regeneration (BO2 adds final killcam and the pre-match
+countdown). Below it, a
 rules section for the selected game mode sets its time limit, score limit, lives and respawn
 delay, plus rounds for Search & Destroy, Demolition and Capture the Flag. Anything left on
 *Game default* / blank isn't written, so the game mode's normal value applies. The panel writes
-these into Plutonium's `storage\t6\gamesettings\hp_<id>_<mode>.cfg`, laid out like
+BO2's rules go into Plutonium's `storage\t6\gamesettings\hp_<id>_<mode>.cfg`, laid out like
 Plutonium's own mode files (the game's default and mode settings, `set_gametype <mode>`, then the
 panel's rules). The map rotation loads it with `execgts` before each map. *Auto-balance teams*
-is on unless you turn it off, as in Plutonium's own configs.
+is on unless you turn it off, as in Plutonium's own configs. CoD4x, MW2 and BO1 get the same rules
+as `scr_` dvars in the server config (`scr_hardcore`, `scr_team_fftype`, `scr_game_allowkillcam`,
+`scr_teambalance`, `scr_player_maxhealth`, `scr_player_healthregentime`, and
+`scr_<mode>_timelimit` / `scorelimit` / `numlives` / `playerrespawndelay` / `roundlimit` /
+`winlimit` for the selected mode). MW3 takes its rules from DSR files, so the panel leaves them
+to MW3's own `<MODE>_default.dsr`.
 
-**BO2 bots:** besides how many bots and how hard they are, you can set how the player count
-works, which team bots join (or a custom split), forced team balance, bot rank and prestige,
-whether bots throw grenades, jump/drop shot and aim, kicking bots at the end of a match, and
-how long to wait before adding them. *Keep teams even by moving bots* is on by default: when a
+**Bots (every game):** besides how many bots and how hard they are, the panel shows every Bot
+Warfare option that game's version documents: how bots fill the server (including *Use bots to
+even out the teams*), waiting for a real player, which team bots join (or a custom split), bot
+rank and prestige (COD Points on BO1), class choices, and whether bots knife, throw grenades,
+jump/drop shot, aim down sights, play the objective, camp, use killstreaks, take care packages
+and chat. Options a game's Bot Warfare doesn't have aren't shown for it. *Keep teams even by moving bots* is on by default: when a
 friend joins, Bot Warfare kicks a bot from the team with the most bots (it doesn't count people),
 so without it the teams can end up uneven.
 
@@ -109,9 +117,10 @@ by tests:
 - The CoD4x setup (game `.iwd` and `zone` files in the server folder, `+set dedicated 2`)
 - The `rcon` / `getstatus` protocol
 
-The BO2 bot options (team, split, rank, prestige, grenades, jump/drop shot, aim, kick at match
-end, wait time, fill mode, spectators) use the dvars documented in the
-[t6_bot_warfare README](https://github.com/ineedbots/t6_bot_warfare).
+The bot options use the dvars each game's Bot Warfare README documents
+([cod4x](https://github.com/ineedbots/cod4x_bot_warfare), [iw4x](https://github.com/ineedbots/iw4x_bot_warfare),
+[t6](https://github.com/ineedbots/t6_bot_warfare), [t5](https://github.com/ineedbots/t5_bot_warfare),
+[iw5](https://github.com/ineedbots/iw5_bot_warfare)).
 
 The BO2 rotation format (`execgts <file> map …`), the gamesettings file layout and every
 `gts` rule name come from Plutonium's T6 server configs
@@ -121,6 +130,9 @@ These follow the standard community server configs, but haven't been run against
 yet. If something doesn't take, use **Settings → Extra config lines** to override it, and tell me
 what the console says:
 
+- **CoD4x / MW2 / BO1 match rules**: the `scr_` dvars above are the series' standard names, but
+  haven't been checked against each game's scripts. If one doesn't take, override it under
+  *Extra config lines*.
 - **Map pictures**: the wiki search picks the page whose title matches the map's name. A card can
   end up with a wrong or missing picture if the wiki names a page differently.
 - **XP dvars**: `scr_xpscale` everywhere; `scr_weaponxpscale` on MW3/BO1/BO2. Check a match's

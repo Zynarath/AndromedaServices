@@ -125,45 +125,76 @@ const TITLES = {
   },
 };
 
-// BO2 match rules: "gts" (game type setting) names from Plutonium's T6 server configs
-// (storage/t6/gamesettings/*.cfg). Blank = the game mode's default; `always` = written even when blank.
-const T6_MATCH = [
-  { key: 'hardcoreMode', label: 'Hardcore', type: 'bool' },
-  { key: 'friendlyfiretype', label: 'Friendly fire', type: 'select', options: [['0', 'Off'], ['1', 'On'], ['2', 'Reflect'], ['3', 'Shared']] },
-  { key: 'allowKillcam', label: 'Killcam', type: 'bool' },
+// Match rules, written the way each game takes them:
+//  - BO2 (Plutonium T6): "gts" names from Plutonium's T6 server configs (storage/t6/gamesettings/*.cfg)
+//  - CoD4x, MW2 (IW4x), BO1 (Plutonium T5): the series' scr_ dvars (scr_<mode>_timelimit, ...)
+//  - MW3 (Plutonium IW5) takes them from DSR files instead, so the panel doesn't offer them there.
+// `key` is what's stored; blank = the game mode's default; `always` = written even when blank.
+const RULES_KIND = { t6: 'gts', cod4x: 'scr', iw4x: 'scr', t5: 'scr' };
+const MATCH_RULES = [
+  { key: 'hardcoreMode', scr: 'scr_hardcore', label: 'Hardcore', type: 'bool' },
+  { key: 'friendlyfiretype', scr: 'scr_team_fftype', label: 'Friendly fire', type: 'select', options: [['0', 'Off'], ['1', 'On'], ['2', 'Reflect'], ['3', 'Shared']] },
+  { key: 'allowKillcam', scr: 'scr_game_allowkillcam', label: 'Killcam', type: 'bool' },
   { key: 'allowFinalKillcam', label: 'Final killcam', type: 'bool' },
   // Plutonium's own mode files turn this on explicitly, so the panel does too unless it's set to off.
-  { key: 'autoTeamBalance', label: 'Auto-balance teams', type: 'bool', always: true, def: true },
-  { key: 'playerMaxHealth', label: 'Player health', type: 'number', hint: '100 is normal; Hardcore uses 30' },
-  { key: 'playerHealthRegenTime', label: 'Health regeneration delay (seconds)', type: 'number' },
+  { key: 'autoTeamBalance', scr: 'scr_teambalance', label: 'Auto-balance teams', type: 'bool', always: true, def: true },
+  { key: 'playerMaxHealth', scr: 'scr_player_maxhealth', label: 'Player health', type: 'number', hint: '100 is normal; Hardcore uses 30' },
+  { key: 'playerHealthRegenTime', scr: 'scr_player_healthregentime', label: 'Health regeneration delay (seconds)', type: 'number' },
   { key: 'prematchPeriod', label: 'Pre-match countdown (seconds)', type: 'number' },
 ];
-const T6_MODE = [
-  { key: 'timeLimit', label: 'Time limit (minutes, 0 = none)', type: 'number' },
-  { key: 'scoreLimit', label: 'Score limit (0 = none)', type: 'number' },
-  { key: 'roundLimit', label: 'Rounds (0 = none)', type: 'number' },
-  { key: 'roundWinLimit', label: 'Round wins to win the match (0 = none)', type: 'number' },
-  { key: 'playerNumLives', label: 'Lives per player (0 = unlimited)', type: 'number' },
-  { key: 'playerRespawnDelay', label: 'Respawn delay (seconds)', type: 'number' },
+// `scr` is the part after scr_<mode>_.
+const MODE_RULES = [
+  { key: 'timeLimit', scr: 'timelimit', label: 'Time limit (minutes, 0 = none)', type: 'number' },
+  { key: 'scoreLimit', scr: 'scorelimit', label: 'Score limit (0 = none)', type: 'number' },
+  { key: 'roundLimit', scr: 'roundlimit', label: 'Rounds (0 = none)', type: 'number', rounds: true },
+  { key: 'roundWinLimit', scr: 'winlimit', label: 'Round wins to win the match (0 = none)', type: 'number', rounds: true },
+  { key: 'playerNumLives', scr: 'numlives', label: 'Lives per player (0 = unlimited)', type: 'number' },
+  { key: 'playerRespawnDelay', scr: 'playerrespawndelay', label: 'Respawn delay (seconds)', type: 'number' },
 ];
-// Extra Bot Warfare dvars for BO2, from the t6_bot_warfare README.
-const T6_BOTS = [
-  { key: 'fillMode', dvar: 'bots_manage_fill_mode', label: 'What the player count includes', type: 'select', options: [['0', 'Bots and real players'], ['1', 'Only bots']], def: '0' },
+const ROUND_MODES = new Set(['sd', 'sab', 'dd', 'dem', 'ctf']);
+const rulesFor = (title, list) => (RULES_KIND[title] === 'scr' ? list.filter((f) => f.scr) : RULES_KIND[title] ? list : []);
+
+// Bot Warfare dvars each game's version documents in its README (ineedbots/<game>_bot_warfare).
+const BOT_DVARS = {
+  common: ['bots_main_waitForHostTime', 'bots_main_kickBotsAtEnd', 'bots_manage_fill_mode', 'bots_manage_fill_spec', 'bots_team', 'bots_team_amount', 'bots_team_force', 'bots_loadout_rank', 'bots_play_nade', 'bots_play_aim'],
+  t6: ['bots_loadout_prestige', 'bots_play_jumpdrop'],
+  cod4x: ['bots_main_chat', 'bots_manage_fill_watchplayers', 'bots_loadout_reasonable', 'bots_loadout_allow_op', 'bots_play_knife', 'bots_play_obj', 'bots_play_camp', 'bots_play_jumpdrop', 'bots_play_killstreak', 'bots_play_ads'],
+  iw4x: ['bots_main_chat', 'bots_manage_fill_watchplayers', 'bots_loadout_reasonable', 'bots_loadout_allow_op', 'bots_loadout_prestige', 'bots_play_knife', 'bots_play_take_carepackages', 'bots_play_obj', 'bots_play_camp', 'bots_play_jumpdrop', 'bots_play_killstreak', 'bots_play_ads'],
+  iw5: ['bots_main_chat', 'bots_manage_fill_watchplayers', 'bots_loadout_reasonable', 'bots_loadout_allow_op', 'bots_loadout_prestige', 'bots_play_knife', 'bots_play_take_carepackages', 'bots_play_obj', 'bots_play_camp', 'bots_play_jumpdrop', 'bots_play_killstreak', 'bots_play_ads'],
+  t5: ['bots_manage_fill_watchplayers', 'bots_loadout_reasonable', 'bots_loadout_allow_op', 'bots_loadout_prestige', 'bots_loadout_codpoints', 'bots_play_knife', 'bots_play_take_carepackages', 'bots_play_obj', 'bots_play_camp', 'bots_play_killstreak'],
+};
+const BOT_FIELDS = [
+  // Mode 4 ("bots are used for balancing teams") is in every version's source; the README lists it for most.
+  { key: 'fillMode', dvar: 'bots_manage_fill_mode', label: 'How bots fill the server', type: 'select', options: [['0', 'Count bots and real players'], ['1', 'Count only bots'], ['4', 'Use bots to even out the teams']], def: '0' },
+  { key: 'fillWatch', dvar: 'bots_manage_fill_watchplayers', label: 'Only add bots once a real player joins', type: 'bool', def: false },
   { key: 'fillSpec', dvar: 'bots_manage_fill_spec', label: 'Count spectators as players', type: 'bool', def: true },
   { key: 'team', dvar: 'bots_team', label: 'Bot team', type: 'select', options: [['autoassign', 'Auto-assign'], ['allies', 'All on one team (allies)'], ['axis', 'All on the other team (axis)'], ['custom', 'Custom split']], def: 'autoassign' },
-  { key: 'teamAmount', dvar: 'bots_team_amount', label: 'Custom split: bots on the axis team', type: 'number', def: 0, hint: 'The rest go to allies' },
+  { key: 'teamAmount', dvar: 'bots_team_amount', label: 'Custom split: bots on the axis team', type: 'number', def: 0, min: 0, max: 64, hint: 'The rest go to allies' },
   // When a player joins, Bot Warfare kicks a bot from the team with the most bots, ignoring people,
   // so teams end up uneven unless this moves bots across (it checks every 1.5 s).
   { key: 'teamForce', dvar: 'bots_team_force', label: 'Keep teams even by moving bots', type: 'bool', def: true },
-  { key: 'rank', dvar: 'bots_loadout_rank', label: 'Bot rank', type: 'number', def: -1, hint: '-1 = average of the players, 0 = random, or a rank' },
-  { key: 'prestige', dvar: 'bots_loadout_prestige', label: 'Bot prestige', type: 'number', def: -1, hint: '-1 = same as the host, -2 = random, or a prestige' },
+  { key: 'rank', dvar: 'bots_loadout_rank', label: 'Bot rank', type: 'number', def: -1, min: -1, max: 100, hint: '-1 = average of the players, 0 = random, or a rank' },
+  { key: 'prestige', dvar: 'bots_loadout_prestige', label: 'Bot prestige', type: 'number', def: -1, min: -2, max: 20, hint: '-1 = same as the host, -2 = random, or a prestige' },
+  { key: 'codpoints', dvar: 'bots_loadout_codpoints', label: 'Bot COD Points to spend', type: 'number', def: -1, min: -1, max: 10000000, hint: '-1 = average of the players, 0 = random, or an amount' },
+  { key: 'reasonable', dvar: 'bots_loadout_reasonable', label: 'Bots skip weak class setups', type: 'bool', def: false },
+  { key: 'allowOp', dvar: 'bots_loadout_allow_op', label: 'Bots may use overpowered/annoying classes', type: 'bool', def: true },
   { key: 'nade', dvar: 'bots_play_nade', label: 'Bots throw grenades', type: 'bool', def: true },
+  { key: 'knife', dvar: 'bots_play_knife', label: 'Bots knife', type: 'bool', def: true },
   { key: 'jumpdrop', dvar: 'bots_play_jumpdrop', label: 'Bots jump/drop shot', type: 'bool', def: true },
+  { key: 'ads', dvar: 'bots_play_ads', label: 'Bots aim down sights', type: 'bool', def: true },
   { key: 'aim', dvar: 'bots_play_aim', label: 'Bots aim', type: 'bool', def: true },
+  { key: 'obj', dvar: 'bots_play_obj', label: 'Bots play the objective', type: 'bool', def: true },
+  { key: 'camp', dvar: 'bots_play_camp', label: 'Bots camp', type: 'bool', def: true },
+  { key: 'killstreak', dvar: 'bots_play_killstreak', label: 'Bots use killstreaks', type: 'bool', def: true },
+  { key: 'carePackages', dvar: 'bots_play_take_carepackages', label: 'Bots take care packages', type: 'bool', def: true },
+  { key: 'chat', dvar: 'bots_main_chat', label: 'Bot chat rate (0 = silent)', type: 'number', def: 1, min: 0, max: 10, float: true },
   { key: 'kickAtEnd', dvar: 'bots_main_kickBotsAtEnd', label: 'Kick bots at the end of each match', type: 'bool', def: false },
-  { key: 'waitForHost', dvar: 'bots_main_waitForHostTime', label: 'Wait before adding bots (seconds)', type: 'number', def: 10 },
+  { key: 'waitForHost', dvar: 'bots_main_waitForHostTime', label: 'Wait before adding bots (seconds)', type: 'number', def: 10, min: 0, max: 600 },
 ];
-const ROUND_MODES = new Set(['sd', 'dem', 'ctf']);
+const botFieldsFor = (title) => {
+  const ok = new Set([...BOT_DVARS.common, ...(BOT_DVARS[title] || [])]);
+  return BOT_FIELDS.filter((f) => ok.has(f.dvar));
+};
 const gtsCfgName = (server, gametype) => `hp_${server.id}_${gametype}.cfg`;
 // "execgts <file>" in the map rotation loads <file> from Plutonium's storage/t6/gamesettings folder.
 const gtsDir = () => path.join(tools.plutoStorage('t6'), 'gamesettings');
@@ -240,11 +271,8 @@ function buildConfig(server) {
     `set bots_manage_fill_kick "${b.kick !== false ? 1 : 0}"`,
     `set bots_skill "${clean(b.skill ?? skillsFor(c.title).def)}"`
   );
-  if (c.title === 't6') {
-    for (const f of T6_BOTS) lines.push(`set ${f.dvar} "${dvarValue(f, b[f.key] ?? f.def)}"`);
-  } else {
-    lines.push(`set bots_manage_fill_mode "0"`, `set bots_team "autoassign"`);
-  }
+  for (const f of botFieldsFor(c.title)) lines.push(`set ${f.dvar} "${dvarValue(f, b[f.key] ?? f.def)}"`);
+  if (RULES_KIND[c.title] === 'scr') lines.push(...scrRuleLines(c));
   if (c.extraConfig) lines.push('// Extra config lines from the panel', ...String(c.extraConfig).split(/\r?\n/));
   const gametype = c.gametype || 'dom';
   // BO2 picks the mode and its rules from a gamesettings file the rotation loads before each map.
@@ -271,12 +299,33 @@ function buildGtsConfig(server) {
     `execgts gamesettings_${gametype}.cfg`,
     `set_gametype ${gametype}`,
   ];
-  const rules = [...T6_MATCH.map((f) => [f, (c.match || {})[f.key]]), ...T6_MODE.map((f) => [f, ((c.modes || {})[gametype] || {})[f.key]])];
-  for (const [f, set] of rules) {
-    const v = set === undefined || set === null || set === '' ? (f.always ? f.def : null) : set;
-    if (v !== null && v !== undefined) lines.push(`gts ${f.key} "${dvarValue(f, v)}"`);
-  }
+  for (const [f, v] of activeRules(c)) lines.push(`gts ${f.key} "${dvarValue(f, v)}"`);
   return lines.join('\r\n') + '\r\n';
+}
+
+// [field, value] for every rule that applies to the selected game mode and has a value to write.
+function activeRules(c) {
+  const gametype = c.gametype || 'dom';
+  const rules = [
+    ...rulesFor(c.title, MATCH_RULES).map((f) => [f, (c.match || {})[f.key], false]),
+    ...rulesFor(c.title, MODE_RULES)
+      .filter((f) => !f.rounds || ROUND_MODES.has(gametype))
+      .map((f) => [f, ((c.modes || {})[gametype] || {})[f.key], true]),
+  ];
+  const out = [];
+  for (const [f, set, perMode] of rules) {
+    const v = set === undefined || set === null || set === '' ? (f.always ? f.def : null) : set;
+    if (v !== null && v !== undefined) out.push([f, v, perMode]);
+  }
+  return out;
+}
+
+// CoD4x, MW2, BO1: plain dvars in the server config (scr_<mode>_... for the selected mode).
+function scrRuleLines(c) {
+  const gametype = clean(c.gametype || 'dom');
+  const rules = activeRules(c);
+  if (!rules.length) return [];
+  return ['// Match rules', ...rules.map(([f, v, perMode]) => `set ${perMode ? `scr_${gametype}_${f.scr}` : f.scr} "${dvarValue(f, v)}"`)];
 }
 
 function writeConfig(server) {
@@ -320,25 +369,28 @@ function ruleField(key, f) {
   return field;
 }
 
-function t6RuleSections(t) {
+function ruleSections(server, t) {
+  const match = rulesFor(server.cod.title, MATCH_RULES);
+  const mode = rulesFor(server.cod.title, MODE_RULES);
+  if (!match.length) return [];
   return [
-    { title: 'Match rules (all game modes)', fields: T6_MATCH.map((f) => ruleField('cod.match.' + f.key, f)) },
+    { title: 'Match rules (all game modes)', fields: match.map((f) => ruleField('cod.match.' + f.key, f)) },
     ...t.gametypes.map(([gt, label]) => ({
       title: `${label} rules`,
       // Shown only while this game mode is picked above.
       showIf: { key: 'cod.gametype', value: gt },
-      fields: T6_MODE.filter((f) => ROUND_MODES.has(gt) || !f.key.startsWith('round')).map((f) => ruleField(`cod.mode.${gt}.${f.key}`, f)),
+      fields: mode.filter((f) => !f.rounds || ROUND_MODES.has(gt)).map((f) => ruleField(`cod.mode.${gt}.${f.key}`, f)),
     })),
   ];
 }
 
-function t6Values(c) {
+function ruleAndBotValues(c) {
   const out = {};
   const shown = (v) => (v === null || v === undefined ? '' : String(v));
-  for (const f of T6_MATCH) out['cod.match.' + f.key] = shown((c.match || {})[f.key]);
-  for (const [gt] of TITLES.t6.gametypes) for (const f of T6_MODE) out[`cod.mode.${gt}.${f.key}`] = shown(((c.modes || {})[gt] || {})[f.key]);
+  for (const f of rulesFor(c.title, MATCH_RULES)) out['cod.match.' + f.key] = shown((c.match || {})[f.key]);
+  for (const [gt] of TITLES[c.title].gametypes) for (const f of rulesFor(c.title, MODE_RULES)) out[`cod.mode.${gt}.${f.key}`] = shown(((c.modes || {})[gt] || {})[f.key]);
   const b = c.bots || {};
-  for (const f of T6_BOTS) out['cod.bots.' + f.key] = f.type === 'bool' ? !!(b[f.key] ?? f.def) : String(b[f.key] ?? f.def);
+  for (const f of botFieldsFor(c.title)) out['cod.bots.' + f.key] = f.type === 'bool' ? !!(b[f.key] ?? f.def) : String(b[f.key] ?? f.def);
   return out;
 }
 
@@ -527,7 +579,7 @@ const cod = {
           },
         ],
       },
-      ...(server.cod.title === 't6' ? t6RuleSections(t) : []),
+      ...ruleSections(server, t),
       {
         title: 'XP',
         fields: [
@@ -542,7 +594,7 @@ const cod = {
           { key: 'cod.bots.fill', label: 'Keep this many players in the match (bots + people)', type: 'number', hint: '12 = 6v6. Bots leave as real players join.' },
           { key: 'cod.bots.skill', label: 'Bot difficulty', type: 'select', options: skillsFor(server.cod.title).options.map(([value, label]) => ({ value, label })) },
           { key: 'cod.bots.kick', label: 'Remove a bot when a real player joins', type: 'bool' },
-          ...(server.cod.title === 't6' ? T6_BOTS.map((f) => schemaField('cod.bots.' + f.key, f)) : []),
+          ...botFieldsFor(server.cod.title).map((f) => schemaField('cod.bots.' + f.key, f)),
         ],
       },
       {
@@ -577,7 +629,7 @@ const cod = {
       'cod.gameDir': c.gameDir,
       'cod.plutoKey': c.plutoKey,
       'cod.extraConfig': c.extraConfig,
-      ...(c.title === 't6' ? t6Values(c) : {}),
+      ...ruleAndBotValues(c),
     };
   },
 
@@ -604,26 +656,27 @@ const cod = {
     if ('cod.bots.fill' in v) c.bots.fill = num(v['cod.bots.fill'], 0, 64, 12);
     if ('cod.bots.skill' in v && skillsFor(c.title).options.some((o) => o[0] === String(v['cod.bots.skill']))) c.bots.skill = String(v['cod.bots.skill']);
     if ('cod.bots.kick' in v) c.bots.kick = !!v['cod.bots.kick'];
-    if (c.title === 't6') {
+    {
       // Check every rule first, so one bad value doesn't leave the rest half saved.
       const match = { ...(c.match || {}) };
       const modes = JSON.parse(JSON.stringify(c.modes || {}));
       const bots = {};
-      for (const f of T6_MATCH) if ('cod.match.' + f.key in v) match[f.key] = ruleValue(f, v['cod.match.' + f.key]);
+      for (const f of rulesFor(c.title, MATCH_RULES)) if ('cod.match.' + f.key in v) match[f.key] = ruleValue(f, v['cod.match.' + f.key]);
       for (const [gt] of t.gametypes) {
-        for (const f of T6_MODE) {
+        for (const f of rulesFor(c.title, MODE_RULES)) {
           const k = `cod.mode.${gt}.${f.key}`;
           if (k in v) (modes[gt] = modes[gt] || {})[f.key] = ruleValue(f, v[k]);
         }
       }
-      for (const f of T6_BOTS) {
+      for (const f of botFieldsFor(c.title)) {
         const k = 'cod.bots.' + f.key;
         if (!(k in v)) continue;
         if (f.type === 'bool') bots[f.key] = !!v[k];
         else if (f.type === 'select') bots[f.key] = f.options.some((o) => o[0] === String(v[k])) ? String(v[k]) : f.def;
         else {
           const n = Number(v[k]);
-          bots[f.key] = v[k] === '' || !Number.isInteger(n) ? f.def : Math.max(f.key === 'prestige' ? -2 : -1, Math.min(f.key === 'waitForHost' ? 600 : 64, n));
+          const ok = v[k] !== '' && (f.float ? Number.isFinite(n) : Number.isInteger(n));
+          bots[f.key] = ok ? Math.max(f.min, Math.min(f.max, n)) : f.def;
         }
       }
       c.match = match;

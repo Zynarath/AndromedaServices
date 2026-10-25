@@ -146,7 +146,7 @@ test('BO2: match rules, per-mode rules and Bot Warfare settings', () => {
   assert.match(cfg, /set bots_team "custom"/);
   assert.match(cfg, /set bots_team_amount "4"/);
   assert.match(cfg, /set bots_play_aim "0"/);
-  assert.match(cfg, /set bots_loadout_rank "64"/);
+  assert.match(cfg, /set bots_loadout_rank "100"/);
   assert.match(cfg, /set bots_play_nade "1"/);
   const values = cod.readSettings(s);
   assert.equal(values['cod.mode.tdm.scoreLimit'], '100');
@@ -166,8 +166,8 @@ test('BO2: match rules, per-mode rules and Bot Warfare settings', () => {
   const maps = sections.flatMap((x) => x.fields).find((f) => f.key === 'cod.maps');
   assert.equal(maps.type, 'maps');
   assert.equal(maps.options.find((o) => o.value === 'mp_nuketown_2020').image, '/api/servers/abc123/map-image/mp_nuketown_2020');
-  // Other titles keep their simpler form.
-  assert.ok(!cod.settingsSchema(server('iw4x')).sections.some((x) => x.showIf));
+  // MW3 takes its rules from DSR files, so it has no rule sections.
+  assert.ok(!cod.settingsSchema(server('iw5')).sections.some((x) => x.showIf));
 });
 
 test('CoD4x launch runs from the server folder with the bot mod', async () => {
@@ -297,4 +297,37 @@ test('BO2 start writes the mode file where "execgts" looks (Plutonium storage/t6
   const file = path.join(tools.plutoStorage('t6'), 'gamesettings', 'hp_abc123_dom.cfg');
   assert.match(fs.readFileSync(file, 'utf8'), /set_gametype dom\r\ngts autoTeamBalance "1"\r\ngts scoreLimit "200"\r\n$/);
   assert.match(fs.readFileSync(path.join(s.cod.gameDir, 'main', 'hp_abc123.cfg'), 'utf8'), /sv_mapRotation "gametype dom execgts hp_abc123_dom\.cfg map /);
+});
+
+test('CoD4x, MW2 and BO1 get match rules as scr_ dvars; every game gets its own Bot Warfare settings', () => {
+  for (const key of ['cod4x', 'iw4x', 't5']) {
+    const s = server(key);
+    const keys = cod.settingsSchema(s).sections.flatMap((x) => x.fields.map((f) => f.key));
+    assert.ok(keys.includes('cod.match.hardcoreMode'), key);
+    assert.ok(!keys.includes('cod.match.prematchPeriod'), `${key}: BO2-only rules stay out`);
+    // Untouched: only team balance is written.
+    assert.match(cod.buildConfig(s), /\/\/ Match rules\r\nset scr_teambalance "1"\r\n\/\/ Map rotation/);
+    const tdm = key === 'cod4x' || key === 'iw4x' ? 'war' : 'tdm';
+    cod.writeSettings(s, { 'cod.gametype': tdm, 'cod.match.hardcoreMode': '1', 'cod.match.friendlyfiretype': '1', [`cod.mode.${tdm}.scoreLimit`]: 50, [`cod.mode.${tdm}.timeLimit`]: 0, 'cod.mode.sd.roundLimit': 6 });
+    const cfg = cod.buildConfig(s);
+    assert.match(cfg, /set scr_hardcore "1"\r\nset scr_team_fftype "1"\r\nset scr_teambalance "1"\r\n/);
+    assert.match(cfg, new RegExp(`set scr_${tdm}_timelimit "0"\\r\\nset scr_${tdm}_scorelimit "50"\\r\\n`));
+    assert.doesNotMatch(cfg, /scr_sd_roundlimit/, 'only the selected mode is written');
+    assert.doesNotMatch(cfg, /^gts /m);
+  }
+  // Bot settings follow each game's README.
+  const botKeys = (key) => cod.settingsSchema(server(key)).sections.flatMap((x) => x.fields.map((f) => f.key)).filter((k) => k.startsWith('cod.bots.'));
+  assert.ok(botKeys('t5').includes('cod.bots.codpoints'));
+  assert.ok(!botKeys('t5').includes('cod.bots.jumpdrop'));
+  assert.ok(!botKeys('cod4x').includes('cod.bots.prestige'));
+  assert.ok(botKeys('iw5').includes('cod.bots.carePackages'));
+  assert.ok(!botKeys('t6').includes('cod.bots.carePackages'));
+  const mw2 = server('iw4x');
+  cod.writeSettings(mw2, { 'cod.bots.chat': 0.5, 'cod.bots.ads': false, 'cod.bots.fillMode': '4' });
+  const cfg = cod.buildConfig(mw2);
+  assert.match(cfg, /set bots_main_chat "0.5"/);
+  assert.match(cfg, /set bots_play_ads "0"/);
+  assert.match(cfg, /set bots_manage_fill_mode "4"/);
+  assert.match(cfg, /set bots_team_force "1"/);
+  assert.doesNotMatch(cod.buildConfig(server('cod4x')), /bots_loadout_prestige/);
 });
