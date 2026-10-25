@@ -125,6 +125,61 @@ test('WoW: install enables the console; settings write to the .conf files safely
   assert.equal(wow.connectAddress(server, 'play.example.com'), 'set realmlist play.example.com');
 });
 
+test('WoW: "All options" lists every key from the .conf files with their own descriptions (admins only)', () => {
+  const { describeConf, looksBoolean } = require('../src/util/confdoc');
+  // Shaped like cMaNGOS's mangosd.conf.dist and aiplayerbot.conf.dist.
+  const mangosd = [
+    '[MangosdConf]', 'ConfVersion=2024020101', '',
+    '###################################################################################################################',
+    '# SERVER SETTINGS', '#',
+    '#    InstantLogout',
+    '#        Enable or disable instant logout for security level (0..4) or high',
+    '#        Default: 1 (Mods/GMs/Admins)', '#',
+    '#    AllFlightPaths',
+    '#        Players will start with all flight paths',
+    '#        Default: 0 (false)', '#                 1 (true)', '#',
+    '#    DeclinedNames',
+    '#        Allow russian clients to set and use declined names',
+    '#        Default: 0 (false)', '#                 1 (true)', '#',
+    '###################################################################################################################', '',
+    'InstantLogout = 1', 'AllFlightPaths = 0', 'DeclinedNames = 0', 'LoginDatabaseInfo = "127.0.0.1;3310;root;123456;wotlkrealmd"', 'Ra.Enable = 0', 'Rate.XP.Kill = 1', 'Console.Enable = 1', '',
+  ].join('\r\n');
+  const bots = ['# Random bot count', 'AiPlayerbot.MinRandomBots = 50', 'AiPlayerbot.MaxRandomBots = 50', '', '# Log out random bots after BotInWorldTime interval', '# AiPlayerbot.RandomBotTimedLogout = 1', '', '# Enable BG/Arena for random Bots', 'AiPlayerbot.RandomBotJoinBG = 1', ''].join('\n');
+  const e = describeConf(mangosd);
+  const logout = e.find((x) => x.key === 'InstantLogout');
+  assert.equal(logout.section, 'Server Settings');
+  assert.match(logout.doc, /security level/);
+  assert.equal(looksBoolean(logout), false, '0/1 but documented as a level, so not a switch');
+  assert.equal(looksBoolean(e.find((x) => x.key === 'AllFlightPaths')), true);
+  const b = describeConf(bots);
+  assert.equal(b.find((x) => x.key === 'AiPlayerbot.MaxRandomBots').doc, 'Random bot count', 'keys under one comment share it');
+  assert.deepEqual(b.find((x) => x.key === 'AiPlayerbot.RandomBotTimedLogout'), { key: 'AiPlayerbot.RandomBotTimedLogout', value: undefined, def: '1', section: '', doc: 'Log out random bots after BotInWorldTime interval' });
+
+  const root = fakeSpp();
+  const confDir = wow.detect(root).confDir;
+  fs.writeFileSync(path.join(confDir, 'mangosd.conf'), mangosd);
+  fs.writeFileSync(path.join(confDir, 'aiplayerbot.conf'), bots);
+  const server = { id: 'w2', name: 'WoW', game: 'wow', wow: wow.defaults({ name: 'WoW', wow: { root } }) };
+  const fields = wow.settingsSchema(server).sections.flatMap((x) => x.fields);
+  const keys = fields.map((f) => f.key);
+  assert.ok(keys.includes('conf.mangosd.conf.InstantLogout'));
+  assert.ok(keys.includes('conf.aiplayerbot.conf.AiPlayerbot.RandomBotTimedLogout'));
+  for (const hidden of ['LoginDatabaseInfo', 'Ra.Enable', 'Console.Enable', 'ConfVersion']) assert.ok(!keys.includes('conf.mangosd.conf.' + hidden), hidden);
+  assert.equal(new Set(keys).size, keys.length, 'curated keys are not listed twice');
+  assert.ok(fields.find((f) => f.key === 'conf.mangosd.conf.InstantLogout').admin);
+  // Non-admins can't change them; admins can, including turning on a commented-out bot option.
+  wow.writeSettings(server, { 'conf.mangosd.conf.InstantLogout': '3' }, { admin: false });
+  assert.equal(wow.readSettings(server)['conf.mangosd.conf.InstantLogout'], '1');
+  wow.writeSettings(server, { 'conf.mangosd.conf.InstantLogout': '3', 'conf.aiplayerbot.conf.AiPlayerbot.RandomBotTimedLogout': '0', 'conf.mangosd.conf.DeclinedNames': '7', 'conf.mangosd.conf.Ra.Enable': '1', 'conf.mangosd.conf.Made.Up': '1' }, { admin: true });
+  const after = fs.readFileSync(path.join(confDir, 'mangosd.conf'), 'utf8');
+  assert.match(after, /InstantLogout = 3/);
+  assert.match(after, /DeclinedNames = 0/, 'switches only take 0 or 1');
+  assert.match(after, /Ra\.Enable = 0/, 'hidden keys are never written');
+  assert.doesNotMatch(after, /Made\.Up/, 'only keys that exist in the file');
+  assert.match(fs.readFileSync(path.join(confDir, 'aiplayerbot.conf'), 'utf8'), /\nAiPlayerbot\.RandomBotTimedLogout = 0\n?$/);
+  assert.equal(wow.readSettings(server)['conf.aiplayerbot.conf.AiPlayerbot.RandomBotTimedLogout'], '0');
+});
+
 test('WoW: account names and passwords are validated for console safety', () => {
   assert.ok(wow.NAME_RE.test('Buddy99'));
   assert.ok(!wow.NAME_RE.test('a b'));
