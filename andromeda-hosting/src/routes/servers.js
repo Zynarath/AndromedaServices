@@ -204,6 +204,34 @@ router.put('/servers/:id/settings', (req, res) => {
   res.json({ ok: true, warning, restartRequired: !!(result.restartRequired && inst.child), values: inst.game.readSettings(inst.server) });
 });
 
+// ---- mod configuration (ARK mod INI sections, Minecraft mod config files) ----
+function modConfigGame(inst) {
+  if (!inst.game.listModConfigs) throw new HttpError(404, 'This server has no mod configuration');
+  return inst;
+}
+
+router.get('/servers/:id/mod-config', async (req, res) => {
+  const inst = modConfigGame(load(req, 'settings'));
+  res.json({ ...(await inst.game.listModConfigs(inst.server)), running: !!inst.child, canRaw: auth.can(req.user, inst.server, 'files') });
+});
+
+router.get('/servers/:id/mod-config/file', (req, res) => {
+  const inst = modConfigGame(load(req, 'settings'));
+  const out = inst.game.readModConfig(inst.server, String(req.query.file || ''));
+  // The raw text is the whole file, so it needs the same permission as the Files tab.
+  if (!auth.can(req.user, inst.server, 'files')) delete out.raw;
+  res.json(out);
+});
+
+router.put('/servers/:id/mod-config/file', (req, res) => {
+  const inst = modConfigGame(load(req, 'settings'));
+  const body = req.body || {};
+  if (typeof body.raw === 'string' && !auth.can(req.user, inst.server, 'files')) throw new HttpError(403, 'Editing the raw file needs the Files permission');
+  const r = inst.game.writeModConfig(inst.server, String(body.file || ''), { values: body.values, raw: body.raw }, { running: !!inst.child });
+  inst.appendConsole(`[mod config] ${req.user.username} changed ${r.changed} setting(s) in ${body.file}`);
+  res.json({ ok: true, ...r, restartRequired: !!inst.child });
+});
+
 // Map preview for the CoD map picker (looked up on the CoD wiki once, then cached).
 router.get('/servers/:id/map-image/:map', (req, res) => {
   const inst = load(req);

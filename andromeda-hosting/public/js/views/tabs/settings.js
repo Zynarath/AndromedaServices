@@ -1,7 +1,7 @@
 import { api } from '../../api.js';
 import { html, $, icon, toast, confirmBox, modal } from '../../ui.js';
 
-function field(f, value) {
+export function field(f, value) {
   const id = 'f-' + f.key.replace(/\W/g, '_');
   const hint = f.hint ? html`<small class="hint">${f.hint}</small>` : '';
   const tip = f.tip ? html`title="${f.tip}"` : '';

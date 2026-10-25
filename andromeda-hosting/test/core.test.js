@@ -359,3 +359,75 @@ test('Minecraft: full server.properties, game rules and operators', () => {
   mc.onReady(server, inst);
   assert.deepEqual(sent.slice(0, 2), ['deop Steve', 'op Alex']);
 });
+
+test('Mod configuration: Minecraft config files become forms, grouped by the mod that wrote them', async () => {
+  const mc = require('../src/games/minecraft');
+  const { createZip } = require('../src/util/zip');
+  const dir = path.join(tmp, 'mc-modcfg');
+  const w = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  };
+  // Two "jars" with real mod metadata.
+  const jarSrc = path.join(tmp, 'jar-create');
+  fs.mkdirSync(path.join(jarSrc, 'META-INF'), { recursive: true });
+  fs.writeFileSync(path.join(jarSrc, 'META-INF', 'mods.toml'), 'modLoader="javafml"\n[[mods]]\nmodId="create"\ndisplayName="Create"\n');
+  await createZip(jarSrc, path.join(dir, 'mods', 'create-1.0.jar'));
+  const jarSrc2 = path.join(tmp, 'jar-sodium');
+  fs.mkdirSync(jarSrc2, { recursive: true });
+  fs.writeFileSync(path.join(jarSrc2, 'fabric.mod.json'), JSON.stringify({ id: 'waystones', name: 'Waystones' }));
+  await createZip(jarSrc2, path.join(dir, 'mods', 'waystones.jar'));
+  w('server.properties', 'level-name=world\n');
+  w('config/create-common.toml', '[worldgen]\n\t#Range: 0 ~ 10\n\tfrequency = 4\n');
+  w('world/serverconfig/create-server.toml', '[kinetics]\n\t#Allowed Values: LOW, HIGH\n\tstress = "LOW"\n');
+  w('config/waystones/settings.json', '{\n  "cooldown": 30,\n  "allowGlobal": true\n}\n');
+  w('config/mystery.json5', '{ // comments\n a: 1 }\n');
+  const server = { id: 'mcfg', name: 'Pack', dir, mc: mc.defaults({ name: 'Pack', mc: {} }) };
+  const list = await mc.listModConfigs(server);
+  const byName = Object.fromEntries(list.mods.map((m) => [m.name, m.files.map((f) => f.file).sort()]));
+  assert.deepEqual(byName.Create, ['config/create-common.toml', 'world/serverconfig/create-server.toml']);
+  assert.deepEqual(byName.Waystones, ['config/waystones/settings.json']);
+  assert.deepEqual(byName.mystery, ['config/mystery.json5']);
+  // Form fields, with ranges and allowed values; the raw text for formats without a form.
+  const toml = mc.readModConfig(server, 'config/create-common.toml');
+  assert.deepEqual(toml.fields.map((f) => [f.label, f.type, f.value, f.min, f.max]), [['frequency', 'number', 4, 0, 10]]);
+  assert.equal(mc.readModConfig(server, 'config/mystery.json5').fields, null);
+  mc.writeModConfig(server, 'config/create-common.toml', { values: { [toml.fields[0].id]: 7 } });
+  assert.equal(fs.readFileSync(path.join(dir, 'config/create-common.toml'), 'utf8'), '[worldgen]\n\t#Range: 0 ~ 10\n\tfrequency = 7\n');
+  assert.throws(() => mc.writeModConfig(server, 'config/create-common.toml', { values: { [toml.fields[0].id]: 70 } }), /between 0 and 10/);
+  const srv = mc.readModConfig(server, 'world/serverconfig/create-server.toml');
+  assert.deepEqual(srv.fields[0].options, ['LOW', 'HIGH']);
+  assert.throws(() => mc.writeModConfig(server, 'world/serverconfig/create-server.toml', { values: { [srv.fields[0].id]: 'MEDIUM' } }), /not one of/);
+  const json = mc.readModConfig(server, 'config/waystones/settings.json');
+  mc.writeModConfig(server, 'config/waystones/settings.json', { values: { [json.fields.find((f) => f.label === 'allowGlobal').id]: false } });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'config/waystones/settings.json'), 'utf8')), { cooldown: 30, allowGlobal: false });
+  mc.writeModConfig(server, 'config/mystery.json5', { raw: '{ a: 2 }\n' });
+  assert.equal(fs.readFileSync(path.join(dir, 'config/mystery.json5'), 'utf8'), '{ a: 2 }\n');
+  // Only files the scan lists can be read or written.
+  for (const bad of ['server.properties', '../etc/passwd', 'config/../server.properties']) assert.throws(() => mc.readModConfig(server, bad), /not found/);
+  assert.throws(() => mc.writeModConfig(server, 'eula.txt', { raw: 'x' }), /not found/);
+});
+
+test('Mod configuration: ARK mod INI sections', () => {
+  const ark = require('../src/games/ark');
+  const server = { id: 'amc', name: 'Dino', game: 'ark', dir: path.join(tmp, 'ark-modcfg'), ark: ark.defaults({ name: 'Dino', ark: { edition: 'ase', mods: '1234' } }) };
+  const cfg = path.join(server.dir, 'ShooterGame/Saved/Config', process.platform === 'win32' ? 'WindowsServer' : 'LinuxServer');
+  fs.mkdirSync(cfg, { recursive: true });
+  fs.writeFileSync(path.join(cfg, 'GameUserSettings.ini'), '[ServerSettings]\nXPMultiplier=2\n\n[AnnunakiGenesis]\nDisableAlphas=False\nMaxLevel=150\nBlacklist=A\nBlacklist=B\n');
+  const list = ark.listModConfigs(server);
+  assert.deepEqual(list.mods.map((m) => m.name), ['AnnunakiGenesis']);
+  assert.deepEqual(list.loadedMods, ['1234']);
+  const d = ark.readModConfig(server, 'gus:AnnunakiGenesis');
+  assert.deepEqual(d.fields.map((f) => [f.id, f.type, f.value]), [['DisableAlphas', 'bool', false], ['MaxLevel', 'number', '150'], ['Blacklist', 'textarea', 'A\nB']]);
+  assert.throws(() => ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { MaxLevel: 300 } }, { running: true }), /Stop the server/);
+  ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { DisableAlphas: true, MaxLevel: '300', Blacklist: 'A\nC\nD', NewKey: '5' } });
+  const text = fs.readFileSync(path.join(cfg, 'GameUserSettings.ini'), 'utf8');
+  assert.match(text, /\[AnnunakiGenesis\]\r\nDisableAlphas=True\r\nMaxLevel=300\r\nBlacklist=A\r\nBlacklist=C\r\nBlacklist=D\r\nNewKey=5\r\n/);
+  assert.match(text, /\[ServerSettings\]\r\nXPMultiplier=2/);
+  // New sections; ARK's own sections and odd names are refused.
+  ark.writeModConfig(server, 'game:StructuresPlus', { values: {} });
+  assert.ok(ark.listModConfigs(server).mods.some((m) => m.id === 'game:StructuresPlus'));
+  assert.throws(() => ark.writeModConfig(server, 'gus:ServerSettings', { values: { RCONPort: 1 } }), /mod section name/);
+  assert.throws(() => ark.writeModConfig(server, 'gus:Bad]Name', { values: {} }), /mod section name/);
+  assert.throws(() => ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { 'bad key=1\n[x]': 1 } }), /valid setting name/);
+});
