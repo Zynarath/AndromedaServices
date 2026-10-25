@@ -154,6 +154,27 @@ async function ensureDb(instance) {
   throw new HttpError(500, 'MySQL did not start within 90 seconds');
 }
 
+// mangosd shuts itself down while loading auctions ("AuctionHouseMgr::AddAItem():
+// mAitems.find(it->GetGUIDLow()) == mAitems.end()") when two rows of the auction table hold the same
+// item, which an interrupted save can leave behind. Keep the oldest listing per item, remove the
+// others, and save the removed rows to a file so nothing disappears without a record.
+async function repairAuctions(instance, q = query) {
+  const server = instance.server;
+  let dupes;
+  try {
+    dupes = await q(server, 'Character', 'SELECT a.* FROM auction a JOIN (SELECT itemguid, MIN(id) AS keep_id FROM auction GROUP BY itemguid HAVING COUNT(*) > 1) d ON a.itemguid = d.itemguid AND a.id <> d.keep_id');
+  } catch (err) {
+    instance.appendConsole(`[panel] Couldn't check the auction house for duplicate listings: ${err.message}`);
+    return 0;
+  }
+  if (!dupes.length) return 0;
+  const file = path.join(paths(server).confDir, `andromeda-removed-auctions-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+  fs.writeFileSync(file, JSON.stringify(dupes, null, 2));
+  await q(server, 'Character', `DELETE FROM auction WHERE id IN (${dupes.map(() => '?').join(',')})`, dupes.map((r) => r.id));
+  instance.appendConsole(`[panel] Removed ${dupes.length} duplicate auction listing(s) (the same item listed twice), which stop the world server from starting. The removed rows are saved in ${file}`);
+  return dupes.length;
+}
+
 async function stopDb(instance) {
   if (!instance.auxRunning('mysql')) return;
   const server = instance.server;
@@ -386,6 +407,7 @@ const wow = {
       }
     }
     if (lastErr) throw new HttpError(500, `Couldn't reach the login database: ${lastErr.message}`);
+    await repairAuctions(instance);
     if (p.layout === 'spp') fs.writeFileSync(path.join(p.confDir, 'name.txt'), server.wow.realmName || server.name);
     if (!instance.auxRunning('realmd')) instance.spawnAux('realmd', path.join(p.bin, 'realmd' + EXE), [], { cwd: p.confDir });
   },
@@ -651,3 +673,4 @@ function runSqlTool(exe, info, extra, { out, input } = {}) {
 }
 
 module.exports = wow;
+module.exports.repairAuctions = repairAuctions;

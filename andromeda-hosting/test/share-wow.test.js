@@ -180,6 +180,33 @@ test('WoW: "All options" lists every key from the .conf files with their own des
   assert.equal(wow.readSettings(server)['conf.aiplayerbot.conf.AiPlayerbot.RandomBotTimedLogout'], '0');
 });
 
+test('WoW: duplicate auction listings that crash mangosd are removed before start, with a record', async () => {
+  const root = fakeSpp();
+  const server = { id: 'w3', name: 'WoW', game: 'wow', wow: wow.defaults({ name: 'WoW', wow: { root } }) };
+  const lines = [];
+  const instance = { server, appendConsole: (l) => lines.push(l) };
+  const calls = [];
+  const dupes = [{ id: 7, houseid: 1, itemguid: 500, item_template: 2589 }, { id: 9, houseid: 1, itemguid: 500, item_template: 2589 }];
+  const fakeQuery = async (_s, which, sql, params) => {
+    calls.push({ which, sql, params });
+    return sql.startsWith('SELECT') ? dupes : { affectedRows: params.length };
+  };
+  assert.equal(await wow.repairAuctions(instance, fakeQuery), 2);
+  assert.equal(calls[0].which, 'Character');
+  assert.match(calls[0].sql, /GROUP BY itemguid HAVING COUNT\(\*\) > 1/);
+  assert.match(calls[0].sql, /a\.id <> d\.keep_id/, 'the oldest listing of each item is kept');
+  assert.deepEqual(calls[1].params, [7, 9]);
+  const saved = fs.readdirSync(wow.detect(root).confDir).filter((f) => f.startsWith('andromeda-removed-auctions-'));
+  assert.equal(saved.length, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(wow.detect(root).confDir, saved[0]), 'utf8')), dupes);
+  assert.match(lines[0], /Removed 2 duplicate auction listing/);
+  // Nothing to fix: no delete. A database error doesn't stop the start.
+  calls.length = 0;
+  assert.equal(await wow.repairAuctions(instance, async () => []), 0);
+  assert.equal(await wow.repairAuctions(instance, async () => { throw new Error('offline'); }), 0);
+  assert.match(lines[lines.length - 1], /Couldn't check the auction house/);
+});
+
 test('WoW: account names and passwords are validated for console safety', () => {
   assert.ok(wow.NAME_RE.test('Buddy99'));
   assert.ok(!wow.NAME_RE.test('a b'));
