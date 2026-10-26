@@ -419,6 +419,15 @@ test('Mod configuration: ARK mod sections, with names and documented defaults fr
   const asked = [];
   global.fetch = async (url, opts) => {
     asked.push(String(url));
+    // The mod's discussions: a pinned "Server config" thread documents one more setting.
+    if (/\/discussions\/1234$/.test(String(url))) {
+      return new Response('<html><body><div class="forum_topic"><a class="forum_topic_overlay" href="https://steamcommunity.com/workshop/filedetails/discussion/1234/555/"></a><div class="forum_topic_name">Server config (INI settings)</div></div>' +
+        '<div class="forum_topic"><a href="https://steamcommunity.com/workshop/filedetails/discussion/1234/777/"></a><div class="forum_topic_name">Show your best tame</div></div></body></html>', { headers: { 'content-type': 'text/html' } });
+    }
+    if (/\/discussion\/1234\/555\/$/.test(String(url))) {
+      return new Response('<div class="forum_op"><div class="content">Add to GameUserSettings.ini:<br>[AnnunakiGenesis]<br>MaxWildLevel=150<br>AlphaSpawnChance=0.1 // chance a wild dino spawns as an alpha<br></div></div>', { headers: { 'content-type': 'text/html' } });
+    }
+    if (/\/discussions\/999$/.test(String(url))) return new Response('<html></html>', { headers: { 'content-type': 'text/html' } });
     assert.match(String(url), /GetPublishedFileDetails/);
     const ids = [...new URLSearchParams(String(opts.body)).entries()].filter(([k]) => k.startsWith('publishedfileids')).map(([, v]) => v);
     assert.deepEqual(ids, ['1234', '999']);
@@ -433,7 +442,9 @@ test('Mod configuration: ARK mod sections, with names and documented defaults fr
     const ann = list.mods.find((m) => m.modId === '1234');
     assert.equal(ann.name, 'Annunaki Genesis');
     assert.equal(ann.image, '/api/servers/amc/mod-image/1234');
-    assert.deepEqual(ann.files.map((f) => [f.file, f.documented]), [['gus:AnnunakiGenesis', 3]]);
+    assert.deepEqual(ann.files.map((f) => [f.file, f.documented]), [['gus:AnnunakiGenesis', 4]], 'three from the page, one more from the config thread');
+    assert.deepEqual(ann.sources.map((x) => [x.label, x.settings]), [['Workshop page', 3], ['Steam discussion: Server config (INI settings)', 2]]);
+    assert.ok(!asked.some((u) => u.includes('/777/')), 'unrelated threads are not read');
     assert.equal(list.mods.find((m) => m.modId === '999').name, 'Simple Mod');
     assert.deepEqual(list.mods.find((m) => m.id === 'other').files.map((f) => f.file), ['gus:SomeOtherMod']);
     // Documented settings are pre-filled with their defaults; the file's own value wins where it has one.
@@ -445,7 +456,10 @@ test('Mod configuration: ARK mod sections, with names and documented defaults fr
     assert.equal(byKey.MaxWildLevel.value, '150');
     assert.equal(byKey.Tier3Chance.value, '0.25');
     assert.equal(byKey.Blacklist.type, 'textarea');
-    assert.equal(asked.length, 1, 'mod details are cached');
+    assert.match(byKey.AlphaSpawnChance.hint, /chance a wild dino spawns as an alpha · Default: 0.1 · from Steam discussion: Server config/);
+    const before = asked.length;
+    await ark.listModConfigs(server);
+    assert.equal(asked.length, before, 'mod details are cached');
     await assert.rejects(ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { MaxWildLevel: 300 } }, { running: true }), /Stop the server/);
     // Saving the form as shown: defaults stay out of the file; changed values go in.
     await ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { DisableAlphas: false, MaxWildLevel: '300', Tier3Chance: '0.5', Blacklist: 'A\nC' } });
@@ -482,4 +496,43 @@ test('Mod pages: settings are read from BBCode/HTML descriptions; pictures only 
   assert.ok(allowedImageHost('https://media.forgecdn.net/avatars/1.png'));
   assert.ok(!allowedImageHost('https://evil.example/x.png'));
   assert.ok(!allowedImageHost('http://steamuserimages-a.akamaihd.net/x.png'));
+});
+
+test('Mod pages: documentation links are followed in readable form; pictures are resized and recognised', async () => {
+  const { docLinks, sniffImage, thumbnailUrl, getModImage } = require('../src/services/modinfo');
+  const links = docLinks('Config: [url=https://pastebin.com/AbC123xy]settings[/url] and https://github.com/me/mod/blob/main/README.md, https://docs.google.com/document/d/1x-Y_z/edit?usp=sharing and https://steamcommunity.com/workshop/filedetails/discussion/42/9001/ and https://example.com/whatever', '42');
+  assert.deepEqual(links.map((l) => [l.label, l.read]), [
+    ['Pastebin', 'https://pastebin.com/raw/AbC123xy'],
+    ['GitHub', 'https://raw.githubusercontent.com/me/mod/main/README.md'],
+    ['Google Doc', 'https://docs.google.com/document/d/1x-Y_z/export?format=txt'],
+    ['Steam discussion', 'https://steamcommunity.com/workshop/filedetails/discussion/42/9001/'],
+  ]);
+  assert.equal(sniffImage(Buffer.from([0xff, 0xd8, 0xff, 0xe0])), 'image/jpeg');
+  assert.equal(sniffImage(Buffer.from('GIF89a')), 'image/gif');
+  assert.equal(sniffImage(Buffer.from('<html>')), null);
+  assert.match(thumbnailUrl('https://images.steamusercontent.com/ugc/1/ABC/'), /\?imw=256&imh=256&ima=fit&impolicy=Letterbox$/);
+  assert.equal(thumbnailUrl('https://media.forgecdn.net/a.png'), 'https://media.forgecdn.net/a.png');
+
+  // A picture Steam sends without a proper type (resized URL fails, original works) is still used.
+  const cacheFile = path.join(process.env.ANDROMEDA_DATA, 'cache', 'mod-info.json');
+  const cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  cache['ase:4242'] = { id: '4242', found: true, name: 'Pic', imageUrl: 'https://images.steamusercontent.com/ugc/9/PIC/', docs: [], sources: [], fetchedAt: Date.now() };
+  fs.writeFileSync(cacheFile, JSON.stringify(cache));
+  delete require.cache[require.resolve('../src/services/modinfo')];
+  const fresh = require('../src/services/modinfo');
+  const realFetch = global.fetch;
+  const asked = [];
+  global.fetch = async (url) => {
+    asked.push(String(url));
+    if (String(url).includes('imw=')) return new Response('nope', { status: 404 });
+    return new Response(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), { headers: { 'content-type': 'application/octet-stream' } });
+  };
+  try {
+    const img = await fresh.getModImage('4242', 'ase');
+    assert.equal(img.type, 'image/jpeg');
+    assert.ok(img.file.endsWith('ase-4242.jpg'));
+    assert.ok(asked[0].includes('imw=256') && !asked[asked.length - 1].includes('imw='), 'thumbnail first, then the original');
+  } finally {
+    global.fetch = realFetch;
+  }
 });
