@@ -12,6 +12,8 @@ function readComments(lines) {
   for (const l of lines) {
     const range = /Range:\s*(-?[\d.]+(?:[eE][+-]?\d+)?)\s*~\s*(-?[\d.]+(?:[eE][+-]?\d+)?)/i.exec(l);
     if (range) Object.assign(out, { min: Number(range[1]), max: Number(range[2]) });
+    const def = /^\s*Default:\s*(.+?)\s*$/i.exec(l);
+    if (def) out.def = def[1].replace(/^"(.*)"$/, '$1');
     const allowed = /Allowed Values:\s*(.+)$/i.exec(l);
     if (allowed) out.options = allowed[1].split(',').map((s) => s.trim()).filter(Boolean);
   }

@@ -44,7 +44,7 @@ export function field(f, value) {
       ${hint}</label>`;
   }
   return html`<label class="field" for="${id}" ${tip}><span>${f.label}</span>
-    <input id="${id}" name="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" value="${value ?? ''}" ${f.def != null ? html`placeholder="Default: ${f.def}"` : ''} ${f.step ? html`step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.min != null ? html`min="${f.min}"` : ''} autocomplete="off">${hint}</label>`;
+    <input id="${id}" name="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" value="${value ?? ''}" ${f.def != null ? html`placeholder="Default: ${f.def}"` : ''} ${f.step ? html`step="${f.step}"` : f.type === 'number' ? html`step="any"` : ''} ${f.min != null ? html`min="${f.min}"` : ''} autocomplete="off">${hint}</label>`;
 }
 
 export async function render(root, { server, can, refresh, navigate, refreshServers }) {
@@ -75,7 +75,7 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
       <div class="form-actions"><button class="btn btn-primary">Save</button></div>
     </form>
 
-    <form id="game" class="panel">
+    <form id="game" class="panel" novalidate>
       <h3>Game settings</h3>
       ${schema.note ? html`<p class="muted small">${schema.note}</p>` : ''}
       ${schema.sections.reduce((n, sec) => n + sec.fields.length, 0) > 30 ? html`<input type="search" id="settings-filter" class="filter" placeholder="Find a setting… (e.g. taming, stack, decay)" autocomplete="off">` : ''}

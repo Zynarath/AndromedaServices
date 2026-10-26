@@ -408,26 +408,78 @@ test('Mod configuration: Minecraft config files become forms, grouped by the mod
   assert.throws(() => mc.writeModConfig(server, 'eula.txt', { raw: 'x' }), /not found/);
 });
 
-test('Mod configuration: ARK mod INI sections', () => {
+test('Mod configuration: ARK mod sections, with names and documented defaults from the Workshop', async () => {
   const ark = require('../src/games/ark');
-  const server = { id: 'amc', name: 'Dino', game: 'ark', dir: path.join(tmp, 'ark-modcfg'), ark: ark.defaults({ name: 'Dino', ark: { edition: 'ase', mods: '1234' } }) };
+  const server = { id: 'amc', name: 'Dino', game: 'ark', dir: path.join(tmp, 'ark-modcfg'), ark: ark.defaults({ name: 'Dino', ark: { edition: 'ase', mods: '1234, 999' } }) };
   const cfg = path.join(server.dir, 'ShooterGame/Saved/Config', process.platform === 'win32' ? 'WindowsServer' : 'LinuxServer');
   fs.mkdirSync(cfg, { recursive: true });
-  fs.writeFileSync(path.join(cfg, 'GameUserSettings.ini'), '[ServerSettings]\nXPMultiplier=2\n\n[AnnunakiGenesis]\nDisableAlphas=False\nMaxLevel=150\nBlacklist=A\nBlacklist=B\n');
-  const list = ark.listModConfigs(server);
-  assert.deepEqual(list.mods.map((m) => m.name), ['AnnunakiGenesis']);
-  assert.deepEqual(list.loadedMods, ['1234']);
-  const d = ark.readModConfig(server, 'gus:AnnunakiGenesis');
-  assert.deepEqual(d.fields.map((f) => [f.id, f.type, f.value]), [['DisableAlphas', 'bool', false], ['MaxLevel', 'number', '150'], ['Blacklist', 'textarea', 'A\nB']]);
-  assert.throws(() => ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { MaxLevel: 300 } }, { running: true }), /Stop the server/);
-  ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { DisableAlphas: true, MaxLevel: '300', Blacklist: 'A\nC\nD', NewKey: '5' } });
-  const text = fs.readFileSync(path.join(cfg, 'GameUserSettings.ini'), 'utf8');
-  assert.match(text, /\[AnnunakiGenesis\]\r\nDisableAlphas=True\r\nMaxLevel=300\r\nBlacklist=A\r\nBlacklist=C\r\nBlacklist=D\r\nNewKey=5\r\n/);
-  assert.match(text, /\[ServerSettings\]\r\nXPMultiplier=2/);
-  // New sections; ARK's own sections and odd names are refused.
-  ark.writeModConfig(server, 'game:StructuresPlus', { values: {} });
-  assert.ok(ark.listModConfigs(server).mods.some((m) => m.id === 'game:StructuresPlus'));
-  assert.throws(() => ark.writeModConfig(server, 'gus:ServerSettings', { values: { RCONPort: 1 } }), /mod section name/);
-  assert.throws(() => ark.writeModConfig(server, 'gus:Bad]Name', { values: {} }), /mod section name/);
-  assert.throws(() => ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { 'bad key=1\n[x]': 1 } }), /valid setting name/);
+  fs.writeFileSync(path.join(cfg, 'GameUserSettings.ini'), '[ServerSettings]\nXPMultiplier=2\n\n[AnnunakiGenesis]\nMaxWildLevel=150\nBlacklist=A\nBlacklist=B\n\n[SomeOtherMod]\nSpeed=2\n');
+  // Steam's GetPublishedFileDetails answer: one documented mod, one without settings in its description.
+  const realFetch = global.fetch;
+  const asked = [];
+  global.fetch = async (url, opts) => {
+    asked.push(String(url));
+    assert.match(String(url), /GetPublishedFileDetails/);
+    const ids = [...new URLSearchParams(String(opts.body)).entries()].filter(([k]) => k.startsWith('publishedfileids')).map(([, v]) => v);
+    assert.deepEqual(ids, ['1234', '999']);
+    return new Response(JSON.stringify({ response: { result: 1, resultcount: 2, publishedfiledetails: [
+      { publishedfileid: '1234', result: 1, title: 'Annunaki Genesis', preview_url: 'https://steamuserimages-a.akamaihd.net/ugc/1/a.png', time_updated: 1700000000,
+        description: '[h1]Settings[/h1]\r\nAdd to GameUserSettings.ini:\r\n[code][AnnunakiGenesis]\r\nDisableAlphas=False // no alpha creatures\r\nMaxWildLevel=300\r\nTier3Chance=0.25\r\n[/code]' },
+      { publishedfileid: '999', result: 1, title: 'Simple Mod', preview_url: '', description: 'No settings.' },
+    ] } }), { headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const list = await ark.listModConfigs(server);
+    const ann = list.mods.find((m) => m.modId === '1234');
+    assert.equal(ann.name, 'Annunaki Genesis');
+    assert.equal(ann.image, '/api/servers/amc/mod-image/1234');
+    assert.deepEqual(ann.files.map((f) => [f.file, f.documented]), [['gus:AnnunakiGenesis', 3]]);
+    assert.equal(list.mods.find((m) => m.modId === '999').name, 'Simple Mod');
+    assert.deepEqual(list.mods.find((m) => m.id === 'other').files.map((f) => f.file), ['gus:SomeOtherMod']);
+    // Documented settings are pre-filled with their defaults; the file's own value wins where it has one.
+    const d = await ark.readModConfig(server, 'gus:AnnunakiGenesis');
+    const byKey = Object.fromEntries(d.fields.map((f) => [f.id, f]));
+    assert.equal(byKey.DisableAlphas.value, false);
+    assert.equal(byKey.DisableAlphas.inFile, false);
+    assert.match(byKey.DisableAlphas.hint, /no alpha creatures · Default: False · not in your INI yet/);
+    assert.equal(byKey.MaxWildLevel.value, '150');
+    assert.equal(byKey.Tier3Chance.value, '0.25');
+    assert.equal(byKey.Blacklist.type, 'textarea');
+    assert.equal(asked.length, 1, 'mod details are cached');
+    await assert.rejects(ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { MaxWildLevel: 300 } }, { running: true }), /Stop the server/);
+    // Saving the form as shown: defaults stay out of the file; changed values go in.
+    await ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { DisableAlphas: false, MaxWildLevel: '300', Tier3Chance: '0.5', Blacklist: 'A\nC' } });
+    let text = fs.readFileSync(path.join(cfg, 'GameUserSettings.ini'), 'utf8');
+    const section = text.slice(text.indexOf('[AnnunakiGenesis]'), text.indexOf('[SomeOtherMod]'));
+    for (const line of ['MaxWildLevel=300', 'Tier3Chance=0.5', 'Blacklist=A', 'Blacklist=C']) assert.ok(section.includes(line + '\r\n'), line);
+    assert.doesNotMatch(section, /Blacklist=B/);
+    assert.doesNotMatch(text, /DisableAlphas/);
+    await ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { DisableAlphas: false }, writeAll: true });
+    text = fs.readFileSync(path.join(cfg, 'GameUserSettings.ini'), 'utf8');
+    assert.match(text, /DisableAlphas=False/);
+    assert.match(text, /\[ServerSettings\]\r\nXPMultiplier=2/);
+    // New sections; ARK's own sections and odd names are refused.
+    await ark.writeModConfig(server, 'game:StructuresPlus', { values: {} });
+    assert.ok((await ark.listModConfigs(server)).mods.find((m) => m.id === 'other').files.some((f) => f.file === 'game:StructuresPlus'));
+    await assert.rejects(ark.writeModConfig(server, 'gus:ServerSettings', { values: { RCONPort: 1 } }), /mod section name/);
+    await assert.rejects(ark.writeModConfig(server, 'gus:Bad]Name', { values: {} }), /mod section name/);
+    await assert.rejects(ark.writeModConfig(server, 'gus:AnnunakiGenesis', { values: { 'bad key=1\n[x]': 1 } }), /valid setting name/);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+test('Mod pages: settings are read from BBCode/HTML descriptions; pictures only from Steam/CurseForge hosts', () => {
+  const { parseModDocs, bbcodeToText, htmlToText, allowedImageHost } = require('../src/services/modinfo');
+  const docs = parseModDocs(bbcodeToText('[b]Game.ini[/b] settings:\r\n[code][MyModGame]\r\nBossHP=2.0 ; boss health\r\n[/code]\r\n[ServerSettings]\r\nXPMultiplier=3\r\n[list][*]not a setting[/list]\r\n[MyMod]\r\nSpeed of things\r\nSpeed=2\r\nSpeed=5'));
+  assert.deepEqual(docs, [
+    { section: 'MyModGame', file: 'game', settings: [{ key: 'BossHP', def: '2.0', doc: 'boss health' }] },
+    { section: 'MyMod', file: 'gus', settings: [{ key: 'Speed', def: '2', doc: 'Speed of things' }] },
+  ]);
+  assert.deepEqual(parseModDocs(htmlToText('<p>[CfMod]<br>Rate=1.5 // faster</p>')), [{ section: 'CfMod', file: 'gus', settings: [{ key: 'Rate', def: '1.5', doc: 'faster' }] }]);
+  assert.ok(allowedImageHost('https://steamuserimages-a.akamaihd.net/ugc/1/x.png'));
+  assert.ok(allowedImageHost('https://images.steamusercontent.com/ugc/1/x.png'));
+  assert.ok(allowedImageHost('https://media.forgecdn.net/avatars/1.png'));
+  assert.ok(!allowedImageHost('https://evil.example/x.png'));
+  assert.ok(!allowedImageHost('http://steamuserimages-a.akamaihd.net/x.png'));
 });
