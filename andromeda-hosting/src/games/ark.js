@@ -315,6 +315,16 @@ const LAUNCH_FIELDS = [
   ].map(([name, flag, label]) => ({ name, flag, label, type: 'bool', group: 'Launch options' })),
 ].map((f) => ({ group: 'Launch', ...f, key: 'launch.' + f.name }));
 
+// Max wild dino level: ARK's highest wild level is 30 × OverrideOfficialDifficulty (with
+// DifficultyOffset at 1), so a cap sets both. Wild levels then come in steps of cap ÷ 30.
+const LEVEL_CAP_MIN = 30;
+const LEVEL_CAP_MAX = 10000;
+function applyLevelCap(a) {
+  if (!a.wildLevelCap) return;
+  a.settings.DifficultyOffset = 1;
+  a.settings.OverrideOfficialDifficulty = Number((a.wildLevelCap / 30).toFixed(4));
+}
+
 function edition(server) {
   return EDITIONS[server.ark.edition] || EDITIONS.asa;
 }
@@ -561,6 +571,7 @@ const ark = {
       if (v !== undefined) a.settings[f.key] = v;
     }
     a.engrams = engramState(server, game);
+    applyLevelCap(a); // the cap wins over the two difficulty values, even ones edited by hand
     // Lines deleted from the extra boxes since the last write.
     for (const r of a.extraRemove || []) files[r.file].removeAll(r.section, r.key);
     const s = a.settings;
@@ -715,8 +726,19 @@ const ark = {
         tip: f.file ? `${EXTRA[f.file].file} [${f.section}] ${f.iniKey || f.key}` : f.flag,
       };
       if (f.name === 'map') field.options = edition(server).maps;
+      if (server.ark.wildLevelCap && (f.key === 'DifficultyOffset' || f.key === 'OverrideOfficialDifficulty')) {
+        field.hint = `Set automatically from "Max wild dino level" (${server.ark.wildLevelCap}). Clear that to set this by hand.`;
+      }
       groups.get(f.group).push(field);
     }
+    groups.get('Rates').unshift({
+      key: 'wild.levelCap',
+      label: 'Max wild dino level',
+      type: 'number',
+      step: 1,
+      min: LEVEL_CAP_MIN,
+      hint: 'Sets Difficulty offset to 1 and Override difficulty to this ÷ 30 for you. Wild dinos spawn at levels in steps of this ÷ 30 (e.g. 300 → 10, 20 … 300). Blank = set the two by hand.',
+    });
     const eng = engramState(server, loadIni(server, 'game'));
     groups.set('Engram points', [
       {
@@ -758,6 +780,7 @@ const ark = {
       out['ini.' + f.key] = v ?? '';
     }
     for (const which of Object.keys(EXTRA)) out['extra.' + which] = (a.extraIni && a.extraIni[which]) || '';
+    out['wild.levelCap'] = a.wildLevelCap ?? '';
     const eng = engramState(server, files.game);
     out['engram.mode'] = eng.mode || 'default';
     out['engram.levels'] = eng.levels ?? '';
@@ -771,6 +794,14 @@ const ark = {
     // Check everything before changing anything, so a bad value doesn't leave half the form saved.
     const changes = [];
     let engrams = null;
+    if ('wild.levelCap' in values) {
+      const v = values['wild.levelCap'];
+      const n = v === '' || v === null || v === undefined ? null : Number(v);
+      if (n !== null && (!Number.isInteger(n) || n < LEVEL_CAP_MIN || n > LEVEL_CAP_MAX)) {
+        throw new HttpError(400, `Max wild dino level must be a whole number from ${LEVEL_CAP_MIN} to ${LEVEL_CAP_MAX}`);
+      }
+      changes.push(() => (a.wildLevelCap = n));
+    }
     for (const [k, v] of Object.entries(values)) {
       if (k.startsWith('engram.')) {
         engrams = engrams || { ...(a.engrams || { mode: 'default', levels: null, points: null, custom: '' }) };
@@ -843,6 +874,7 @@ const ark = {
       if (engrams) a.engramsWritten = files.game.getAll(GM, ENGRAM_KEY);
     }
     for (const apply of changes) apply();
+    applyLevelCap(a); // after the form's own difficulty values, so the cap wins
     if (!a.settings.ServerAdminPassword) a.settings.ServerAdminPassword = randomPassword(14);
     if (!a.map) a.map = edition(server).maps[0];
     return { restartRequired: true };
@@ -889,12 +921,16 @@ ark.listModConfigs = async function (server, opts = {}) {
     }
     return { id: 'mod:' + info.id, modId: info.id, name: info.name || `Mod ${info.id}`, found: !!info.found, image: info.found && info.imageUrl ? modImageUrl(server, info.id) : null, url: info.url || null, sources: info.sources || [], files };
   });
+  // Mods with nothing to configure (no documented settings, no section of their own) are hidden.
+  const hidden = mods.filter((m) => !m.files.length).map((m) => m.name);
+  mods.splice(0, mods.length, ...mods.filter((m) => m.files.length));
   const other = existing.filter((e) => !claimed.has(modId(e.file, e.section).toLowerCase()));
   if (other.length) mods.push({ id: 'other', name: 'Other mod sections', files: other.map((e) => ({ file: modId(e.file, e.section), where: `${EXTRA[e.file].file} [${e.section}]`, keys: e.keys })) });
   return {
     kind: 'ini',
     note: 'Each mod with the settings its Workshop/CurseForge page documents, pre-filled with their defaults. Change a value to override it; settings left at the default stay out of your INI files (use "Write all defaults" to put them all in). Sections the mods wrote themselves are included.',
     mods,
+    hidden,
   };
 };
 
