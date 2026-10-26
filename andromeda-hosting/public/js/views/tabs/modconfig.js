@@ -210,7 +210,10 @@ export async function render(root, { server }) {
   );
   drawForm();
   await load();
-  $('#mc-note').textContent = list.note;
+  const drawNote = () => {
+    $('#mc-note').textContent = list.note + (list.hidden && list.hidden.length ? ` Hidden because they have nothing to configure: ${list.hidden.join(', ')}.` : '');
+  };
+  drawNote();
   $('#mc-search').oninput = (e) => {
     modQuery = e.target.value;
     drawList();
@@ -223,6 +226,7 @@ export async function render(root, { server }) {
     e.target.disabled = true;
     try {
       await load(true);
+      drawNote();
       if (current) await open(current.file);
       toast('Mod info refreshed', 'ok');
     } finally {

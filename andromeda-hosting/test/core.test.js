@@ -445,7 +445,8 @@ test('Mod configuration: ARK mod sections, with names and documented defaults fr
     assert.deepEqual(ann.files.map((f) => [f.file, f.documented]), [['gus:AnnunakiGenesis', 4]], 'three from the page, one more from the config thread');
     assert.deepEqual(ann.sources.map((x) => [x.label, x.settings]), [['Workshop page', 3], ['Steam discussion: Server config (INI settings)', 2]]);
     assert.ok(!asked.some((u) => u.includes('/777/')), 'unrelated threads are not read');
-    assert.equal(list.mods.find((m) => m.modId === '999').name, 'Simple Mod');
+    assert.ok(!list.mods.some((m) => m.modId === '999'), 'a mod with nothing to configure is hidden');
+    assert.deepEqual(list.hidden, ['Simple Mod']);
     assert.deepEqual(list.mods.find((m) => m.id === 'other').files.map((f) => f.file), ['gus:SomeOtherMod']);
     // Documented settings are pre-filled with their defaults; the file's own value wins where it has one.
     const d = await ark.readModConfig(server, 'gus:AnnunakiGenesis');
@@ -535,4 +536,40 @@ test('Mod pages: documentation links are followed in readable form; pictures are
   } finally {
     global.fetch = realFetch;
   }
+});
+
+test('ARK: max wild dino level sets the difficulty values, and wins over them', async () => {
+  const ark = require('../src/games/ark');
+  const server = { id: 'cap', name: 'Cap', game: 'ark', dir: path.join(tmp, 'ark-cap'), ark: ark.defaults({ name: 'Cap', ark: { edition: 'ase' } }) };
+  const exe = ark.exePath(server);
+  if (!exe) return;
+  fs.mkdirSync(path.dirname(exe), { recursive: true });
+  fs.writeFileSync(exe, '');
+  const cfg = path.join(server.dir, 'ShooterGame/Saved/Config', process.platform === 'win32' ? 'WindowsServer' : 'LinuxServer');
+  ark.writeSettings(server, { 'wild.levelCap': 300, 'ini.OverrideOfficialDifficulty': 2, 'ini.DifficultyOffset': 0.2 });
+  assert.equal(server.ark.wildLevelCap, 300);
+  assert.equal(server.ark.settings.OverrideOfficialDifficulty, 10);
+  assert.equal(server.ark.settings.DifficultyOffset, 1);
+  const v = ark.readSettings(server);
+  assert.equal(v['wild.levelCap'], 300);
+  assert.equal(v['ini.OverrideOfficialDifficulty'], 10);
+  const rates = ark.settingsSchema(server).sections.find((x) => x.title === 'Rates');
+  assert.equal(rates.fields[0].key, 'wild.levelCap');
+  assert.match(rates.fields.find((f) => f.key === 'ini.OverrideOfficialDifficulty').hint, /Set automatically/);
+  await ark.buildLaunch(server);
+  let gus = fs.readFileSync(path.join(cfg, 'GameUserSettings.ini'), 'utf8');
+  assert.match(gus, /OverrideOfficialDifficulty=10\r\n/);
+  assert.match(gus, /DifficultyOffset=1\r\n/);
+  // A hand edit to the file doesn't beat the cap.
+  fs.writeFileSync(path.join(cfg, 'GameUserSettings.ini'), gus.replace('OverrideOfficialDifficulty=10', 'OverrideOfficialDifficulty=3'));
+  await ark.buildLaunch(server);
+  assert.match(fs.readFileSync(path.join(cfg, 'GameUserSettings.ini'), 'utf8'), /OverrideOfficialDifficulty=10\r\n/);
+  // Uneven caps: 250 -> 8.3333 (levels in steps of ~8.3, top 250).
+  ark.writeSettings(server, { 'wild.levelCap': 250 });
+  assert.equal(server.ark.settings.OverrideOfficialDifficulty, 8.3333);
+  assert.throws(() => ark.writeSettings(server, { 'wild.levelCap': 12 }), /from 30 to 10000/);
+  // Cleared: the difficulty fields are the user's again.
+  ark.writeSettings(server, { 'wild.levelCap': '', 'ini.OverrideOfficialDifficulty': 5 });
+  assert.equal(server.ark.wildLevelCap, null);
+  assert.equal(server.ark.settings.OverrideOfficialDifficulty, 5);
 });
