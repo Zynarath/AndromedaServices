@@ -887,7 +887,7 @@ ark.listModConfigs = async function (server, opts = {}) {
       claimed.add(modId(file, (have || doc).section).toLowerCase());
       files.push({ file: modId(file, (have || doc).section), where: `${EXTRA[file].file} [${(have || doc).section}]`, documented: doc.settings.length, keys: have ? have.keys : 0 });
     }
-    return { id: 'mod:' + info.id, modId: info.id, name: info.name || `Mod ${info.id}`, found: !!info.found, image: info.found && info.imageUrl ? modImageUrl(server, info.id) : null, url: info.url || null, files };
+    return { id: 'mod:' + info.id, modId: info.id, name: info.name || `Mod ${info.id}`, found: !!info.found, image: info.found && info.imageUrl ? modImageUrl(server, info.id) : null, url: info.url || null, sources: info.sources || [], files };
   });
   const other = existing.filter((e) => !claimed.has(modId(e.file, e.section).toLowerCase()));
   if (other.length) mods.push({ id: 'other', name: 'Other mod sections', files: other.map((e) => ({ file: modId(e.file, e.section), where: `${EXTRA[e.file].file} [${e.section}]`, keys: e.keys })) });
@@ -921,7 +921,7 @@ ark.readModConfig = async function (server, id) {
     fields.push({
       id: s.key, label: s.key, type, def: s.def, inFile: !!inFile, section: 'Documented settings',
       value: type === 'bool' ? /^true$/i.test(String(value).trim()) : value,
-      hint: [s.doc, `Default: ${s.def}`, inFile ? '' : 'not in your INI yet'].filter(Boolean).join(' · '),
+      hint: [s.doc, `Default: ${s.def}`, s.source && !/page$/.test(s.source) ? `from ${s.source}` : '', inFile ? '' : 'not in your INI yet'].filter(Boolean).join(' · '),
     });
     seen.delete(s.key.toLowerCase());
   }
@@ -930,7 +930,7 @@ ark.readModConfig = async function (server, id) {
     if (values.length > 1) fields.push({ ...base, type: 'textarea', value: values.join('\n'), hint: 'Repeated setting: one value per line' });
     else fields.push({ ...base, type: typeOf(values[0]), value: typeOf(values[0]) === 'bool' ? /^true$/i.test(values[0].trim()) : values[0] });
   }
-  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields, canAdd: true, documented: !!doc, mod: mod && { name: mod.name, url: mod.url } };
+  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields, canAdd: true, documented: !!doc, mod: mod && { name: mod.name, url: mod.url, sources: mod.sources || [] } };
 };
 
 // values: { key: value } (existing or new keys). Only while the server is stopped: ARK writes its

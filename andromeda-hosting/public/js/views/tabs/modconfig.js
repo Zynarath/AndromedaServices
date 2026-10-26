@@ -69,6 +69,11 @@ export async function render(root, { server }) {
             ${!ark && list.canRaw && d.fields ? html`<button type="button" class="btn btn-sm btn-ghost" id="mc-raw">${showRaw ? 'Show as form' : 'Edit raw file'}</button>` : ''}
           </div>
         </div>
+        ${d.mod && d.mod.sources && d.mod.sources.length
+          ? html`<details class="adv mc-sources"><summary>Where these settings come from (${d.mod.sources.length} source${d.mod.sources.length === 1 ? '' : 's'} checked)</summary><ul>${d.mod.sources.map(
+              (src) => html`<li>${src.url ? html`<a href="${src.url}" target="_blank" rel="noopener">${src.label}</a>` : src.label} — ${src.error ? html`<span class="muted">couldn't read it (${src.error})</span>` : `${src.settings} setting${src.settings === 1 ? '' : 's'}`}</li>`
+            )}</ul><p class="muted small">The panel reads the mod's page, its discussions about settings, and documents the page links to (Pastebin, GitHub, Google Docs). If the mod explains a setting only in a video or on Discord, add it below.</p></details>`
+          : ''}
         ${ark && list.running ? html`<p class="form-error">Stop the server to change mod settings — ARK rewrites its INI files when it shuts down.</p>` : ''}
         ${ark && !d.documented && !showRaw ? html`<p class="muted small">The mod page doesn't document settings for this section, so only what's in your INI is shown. Add settings from the mod's instructions below.</p>` : ''}
         ${showRaw
@@ -191,6 +196,18 @@ export async function render(root, { server }) {
       </div>
     </div>`.s;
 
+  // Pictures that can't be loaded become the plain placeholder.
+  root.addEventListener(
+    'error',
+    (e) => {
+      if (e.target.tagName !== 'IMG' || !e.target.matches('.mc-thumb, .mc-hero')) return;
+      const ph = document.createElement('span');
+      ph.className = `${e.target.className} mc-thumb-none`;
+      ph.innerHTML = icon('box');
+      e.target.replaceWith(ph);
+    },
+    true
+  );
   drawForm();
   await load();
   $('#mc-note').textContent = list.note;

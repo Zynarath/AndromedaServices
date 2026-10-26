@@ -141,6 +141,18 @@ async function renderMc(root, { server, navigate }) {
 async function renderArk(root, { server, navigate }) {
   let mods = (await api.get(`/api/servers/${server.id}/ark-mods`)).mods;
   const asa = server.ark.edition === 'asa';
+  // A picture that can't be loaded becomes the plain placeholder ("error" doesn't bubble, hence capture).
+  root.addEventListener(
+    'error',
+    (e) => {
+      if (e.target.tagName !== 'IMG' || !e.target.closest('#mod-list')) return;
+      const ph = document.createElement('span');
+      ph.className = 'cf-noimg';
+      ph.innerHTML = icon('box');
+      e.target.replaceWith(ph);
+    },
+    true
+  );
   const draw = () => {
     root.innerHTML = html`
       <div class="panel">
