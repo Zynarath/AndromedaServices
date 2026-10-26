@@ -91,6 +91,11 @@ async function getMods(ids) {
   return (await call('/v1/mods', { method: 'POST', body: { modIds: ids.map(Number) } })).data;
 }
 
+// The mod page's long description (HTML).
+async function getModDescription(id) {
+  return (await call(`/v1/mods/${id}/description`)).data || '';
+}
+
 async function getFiles(modId, { gameVersion, loader, pageSize = 50, index = 0 } = {}) {
   const res = await call(`/v1/mods/${modId}/files`, {
     query: { gameVersion, modLoaderType: loader ? LOADER_IDS[loader] : undefined, pageSize, index },
@@ -123,6 +128,7 @@ module.exports = {
   search,
   getMod,
   getMods,
+  getModDescription,
   getFiles,
   getFile,
   getFilesByIds,

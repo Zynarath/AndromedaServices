@@ -158,6 +158,20 @@ input[type='range'] { padding: 0; accent-color: var(--accent); border: 0; backgr
 .mc-form-head h3 { margin: 0; word-break: break-all; }
 .mc-raw { width: 100%; font-size: 12px; }
 #mc-new { margin-top: 6px; }
+.mc-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 8px; background: var(--surface); }
+.mc-card-head { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
+.mc-card-title { display: flex; flex-direction: column; min-width: 0; }
+.mc-card-title strong { overflow-wrap: anywhere; }
+.mc-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; background: var(--surface-3); }
+.mc-thumb-none { display: grid; place-items: center; color: var(--muted); }
+.mc-hero { width: 72px; height: 72px; border-radius: 10px; object-fit: cover; flex: none; background: var(--surface-3); }
+.mc-form-title { flex: 1; min-width: 0; }
+.mc-form-title p { margin: 2px 0 0; }
+.mc-none { margin: 4px 8px; }
+.mc-empty { display: grid; place-items: center; gap: 8px; color: var(--muted); padding: 60px 0; text-align: center; }
+.mc-def { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 2px; }
+.field-switch .mc-def { width: 100%; margin-left: 46px; }
+.mc-def .link-btn { color: var(--accent); font-size: 12px; text-decoration: underline; margin: 0; }
 @media (max-width: 760px) { .mc-layout { grid-template-columns: 1fr; } .mc-side { position: static; max-height: 320px; } }
 .map-inactive-note { display: none; margin: 0 0 4px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--info-soft); color: var(--info); font-size: 13px; font-weight: 500; }
 .map-field.inactive .map-inactive-note { display: block; }

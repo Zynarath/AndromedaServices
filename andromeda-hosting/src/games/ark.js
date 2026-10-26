@@ -4,6 +4,7 @@ const path = require('path');
 const Ini = require('../util/ini');
 const Rcon = require('../util/rcon');
 const steamcmd = require('../services/steamcmd');
+const modinfo = require('../services/modinfo');
 const { HttpError, randomPassword } = require('../util/misc');
 const { splitArgs } = require('./minecraft');
 
@@ -867,36 +868,74 @@ function modSections(server) {
 
 const modId = (file, section) => `${file}:${section}`;
 
-ark.listModConfigs = function (server) {
+const modImageUrl = (server, id) => `/api/servers/${server.id}/mod-image/${id}`;
+
+// The loaded mods with their Workshop/CurseForge details and the INI sections their pages document.
+async function modDetails(server, opts) {
+  return modinfo.getModInfo(server.ark.mods, { edition: server.ark.edition, ...opts });
+}
+
+ark.listModConfigs = async function (server, opts = {}) {
+  const infos = await modDetails(server, opts);
+  const existing = modSections(server);
+  const claimed = new Set();
+  const mods = infos.map((info) => {
+    const files = [];
+    for (const doc of info.docs || []) {
+      const have = existing.find((e) => e.section.toLowerCase() === doc.section.toLowerCase());
+      const file = have ? have.file : doc.file;
+      claimed.add(modId(file, (have || doc).section).toLowerCase());
+      files.push({ file: modId(file, (have || doc).section), where: `${EXTRA[file].file} [${(have || doc).section}]`, documented: doc.settings.length, keys: have ? have.keys : 0 });
+    }
+    return { id: 'mod:' + info.id, modId: info.id, name: info.name || `Mod ${info.id}`, found: !!info.found, image: info.found && info.imageUrl ? modImageUrl(server, info.id) : null, url: info.url || null, files };
+  });
+  const other = existing.filter((e) => !claimed.has(modId(e.file, e.section).toLowerCase()));
+  if (other.length) mods.push({ id: 'other', name: 'Other mod sections', files: other.map((e) => ({ file: modId(e.file, e.section), where: `${EXTRA[e.file].file} [${e.section}]`, keys: e.keys })) });
   return {
     kind: 'ini',
-    note: 'ARK mods keep their settings in their own sections of GameUserSettings.ini or Game.ini. A section shows up here once the mod (or you) has written it; most mods write theirs on the first start with the mod, some only list their options on their mod page — add those with "Add setting" or "New mod section".',
-    loadedMods: server.ark.mods,
-    mods: modSections(server).map((m) => ({ id: modId(m.file, m.section), name: m.section, files: [{ file: modId(m.file, m.section), where: EXTRA[m.file].file, keys: m.keys }] })),
+    note: 'Each mod with the settings its Workshop/CurseForge page documents, pre-filled with their defaults. Change a value to override it; settings left at the default stay out of your INI files (use "Write all defaults" to put them all in). Sections the mods wrote themselves are included.',
+    mods,
   };
 };
 
-ark.readModConfig = function (server, id) {
+ark.readModConfig = async function (server, id) {
   const [which, section] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   if (!EXTRA[which]) throw new HttpError(404, 'Unknown file');
   const ini = loadIni(server, which);
   const sec = ini.section(section);
-  const fields = [];
-  if (sec) {
-    const seen = new Map();
-    for (const l of sec.lines) if (l.key) seen.set(l.key, [...(seen.get(l.key) || []), l.value]);
-    for (const [key, vals] of seen) {
-      if (vals.length > 1) fields.push({ id: key, label: key, type: 'textarea', value: vals.join('\n'), hint: 'Repeated setting: one value per line' });
-      else if (/^(true|false)$/i.test(vals[0].trim())) fields.push({ id: key, label: key, type: 'bool', value: /^true$/i.test(vals[0].trim()) });
-      else fields.push({ id: key, label: key, type: /^-?\d+(\.\d+)?$/.test(vals[0].trim()) ? 'number' : 'text', value: vals[0] });
-    }
+  const seen = new Map();
+  if (sec) for (const l of sec.lines) if (l.key) seen.set(l.key.toLowerCase(), { key: l.key, values: [...((seen.get(l.key.toLowerCase()) || {}).values || []), l.value] });
+  // Documentation for this section from the mods' pages.
+  let doc = null;
+  let mod = null;
+  for (const info of await modDetails(server)) {
+    const d = (info.docs || []).find((x) => x.section.toLowerCase() === section.toLowerCase());
+    if (d) [doc, mod] = [d, info];
   }
-  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields, canAdd: true };
+  const typeOf = (v) => (/^(true|false)$/i.test(String(v).trim()) ? 'bool' : /^-?\d+(\.\d+)?$/.test(String(v).trim()) ? 'number' : 'text');
+  const fields = [];
+  for (const s of (doc && doc.settings) || []) {
+    const inFile = seen.get(s.key.toLowerCase());
+    const value = inFile ? inFile.values[inFile.values.length - 1] : s.def;
+    const type = typeOf(s.def);
+    fields.push({
+      id: s.key, label: s.key, type, def: s.def, inFile: !!inFile, section: 'Documented settings',
+      value: type === 'bool' ? /^true$/i.test(String(value).trim()) : value,
+      hint: [s.doc, `Default: ${s.def}`, inFile ? '' : 'not in your INI yet'].filter(Boolean).join(' · '),
+    });
+    seen.delete(s.key.toLowerCase());
+  }
+  for (const { key, values } of seen.values()) {
+    const base = { id: key, label: key, inFile: true, section: doc ? 'Also in your INI' : '' };
+    if (values.length > 1) fields.push({ ...base, type: 'textarea', value: values.join('\n'), hint: 'Repeated setting: one value per line' });
+    else fields.push({ ...base, type: typeOf(values[0]), value: typeOf(values[0]) === 'bool' ? /^true$/i.test(values[0].trim()) : values[0] });
+  }
+  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields, canAdd: true, documented: !!doc, mod: mod && { name: mod.name, url: mod.url } };
 };
 
 // values: { key: value } (existing or new keys). Only while the server is stopped: ARK writes its
 // settings back on shutdown and would undo the change.
-ark.writeModConfig = function (server, id, { values }, opts = {}) {
+ark.writeModConfig = async function (server, id, { values, writeAll }, opts = {}) {
   if (opts.running) throw new HttpError(409, 'Stop the server first: ARK rewrites its INI files when it shuts down, which would undo the change.');
   const [which, section] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   if (!EXTRA[which]) throw new HttpError(404, 'Unknown file');
@@ -905,8 +944,21 @@ ark.writeModConfig = function (server, id, { values }, opts = {}) {
   const sec = ini.section(section);
   const current = new Map();
   if (sec) for (const l of sec.lines) if (l.key) current.set(l.key, [...(current.get(l.key) || []), l.value]);
+  // Documented settings still at their default stay out of the file, unless "Write all defaults".
+  const docs = new Map();
+  for (const info of await modDetails(server)) {
+    for (const d of info.docs || []) if (d.section.toLowerCase() === section.toLowerCase()) for (const st of d.settings) docs.set(st.key.toLowerCase(), st.def);
+  }
+  const sameAsDefault = (key, v) => {
+    const def = docs.get(key.toLowerCase());
+    if (def === undefined) return false;
+    const a = String(v).trim();
+    const b = String(def).trim();
+    return a.toLowerCase() === b.toLowerCase() || (a !== '' && b !== '' && Number(a) === Number(b));
+  };
   let changed = 0;
   for (const [key, raw] of Object.entries(values || {})) {
+    if (![...current.keys()].some((k) => k.toLowerCase() === key.toLowerCase()) && !writeAll && sameAsDefault(key, typeof raw === 'boolean' ? (raw ? 'True' : 'False') : raw)) continue;
     if (!MOD_KEY_RE.test(key)) throw new HttpError(400, `"${key}" isn't a valid setting name`);
     const vals = (typeof raw === 'boolean' ? [raw ? 'True' : 'False'] : String(raw ?? '').split(/\r?\n/)).map((v) => v.trim()).filter((v, i, a) => v !== '' || a.length === 1);
     const before = current.get(key) || [];

@@ -10,6 +10,7 @@ const scheduler = require('../manager/scheduler');
 const { games, templates, CONFIG_KEY } = require('../games');
 const cf = require('../services/curseforge');
 const mapImages = require('../services/mapimages');
+const modinfo = require('../services/modinfo');
 const { HttpError, randomId } = require('../util/misc');
 const { parseCpuList, PRIORITIES, CORES } = require('../util/procstats');
 
@@ -212,22 +213,32 @@ function modConfigGame(inst) {
 
 router.get('/servers/:id/mod-config', async (req, res) => {
   const inst = modConfigGame(load(req, 'settings'));
-  res.json({ ...(await inst.game.listModConfigs(inst.server)), running: !!inst.child, canRaw: auth.can(req.user, inst.server, 'files') });
+  res.json({ ...(await inst.game.listModConfigs(inst.server, { refresh: req.query.refresh === '1' })), running: !!inst.child, canRaw: auth.can(req.user, inst.server, 'files') });
 });
 
-router.get('/servers/:id/mod-config/file', (req, res) => {
+// A mod's Workshop/CurseForge picture, for mods in this server's list (downloaded once, then cached).
+router.get('/servers/:id/mod-image/:modId', async (req, res) => {
+  const inst = load(req);
+  if (!inst.server.ark || !inst.server.ark.mods.includes(req.params.modId)) throw new HttpError(404, 'Unknown mod');
+  const img = await modinfo.getModImage(req.params.modId, inst.server.ark.edition).catch(() => null);
+  if (!img) throw new HttpError(404, 'No picture for this mod');
+  res.set('Cache-Control', 'private, max-age=604800');
+  res.type(img.type).sendFile(img.file);
+});
+
+router.get('/servers/:id/mod-config/file', async (req, res) => {
   const inst = modConfigGame(load(req, 'settings'));
-  const out = inst.game.readModConfig(inst.server, String(req.query.file || ''));
+  const out = await inst.game.readModConfig(inst.server, String(req.query.file || ''));
   // The raw text is the whole file, so it needs the same permission as the Files tab.
   if (!auth.can(req.user, inst.server, 'files')) delete out.raw;
   res.json(out);
 });
 
-router.put('/servers/:id/mod-config/file', (req, res) => {
+router.put('/servers/:id/mod-config/file', async (req, res) => {
   const inst = modConfigGame(load(req, 'settings'));
   const body = req.body || {};
   if (typeof body.raw === 'string' && !auth.can(req.user, inst.server, 'files')) throw new HttpError(403, 'Editing the raw file needs the Files permission');
-  const r = inst.game.writeModConfig(inst.server, String(body.file || ''), { values: body.values, raw: body.raw }, { running: !!inst.child });
+  const r = await inst.game.writeModConfig(inst.server, String(body.file || ''), { values: body.values, raw: body.raw, writeAll: !!body.writeAll }, { running: !!inst.child });
   inst.appendConsole(`[mod config] ${req.user.username} changed ${r.changed} setting(s) in ${body.file}`);
   res.json({ ok: true, ...r, restartRequired: !!inst.child });
 });
@@ -314,6 +325,11 @@ router.get('/servers/:id/ark-mods', async (req, res) => {
     try {
       details = (await cf.getMods(ids)).map(cf.slimMod);
     } catch {}
+  } else if (ids.length && inst.server.ark.edition !== 'asa') {
+    // Steam Workshop: name, picture (served through the panel) and page link.
+    details = (await modinfo.getModInfo(ids, { edition: 'ase', refresh: req.query.refresh === '1' }))
+      .filter((d) => d.found)
+      .map((d) => ({ id: Number(d.id), name: d.name, logo: d.imageUrl ? `/api/servers/${inst.server.id}/mod-image/${d.id}` : null, url: d.url }));
   }
   res.json({ mods: ids.map((id) => details.find((d) => String(d.id) === id) || { id: Number(id), name: null }) });
 });
