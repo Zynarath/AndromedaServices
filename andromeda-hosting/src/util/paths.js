@@ -7,6 +7,8 @@ const { HttpError } = require('./misc');
 // Resolve a user-supplied relative path inside root, refusing anything that escapes it
 // (including via symlinks/junctions that point outside the server folder).
 function safeResolve(root, rel = '') {
+  // On Windows a ":" means a drive ("C:x") or an alternate data stream ("x::$DATA"); neither belongs here.
+  if (process.platform === 'win32' && String(rel).includes(':')) throw new HttpError(400, 'Invalid path');
   const cleaned = String(rel).replace(/\\/g, '/').replace(/^\/+/, '');
   const target = path.resolve(root, cleaned);
   const rootResolved = path.resolve(root);
@@ -104,7 +106,9 @@ function findFiles(root, predicate, maxDepth = 8) {
 const BLOCKED_EXT = /\.(exe|dll|so|dylib|bat|cmd|com|scr|msi|ps1|psm1|vbs|vbe|wsf|jse|hta|cpl|sh|bash)$/i;
 const BLOCKED_NAME = /^user_jvm_args\.txt$/i;
 function blockedForNonAdmin(name) {
-  return BLOCKED_EXT.test(name) || BLOCKED_NAME.test(name);
+  // Windows ignores trailing dots/spaces ("run.bat." is run.bat) and treats "x.exe::$DATA" as x.exe.
+  const n = String(name).split(':')[0].replace(/[. ]+$/, '');
+  return BLOCKED_EXT.test(n) || BLOCKED_NAME.test(n);
 }
 
 module.exports = { safeResolve, relTo, cleanName, receiveUpload, listFolder, findFiles, blockedForNonAdmin };

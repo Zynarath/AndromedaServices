@@ -150,6 +150,10 @@ test('ficsit.app: installs into FactoryGame/Mods, checks hashes, removes what is
   // A damaged download is refused.
   smlTarget.hash = 'f'.repeat(64);
   await assert.rejects(ficsit.install(dir, chosen, {}, { target, log: quiet }), /checksum/);
+  // Downloads only come from ficsit.app.
+  smlTarget.hash = null;
+  smlTarget.link = 'https://evil.example/SML.zip';
+  await assert.rejects(ficsit.install(dir, chosen, {}, { target, log: quiet }), /unexpected download address/);
 });
 
 // ---------- Satisfactory ----------

@@ -1,5 +1,5 @@
 import { api } from '../../api.js';
-import { html, $, on, icon, toast, fmtBytes, confirmBox, fmtDate } from '../../ui.js';
+import { html, $, on, icon, toast, fmtBytes, confirmBox, fmtDate, esc, webUrl } from '../../ui.js';
 import { pickCurseForge, pickFromSearch, fmtNum } from '../cfpicker.js';
 
 export async function render(root, ctx) {
@@ -39,7 +39,7 @@ async function renderMc(root, { server, navigate }) {
         ? html`<div class="panel">
             <div class="pack-chosen big">${mc.curseforge.logo ? html`<img src="${mc.curseforge.logo}" alt="">` : ''}
               <div><strong>${mc.curseforge.packName || 'Modpack'}</strong><small>Installed: ${mc.curseforge.versionName || mc.curseforge.fileId} · Minecraft ${mc.mcVersion} · ${mc.loader} ${mc.loaderVersion || ''}</small>
-              ${mc.curseforge.url ? html`<a class="small" href="${mc.curseforge.url}" target="_blank" rel="noopener">View on CurseForge ${icon('external')}</a>` : ''}</div></div>
+              ${mc.curseforge.url ? html`<a class="small" href="${webUrl(mc.curseforge.url)}" target="_blank" rel="noopener">View on CurseForge ${icon('external')}</a>` : ''}</div></div>
             <h4>Versions</h4>
             <div id="versions"><div class="loading">Checking CurseForge for versions…</div></div>
           </div>`
@@ -74,7 +74,7 @@ async function renderMc(root, { server, navigate }) {
     if (isPack) loadVersions();
     const cv = $('#change-version');
     if (cv) {
-      api.get('/api/minecraft/versions').then((r) => ($('#mcv').innerHTML = r.versions.slice(0, 150).map((v) => `<option value="${v}">`).join(''))).catch(() => {});
+      api.get('/api/minecraft/versions').then((r) => ($('#mcv').innerHTML = r.versions.slice(0, 150).map((v) => `<option value="${esc(v)}">`).join(''))).catch(() => {});
       cv.onsubmit = async (e) => {
         e.preventDefault();
         const d = Object.fromEntries(new FormData(cv));
@@ -182,7 +182,7 @@ async function renderArk(root, { server }) {
         <ol class="mod-list" id="mod-list">
           ${mods.map((m, i) => html`<li data-id="${m.id}">
             ${m.logo ? html`<img src="${m.logo}" alt="">` : html`<span class="cf-noimg">${icon('box')}</span>`}
-            <div class="mod-text"><strong>${m.name || 'Mod ' + m.id}</strong><small class="mono">${m.id}${m.url ? html` · <a href="${m.url}" target="_blank" rel="noopener">page</a>` : ''}</small></div>
+            <div class="mod-text"><strong>${m.name || 'Mod ' + m.id}</strong><small class="mono">${m.id}${m.url ? html` · <a href="${webUrl(m.url)}" target="_blank" rel="noopener">page</a>` : ''}</small></div>
             <div class="btn-row"><button class="icon-btn" data-move="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button><button class="icon-btn" data-move="1" ${i === mods.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
             <button class="icon-btn" data-remove title="Remove">${icon('trash')}</button></div></li>`)}
         </ol>
@@ -261,7 +261,7 @@ async function renderSatisfactory(root, { server, navigate }) {
         ${mods.length
           ? html`<ul class="mod-list unordered">${mods.map((m) => html`<li data-ref="${m.ref}">${modLogo(m)}
               <div class="mod-text"><strong>${m.name}</strong><small>${m.summary}</small>
-                <small class="mono">${m.ref} · ${m.installed ? html`installed ${m.installed}` : html`<span class="pill pill-warn">not installed yet</span>`} · <a href="${m.url}" target="_blank" rel="noopener">page</a></small></div>
+                <small class="mono">${m.ref} · ${m.installed ? html`installed ${m.installed}` : html`<span class="pill pill-warn">not installed yet</span>`} · <a href="${webUrl(m.url)}" target="_blank" rel="noopener">page</a></small></div>
               <div class="btn-row"><button class="icon-btn" data-sf-remove title="Remove">${icon('trash')}</button></div></li>`)}</ul>`
           : html`<p class="muted">No mods yet. Browse ficsit.app to add some.</p>`}
         ${deps.length
@@ -353,7 +353,7 @@ async function renderSdtd(root, { server }) {
           ? html`<table class="table"><thead><tr><th>Mod</th><th>Version</th><th class="right">Enabled</th><th></th></tr></thead><tbody>
             ${mods.map((m) => html`<tr data-folder="${m.folder}">
               <td><strong>${m.name}</strong>${m.builtin ? html` <span class="pill">built in</span>` : ''}${m.code ? html` <span class="pill pill-warn" title="Contains .dll files: needs EAC off">code</span>` : ''}${!m.valid ? html` <span class="pill pill-bad" title="No ModInfo.xml: the game ignores this folder">no ModInfo.xml</span>` : ''}
-                <div class="muted small">${m.author ? 'by ' + m.author + ' · ' : ''}<span class="mono">${m.folder}</span>${m.website ? html` · <a href="${m.website}" target="_blank" rel="noopener">page</a>` : ''}</div>
+                <div class="muted small">${m.author ? 'by ' + m.author + ' · ' : ''}<span class="mono">${m.folder}</span>${m.website ? html` · <a href="${webUrl(m.website)}" target="_blank" rel="noopener">page</a>` : ''}</div>
                 ${m.description ? html`<div class="muted small">${m.description}</div>` : ''}</td>
               <td>${m.version || '—'}</td>
               <td class="right">${m.builtin ? html`<span class="muted small">always</span>` : html`<label class="switch"><input type="checkbox" data-sdtd-toggle ${m.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label>`}</td>

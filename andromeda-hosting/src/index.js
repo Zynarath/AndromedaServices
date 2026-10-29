@@ -82,12 +82,16 @@ server.on('upgrade', (req, socket, head) => {
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
     ws.userId = s.user.id;
+    ws.sessionId = s.session.id;
     ws.subscribed = null;
     wss.emit('connection', ws);
   });
 });
 
+// Re-checked for every message, so signing someone out (or disabling them) also cuts off live
+// updates in tabs they still have open.
 function userOf(ws) {
+  if (!db.data.sessions.some((x) => x.id === ws.sessionId)) return null;
   const u = db.data.users.find((x) => x.id === ws.userId);
   return u && !u.disabled ? u : null;
 }

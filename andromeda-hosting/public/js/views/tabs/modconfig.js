@@ -1,5 +1,5 @@
 import { api } from '../../api.js';
-import { html, $, $$, on, icon, toast } from '../../ui.js';
+import { html, $, $$, on, icon, toast, webUrl } from '../../ui.js';
 import { field } from './settings.js';
 
 // Mod configuration: each mod (with its Workshop/CurseForge picture and name) and its settings —
@@ -22,7 +22,7 @@ export async function render(root, { server }) {
       ? mods.map(
           (m) => html`<div class="mc-card">
             <div class="mc-card-head">${thumb(m)}<div class="mc-card-title"><strong>${m.name}</strong>
-              <small class="muted">${m.modId ? html`<span class="mono">${m.modId}</span>` : ''}${m.url ? html` · <a href="${m.url}" target="_blank" rel="noopener">mod page</a>` : ''}</small></div></div>
+              <small class="muted">${m.modId ? html`<span class="mono">${m.modId}</span>` : ''}${m.url ? html` · <a href="${webUrl(m.url)}" target="_blank" rel="noopener">mod page</a>` : ''}</small></div></div>
             ${m.files.length
               ? m.files.map(
                   (f) => html`<button type="button" class="mc-file ${current && current.file === f.file ? 'active' : ''}" data-file="${f.file}">
@@ -65,13 +65,13 @@ export async function render(root, { server }) {
             <p class="muted small mono">${ark ? d.where : current.file}</p>
             ${fields.some((f) => f.def !== undefined) ? html`<p class="small">${changed} of ${fields.filter((f) => f.def !== undefined).length} settings changed from their defaults</p>` : ''}</div>
           <div class="btn-row">
-            ${d.mod && d.mod.url ? html`<a class="btn btn-sm btn-ghost" href="${d.mod.url}" target="_blank" rel="noopener">Mod page</a>` : ''}
+            ${d.mod && d.mod.url ? html`<a class="btn btn-sm btn-ghost" href="${webUrl(d.mod.url)}" target="_blank" rel="noopener">Mod page</a>` : ''}
             ${!ark && list.canRaw && d.fields ? html`<button type="button" class="btn btn-sm btn-ghost" id="mc-raw">${showRaw ? 'Show as form' : 'Edit raw file'}</button>` : ''}
           </div>
         </div>
         ${d.mod && d.mod.sources && d.mod.sources.length
           ? html`<details class="adv mc-sources"><summary>Where these settings come from (${d.mod.sources.length} source${d.mod.sources.length === 1 ? '' : 's'} checked)</summary><ul>${d.mod.sources.map(
-              (src) => html`<li>${src.url ? html`<a href="${src.url}" target="_blank" rel="noopener">${src.label}</a>` : src.label} — ${src.error ? html`<span class="muted">couldn't read it (${src.error})</span>` : `${src.settings} setting${src.settings === 1 ? '' : 's'}`}</li>`
+              (src) => html`<li>${src.url ? html`<a href="${webUrl(src.url)}" target="_blank" rel="noopener">${src.label}</a>` : src.label} — ${src.error ? html`<span class="muted">couldn't read it (${src.error})</span>` : `${src.settings} setting${src.settings === 1 ? '' : 's'}`}</li>`
             )}</ul><p class="muted small">The panel reads the mod's page, its discussions about settings, and documents the page links to (Pastebin, GitHub, Google Docs). If the mod explains a setting only in a video or on Discord, add it below.</p></details>`
           : ''}
         ${ark && list.running ? html`<p class="form-error">Stop the server to change mod settings — ARK rewrites its INI files when it shuts down.</p>` : ''}

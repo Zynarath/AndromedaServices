@@ -78,6 +78,18 @@ router.post('/auth/logout', (req, res) => {
 });
 
 // ---- own account ----
+// Checking the current password here is rate-limited like sign-in, so a stolen session can't be used
+// to guess it.
+function checkOwnPassword(req, password, message) {
+  const key = `account|${req.user.id}`;
+  auth.checkRateLimit(key);
+  if (!auth.verifyPassword(password || '', req.user.passwordHash)) {
+    auth.recordFailure(key);
+    throw new HttpError(400, message);
+  }
+  auth.clearFailures(key);
+}
+
 router.get('/account', auth.requireAuth, (req, res) => {
   const sessions = db.data.sessions
     .filter((s) => s.userId === req.user.id)
@@ -87,7 +99,7 @@ router.get('/account', auth.requireAuth, (req, res) => {
 
 router.post('/account/password', auth.requireAuth, (req, res) => {
   const { current, password } = req.body || {};
-  if (!auth.verifyPassword(current || '', req.user.passwordHash)) throw new HttpError(400, 'Current password is wrong');
+  checkOwnPassword(req, current, 'Current password is wrong');
   auth.validatePassword(password);
   req.user.passwordHash = auth.hashPassword(password);
   auth.destroySessions(req.user.id, req.session.id);
@@ -101,6 +113,8 @@ router.delete('/account/sessions/:id', auth.requireAuth, (req, res) => {
 });
 
 router.post('/account/2fa/setup', auth.requireAuth, (req, res) => {
+  // Otherwise a stolen session could swap in its own authenticator and lock the owner out.
+  if (req.user.totpEnabled) throw new HttpError(400, '2FA is already on. Turn it off first (that needs your password), then set it up again.');
   const secret = totp.generateSecret();
   req.user.pendingTotp = secret;
   db.save();
@@ -118,7 +132,7 @@ router.post('/account/2fa/enable', auth.requireAuth, (req, res) => {
 });
 
 router.post('/account/2fa/disable', auth.requireAuth, (req, res) => {
-  if (!auth.verifyPassword(req.body.password || '', req.user.passwordHash)) throw new HttpError(400, 'Password is wrong');
+  checkOwnPassword(req, req.body.password, 'Password is wrong');
   req.user.totpEnabled = false;
   delete req.user.totpSecret;
   db.save();

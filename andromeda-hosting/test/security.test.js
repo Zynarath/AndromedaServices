@@ -82,13 +82,12 @@ test('INI and properties writers strip newlines (no config injection)', () => {
   assert.doesNotMatch(props.toString(), /\renable-rcon|\nenable-rcon/);
 });
 
-test('file manager blocks non-admins from writing executables', () => {
-  // Mirror of the server-side check in src/routes/files.js.
-  const BLOCKED_EXT = /\.(exe|dll|so|dylib|bat|cmd|com|scr|msi|ps1|psm1|vbs|vbe|wsf|jse|hta|cpl|sh|bash)$/i;
-  const BLOCKED_NAME = /^user_jvm_args\.txt$/i;
-  const blocked = (n) => BLOCKED_EXT.test(n) || BLOCKED_NAME.test(n);
-  for (const n of ['mangosd.exe', 'evil.dll', 'run.bat', 'x.ps1', 'user_jvm_args.txt', 'payload.sh']) assert.ok(blocked(n), n);
-  for (const n of ['server.properties', 'config.yml', 'mod.jar', 'Game.ini', 'notes.txt']) assert.ok(!blocked(n), n);
+test('file manager blocks non-admins from writing executables, including Windows name tricks', () => {
+  const { blockedForNonAdmin: blocked } = require('../src/util/paths');
+  for (const n of ['mangosd.exe', 'evil.dll', 'run.bat', 'x.ps1', 'user_jvm_args.txt', 'payload.sh', 'RUN.BAT']) assert.ok(blocked(n), n);
+  // Windows drops trailing dots/spaces and reads "x.exe::$DATA" as x.exe.
+  for (const n of ['run.bat.', 'run.bat. . ', 'evil.exe::$DATA', 'evil.dll:stream', 'user_jvm_args.txt.']) assert.ok(blocked(n), n);
+  for (const n of ['server.properties', 'config.yml', 'mod.jar', 'Game.ini', 'notes.txt', 'v1.2.']) assert.ok(!blocked(n), n);
 });
 
 test('cover pictures: only real images are accepted, and only from known hosts', () => {
@@ -183,4 +182,44 @@ test('plain HTTP from the internet is flagged; tunnels, LAN and Tailscale are no
   assert.equal(unencryptedFromInternet(req('192.168.1.20')), false, 'home network');
   assert.equal(unencryptedFromInternet(req('100.101.102.103')), false, 'Tailscale');
   assert.equal(unencryptedFromInternet(req('::ffff:127.0.0.1')), false, 'this PC');
+});
+
+test("account security: 2FA can't be replaced from a session, and password checks are rate-limited", async () => {
+  const express = require('express');
+  const db = require('../src/db');
+  auth.createUser({ username: 'Sam', password: 'correct-horse', role: 'user' });
+  const app = express();
+  app.use('/api', express.json(), auth.csrfGuard, require('../src/routes/auth'));
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message }));
+  const srv = app.listen(0, '127.0.0.1');
+  await new Promise((r) => srv.once('listening', r));
+  const base = `http://127.0.0.1:${srv.address().port}/api`;
+  let cookie = '';
+  const call = async (method, path, body) => {
+    const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'AndromedaHosting', cookie }, body: body && JSON.stringify(body) });
+    const set = res.headers.get('set-cookie');
+    if (set) cookie = set.split(';')[0];
+    return { status: res.status, body: await res.json() };
+  };
+  try {
+    assert.equal((await call('POST', '/auth/login', { username: 'Sam', password: 'correct-horse' })).status, 200);
+    // Turn 2FA on.
+    const { secret } = (await call('POST', '/account/2fa/setup')).body;
+    const code = auth.totp.hotp(secret, Math.floor(Date.now() / 30000));
+    assert.equal((await call('POST', '/account/2fa/enable', { code })).status, 200);
+    // A session alone can't swap the authenticator.
+    const again = await call('POST', '/account/2fa/setup');
+    assert.equal(again.status, 400);
+    assert.match(again.body.error, /already on/);
+    assert.equal(db.data.users.find((u) => u.username === 'Sam').totpSecret, secret);
+    // Guessing the current password through "turn off 2FA" is limited like sign-in.
+    let last;
+    for (let i = 0; i < 9; i++) last = await call('POST', '/account/2fa/disable', { password: `guess-${i}` });
+    assert.equal(last.status, 429);
+    const right = await call('POST', '/account/2fa/disable', { password: 'correct-horse' });
+    assert.equal(right.status, 429, 'still locked out for a while, even with the right password');
+  } finally {
+    srv.close();
+  }
 });

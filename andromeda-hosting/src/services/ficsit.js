@@ -285,10 +285,11 @@ async function resolve(wanted, { game = null, target = serverTarget(), log } = {
   return chosen;
 }
 
+// Downloads only come from ficsit.app itself (its API answers with paths like /v1/version/.../download).
 function absoluteLink(link) {
-  if (/^https:\/\//i.test(link)) return link;
-  if (String(link).startsWith('/')) return API + link;
-  throw new Error(`unexpected download address ${link}`);
+  const url = new URL(String(link), API);
+  if (url.protocol !== 'https:' || !(url.hostname === 'ficsit.app' || url.hostname.endsWith('.ficsit.app'))) throw new Error(`unexpected download address ${link}`);
+  return url.href;
 }
 
 function sha256(file) {

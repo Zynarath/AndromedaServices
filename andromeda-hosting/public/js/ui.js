@@ -6,6 +6,9 @@ export class Raw {
 }
 export const raw = (s) => new Raw(String(s));
 
+// Links to other sites (mod pages, CurseForge): only http(s), never javascript: and the like.
+export const webUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '#');
+
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }

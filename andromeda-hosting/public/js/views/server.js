@@ -1,5 +1,5 @@
 import { api, onSocket, subscribe } from '../api.js';
-import { html, $, on, icon, toast, fmtBytes, fmtDuration, statusPill, gameArt, copyText, confirmBox, sparkline, bindSparkHover, esc, raw, artInner } from '../ui.js';
+import { html, $, on, icon, toast, fmtBytes, fmtDuration, statusPill, gameArt, copyText, confirmBox, sparkline, bindSparkHover, esc, raw, artInner, webUrl } from '../ui.js';
 import * as settingsTab from './tabs/settings.js';
 import * as modsTab from './tabs/mods.js';
 import * as filesTab from './tabs/files.js';
@@ -98,7 +98,7 @@ export async function render(root, ctx) {
       ${job && (job.status === 'running' || Date.now() - (job.finishedAt || 0) < 10 * 60e3) ? jobCard(job) : ''}
       ${manual.length
         ? html`<div class="callout callout-warn">${icon('alert')}<div><strong>${manual.length} mod(s) need a manual download.</strong> Their authors block downloads through other apps.
-            Download each file and upload it to the <code>mods</code> folder in the Files tab:<ul>${manual.map((m) => html`<li>${m.url ? html`<a href="${m.url}" target="_blank" rel="noopener">${m.name}</a>` : m.name} — <code>${m.fileName}</code></li>`)}</ul></div></div>`
+            Download each file and upload it to the <code>mods</code> folder in the Files tab:<ul>${manual.map((m) => html`<li>${m.url ? html`<a href="${webUrl(m.url)}" target="_blank" rel="noopener">${m.name}</a>` : m.name} — <code>${m.fileName}</code></li>`)}</ul></div></div>`
         : ''}
       <div class="grid-2">
         <div class="panel">
