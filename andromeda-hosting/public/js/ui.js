@@ -215,10 +215,14 @@ export function copyText(text) {
   navigator.clipboard?.writeText(text).then(() => toast('Copied to clipboard', 'ok', 1800), () => toast(text));
 }
 
-export function artLabel(server) {
+// The label on a server's art box. `short` is for the small square on the server page.
+export function artLabel(server, short = false) {
   if (server.ark) return 'ARK';
   if (server.cod) return server.cod.short;
   if (server.wow) return 'WoW';
+  if (server.sf) return short ? 'SF' : 'Satisfactory';
+  if (server.sdtd) return short ? '7D' : '7 Days';
+  if (server.vh) return short ? 'VH' : 'Valheim';
   return 'MC';
 }
 
@@ -227,13 +231,17 @@ export function gameArt(server) {
   if (t.startsWith('ark')) return 'ark';
   if (t.startsWith('cod')) return 'cod';
   if (t.startsWith('wow')) return 'wow';
+  if (server.game === 'satisfactory' || server.sf) return 'satisfactory';
+  if (server.game === 'sdtd' || server.sdtd) return 'sdtd';
+  if (server.game === 'valheim' || server.vh) return 'valheim';
   if (server.mc && server.mc.source === 'curseforge') return 'mc-cf';
   return 'mc';
 }
 
 // What goes inside a server's art box: the game's cover picture behind its label (or modpack logo).
-export function artInner(server) {
+export function artInner(server, { short = false } = {}) {
+  const label = artLabel(server, short);
   return html`${server.cover ? html`<span class="art-cover" style="background-image:url('${server.cover.url}')"></span>` : ''}${
-    server.mc?.curseforge?.logo ? html`<img src="${server.mc.curseforge.logo}" alt="" loading="lazy">` : html`<span class="art-mono">${artLabel(server)}</span>`
+    server.mc?.curseforge?.logo ? html`<img src="${server.mc.curseforge.logo}" alt="" loading="lazy">` : html`<span class="art-mono ${label.length > 8 ? 'art-mono-long' : ''}">${label}</span>`
   }`;
 }

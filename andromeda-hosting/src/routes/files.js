@@ -5,7 +5,7 @@ const path = require('path');
 const { pipeline } = require('stream/promises');
 const auth = require('../auth');
 const manager = require('../manager/manager');
-const { safeResolve, relTo } = require('../util/paths');
+const { safeResolve, relTo, blockedForNonAdmin } = require('../util/paths');
 const { extractZip, streamZip } = require('../util/zip');
 const { HttpError } = require('../util/misc');
 
@@ -25,14 +25,6 @@ function cleanName(name) {
   return n;
 }
 
-// Files a non-admin must not create or overwrite through the file manager: native executables,
-// scripts, and launch-argument files that the panel or the OS could later run as the host account.
-// (.jar stays allowed because mods are .jar; that is the mods workflow, gated by its own permission.)
-const BLOCKED_EXT = /\.(exe|dll|so|dylib|bat|cmd|com|scr|msi|ps1|psm1|vbs|vbe|wsf|jse|hta|cpl|sh|bash)$/i;
-const BLOCKED_NAME = /^user_jvm_args\.txt$/i;
-function blockedForNonAdmin(name) {
-  return BLOCKED_EXT.test(name) || BLOCKED_NAME.test(name);
-}
 function guardWrite(abs, admin) {
   if (admin) return;
   const name = path.basename(abs);

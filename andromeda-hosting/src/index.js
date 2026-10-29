@@ -23,7 +23,7 @@ app.use((_req, res, next) => {
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; img-src 'self' data: https://media.forgecdn.net https://*.forgecdn.net https://mc-heads.net; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'"
+    "default-src 'self'; img-src 'self' data: https://media.forgecdn.net https://*.forgecdn.net https://mc-heads.net https://storage.ficsit.app; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'"
   );
   next();
 });

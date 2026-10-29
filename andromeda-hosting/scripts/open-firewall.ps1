@@ -6,6 +6,9 @@ param(
   [string]$ArkPorts = "7777-7790",
   [string]$CodPorts = "4976,27016,28960-28970",
   [string]$WowPorts = "3724,8085",
+  [string]$SatisfactoryTcpPorts = "7777-7790,8888-8899",
+  [string]$SevenDaysPorts = "26900-26932",
+  [string]$ValheimPorts = "2456-2470",
   [int]$SharePort = 0
 )
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -22,5 +25,10 @@ Add-Rule "Andromeda Hosting Minecraft" TCP $MinecraftPorts
 Add-Rule "Andromeda Hosting ARK" UDP $ArkPorts
 Add-Rule "Andromeda Hosting Call of Duty" UDP $CodPorts
 Add-Rule "Andromeda Hosting WoW" TCP $WowPorts
+# Satisfactory's game traffic is UDP on the same ports as ARK (opened above); its API and reliable port are TCP.
+Add-Rule "Andromeda Hosting Satisfactory" TCP $SatisfactoryTcpPorts
+Add-Rule "Andromeda Hosting 7 Days to Die (TCP)" TCP $SevenDaysPorts
+Add-Rule "Andromeda Hosting 7 Days to Die (UDP)" UDP $SevenDaysPorts
+Add-Rule "Andromeda Hosting Valheim" UDP $ValheimPorts
 if ($SharePort -gt 0) { Add-Rule "Andromeda Hosting file share" TCP $SharePort }
 Write-Host "Done. Remember to forward the game ports on your router too (not the panel port unless you know you want that)."

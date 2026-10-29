@@ -16,7 +16,7 @@ const TABS = [
   { id: 'settings', label: 'Settings', icon: 'settings', perm: 'settings', mod: settingsTab },
   { id: 'players', label: 'Players', icon: 'users', perm: 'settings', mod: playersTab, game: 'minecraft' },
   { id: 'accounts', label: 'Accounts', icon: 'users', perm: 'settings', mod: accountsTab, game: 'wow' },
-  { id: 'mods', label: 'Mods', icon: 'box', perm: 'mods', mod: modsTab, notGame: 'wow' },
+  { id: 'mods', label: 'Mods', icon: 'box', perm: 'mods', mod: modsTab, games: ['minecraft', 'ark', 'cod', 'satisfactory', 'sdtd'] },
   { id: 'modconfig', label: 'Mod configuration', icon: 'edit', perm: 'settings', mod: modConfigTab, games: ['ark', 'minecraft'] },
   { id: 'files', label: 'Files', icon: 'folder', perm: 'files', mod: filesTab },
   { id: 'backups', label: 'Backups', icon: 'archive', perm: 'backups', mod: backupsTab },
@@ -28,6 +28,9 @@ export function gameLine(s) {
   if (s.ark) return `${s.ark.editionLabel} · ${s.ark.map}`;
   if (s.cod) return `${s.cod.label} · ${s.cod.gametypeLabel}`;
   if (s.wow) return `WoW: Wrath of the Lich King · realm "${s.wow.realmName}"`;
+  if (s.sf) return `Satisfactory · ${s.sf.mods ? `${s.sf.mods} mod${s.sf.mods === 1 ? '' : 's'}` : 'no mods'}`;
+  if (s.sdtd) return `7 Days to Die · ${s.sdtd.world} · save "${s.sdtd.gameName}"`;
+  if (s.vh) return `Valheim · world "${s.vh.worldName}"${s.vh.crossplay ? ' · crossplay' : ''}`;
   if (s.mc.source === 'curseforge') return `${s.mc.curseforge?.packName || 'Modpack'} ${s.mc.curseforge?.versionName ? '· ' + s.mc.curseforge.versionName : ''}`;
   const l = { vanilla: 'Vanilla', forge: 'Forge', neoforge: 'NeoForge', fabric: 'Fabric' }[s.mc.loader] || s.mc.loader;
   return `Minecraft ${s.mc.mcVersion || ''} · ${l} ${s.mc.loaderVersion || ''}`;
@@ -45,7 +48,7 @@ export async function render(root, ctx) {
 
   root.innerHTML = html`
     <div class="server-head">
-      <div class="server-art art-${gameArt(s)}" id="server-art">${artInner(s)}</div>
+      <div class="server-art art-${gameArt(s)}" id="server-art">${artInner(s, { short: true })}</div>
       <div class="server-title">
         <h1>${s.name}</h1>
         <div class="server-meta"><span id="status-pill">${statusPill(s.runtime.status)}</span><span class="muted">${gameLine(s)}</span></div>
@@ -85,7 +88,7 @@ export async function render(root, ctx) {
   const tabEl = $('#tab');
   const refresh = async () => {
     s = (await api.get(`/api/servers/${s.id}`)).server;
-    $('#server-art').innerHTML = artInner(s).s;
+    $('#server-art').innerHTML = artInner(s, { short: true }).s;
     drawPower();
     if (tab.id === 'overview') drawOverview();
   };
@@ -125,6 +128,11 @@ export async function render(root, ctx) {
             ? html`<p class="small">Join password: ${s.cod.joinPassword ? html`<code>${s.cod.joinPassword}</code> <button class="btn btn-sm btn-ghost" data-copy="${s.cod.joinPassword}">${icon('copy')}</button>` : html`<span class="pill pill-warn">none — anyone can join</span>`}</p>`
             : ''}
           ${s.cod ? html`<p class="muted small">In game, open the console (<kbd>~</kbd>) and type <code>${s.cod.joinPassword ? `password ${s.cod.joinPassword}; ` : ''}connect ${esc(s.connect || (lan[0] || 'IP') + ':' + s.cod.port)}</code>.</p>` : ''}
+          ${joinPassword(s.sf || s.sdtd || s.vh)}
+          ${s.sf ? html`<p class="muted small">In Satisfactory: <em>Server Manager → Add Server</em>, enter the address and port. ${s.sf.adminPassword ? html`Admin password for the Server Manager: <code>${s.sf.adminPassword}</code> <button class="btn btn-sm btn-ghost" data-copy="${s.sf.adminPassword}">${icon('copy')}</button>` : ''}</p>
+              ${s.sf.mods ? html`<p class="muted small">This server has mods: players install the same ones with the <a href="https://ficsit.app/satisfactory-mod-manager" target="_blank" rel="noopener">Satisfactory Mod Manager</a> (see the Mods tab).</p>` : ''}` : ''}
+          ${s.sdtd ? html`<p class="muted small">In 7 Days to Die: <em>Join a Game → Connect to IP</em>.${s.sdtd.eac ? '' : ' Easy Anti-Cheat is off, so players start the game without EAC.'}</p>` : ''}
+          ${s.vh ? html`<p class="muted small">In Valheim: <em>Start Game → Join Game → Add server</em> with the address.${s.vh.crossplay ? ' Crossplay is on: friends join with the join code printed in the Console after the server starts.' : ''}</p>` : ''}
           ${s.ark ? html`<p class="muted small">In ARK, open the console (<kbd>~</kbd>) and type <code>open ${esc(s.connect || (lan[0] || 'IP') + ':' + s.ark.port)}</code> to join directly.</p>` : ''}
           <h4>Ports to forward on your router</h4>
           <table class="table compact"><tbody>${forward.map((p) => html`<tr><td><code>${p.port}</code></td><td>${p.proto}</td><td class="muted">${p.label}</td></tr>`)}</tbody></table>
@@ -138,6 +146,9 @@ export async function render(root, ctx) {
             <div><dt>Players</dt><dd id="players">${rt.players ? `${rt.players.online}${rt.players.max ? ' / ' + rt.players.max : ''}${rt.players.bots ? ` · ${rt.players.bots} bots` : ''}` : '—'}</dd></div>
             ${s.mc ? html`<div><dt>Memory limit</dt><dd>${(s.mc.memoryMb / 1024).toFixed(1)} GB</dd></div><div><dt>Java</dt><dd>${s.mc.javaMajor || 'auto'}</dd></div>` : ''}
             ${s.ark ? html`<div><dt>Mods</dt><dd>${s.ark.mods.length}</dd></div><div><dt>Max players</dt><dd>${s.ark.maxPlayers}</dd></div>` : ''}
+            ${s.sf ? html`<div><dt>Mods</dt><dd>${s.sf.mods}${s.sf.modsDirty ? ' (installed on next start)' : ''}</dd></div>${rt.players && rt.players.map ? html`<div><dt>Session</dt><dd>${rt.players.map}</dd></div>` : ''}` : ''}
+            ${s.sdtd ? html`<div><dt>World</dt><dd>${s.sdtd.world}</dd></div><div><dt>Anti-cheat</dt><dd>${s.sdtd.eac ? 'on' : 'off'}</dd></div>` : ''}
+            ${s.vh ? html`<div><dt>World</dt><dd>${s.vh.worldName}</dd></div><div><dt>Crossplay</dt><dd>${s.vh.crossplay ? 'on' : 'off'}</dd></div>` : ''}
             ${s.cod ? html`<div><dt>Mode</dt><dd>${s.cod.gametypeLabel}${rt.players && rt.players.map ? ' · ' + rt.players.map : ''}</dd></div><div><dt>XP</dt><dd>${s.cod.xpScale}x${s.cod.weaponXp ? ` · weapon ${s.cod.weaponXpScale}x` : ''}</dd></div><div><dt>Bots</dt><dd>${s.cod.bots.enabled ? `fill to ${s.cod.bots.fill}${rt.players && rt.players.bots != null ? ` (${rt.players.bots} in game)` : ''}` : 'off'}</dd></div>` : ''}
           </dl>
           <div id="player-list" class="chips">${(rt.players?.players || []).map((p) => html`<span class="chip">${p}</span>`)}</div>
@@ -164,6 +175,11 @@ export async function render(root, ctx) {
       }
     };
   };
+
+  function joinPassword(g) {
+    if (!g || g.joinPassword === undefined) return g && g.hasPassword ? html`<p class="small muted">Password protected.</p>` : '';
+    return html`<p class="small">Join password: ${g.joinPassword ? html`<code>${g.joinPassword}</code> <button class="btn btn-sm btn-ghost" data-copy="${g.joinPassword}">${icon('copy')}</button>` : html`<span class="pill pill-warn">none — anyone can join</span>`}</p>`;
+  }
 
   // WoW joins through a realmlist line, not host:port, so it gets its own Connect card.
   function wowConnect(lan, forward) {
@@ -227,6 +243,10 @@ export async function render(root, ctx) {
     ? [['Save all', 'saveall'], ['Server info', 'server info'], ['Who is online', 'account onlinelist'], ['Announce…', 'announce ']]
     : s.cod
     ? [['Status', 'status'], ['Next map', 'map_rotate'], ['Restart map', 'fast_restart'], ['Say…', 'say '], ['Kick…', 'clientkick ']]
+    : s.sdtd
+    ? [['List players', 'lp'], ['Save world', 'saveworld'], ['Game time', 'gettime'], ['Say…', 'say "'], ['Kick…', 'kick ']]
+    : s.sf || s.vh
+    ? []
     : s.ark
     ? [['Save world', 'SaveWorld'], ['List players', 'ListPlayers'], ['Wipe wild dinos', 'DestroyWildDinos'], ['Broadcast…', 'Broadcast ']]
     : [['List players', 'list'], ['Save world', 'save-all'], ['Whitelist add…', 'whitelist add '], ['Op player…', 'op '], ['Say…', 'say ']];
@@ -243,10 +263,12 @@ export async function render(root, ctx) {
         </div>
         <div class="console" id="console" tabindex="0" aria-label="Server console" aria-live="off">${raw(consoleLines.map(renderLine).join(''))}</div>
         <form class="console-input" id="cmd-form">
-          <span class="prompt">${s.ark || s.cod ? 'RCON' : '>'}</span>
-          <input name="command" autocomplete="off" placeholder="${s.ark ? 'ARK admin command, e.g. ServerChat Hello' : s.cod ? 'Server command, e.g. map mp_rust' : s.wow ? 'GM command without the dot, e.g. announce Hello' : 'Server command, e.g. say Hello'}" ${['running', 'starting'].includes(s.runtime.status) ? '' : 'disabled'}>
-          <button class="btn btn-primary" ${['running', 'starting'].includes(s.runtime.status) ? '' : 'disabled'}>Send</button>
+          <span class="prompt">${s.ark || s.cod ? 'RCON' : s.sdtd ? 'Telnet' : s.sf ? 'API' : '>'}</span>
+          <input name="command" autocomplete="off" placeholder="${s.ark ? 'ARK admin command, e.g. ServerChat Hello' : s.cod ? 'Server command, e.g. map mp_rust' : s.wow ? 'GM command without the dot, e.g. announce Hello' : s.sdtd ? 'Server command, e.g. say "Hello"' : s.sf ? 'Console command' : s.vh ? 'Valheim has no server console' : 'Server command, e.g. say Hello'}" ${['running', 'starting'].includes(s.runtime.status) && !s.vh ? '' : 'disabled'}>
+          <button class="btn btn-primary" ${['running', 'starting'].includes(s.runtime.status) && !s.vh ? '' : 'disabled'}>Send</button>
         </form>
+        ${s.vh ? html`<p class="muted small">Valheim has no server console: the panel shows its log. Admins (Settings → Players) use the in-game console (F5) for kick, ban and save.</p>` : ''}
+        ${s.sdtd ? html`<p class="muted small">Commands go through the game's telnet console (only reachable from this PC). <code>help</code> lists them.</p>` : ''}
         ${s.ark ? html`<p class="muted small">ARK has no live console; the panel shows <code>ShooterGame.log</code> and sends commands over RCON once the server has finished loading.</p>` : ''}
       </div>`.s;
     const c = $('#console');

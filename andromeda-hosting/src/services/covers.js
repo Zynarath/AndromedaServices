@@ -27,6 +27,11 @@ const DEFAULTS = {
   'cod-t6': { steam: 202970 },
   'cod-t5': { steam: 42700 },
   'cod-iw5': { steam: 115300 },
+  'cod-s1x': { steam: 209650 },
+  'cod-iw6x': { steam: 209160 },
+  satisfactory: { steam: 526870 },
+  sdtd: { steam: 251570 },
+  valheim: { steam: 892970 },
   wow: { wiki: 'World of Warcraft: Wrath of the Lich King' },
   minecraft: { wiki: 'Minecraft' },
 };
@@ -37,6 +42,9 @@ function defaultKey(server) {
   if (server.cod) return `cod-${server.cod.title}`;
   if (server.wow) return 'wow';
   if (server.mc) return 'minecraft';
+  if (server.sf) return 'satisfactory';
+  if (server.sdtd) return 'sdtd';
+  if (server.vh) return 'valheim';
   return null;
 }
 

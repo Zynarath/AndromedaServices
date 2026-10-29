@@ -154,6 +154,9 @@ function describe(server) {
     const t = games.cod.TITLES[server.cod.title];
     return `${t.label} · ${(t.gametypes.find((g) => g[0] === server.cod.gametype) || [])[1] || server.cod.gametype}`;
   }
+  if (server.sf) return `Satisfactory · ${server.sf.mods.length ? `${server.sf.mods.length} mod${server.sf.mods.length === 1 ? '' : 's'}` : 'no mods'}`;
+  if (server.sdtd) return `7 Days to Die · ${server.sdtd.gameWorld === 'RWG' ? 'random world' : server.sdtd.gameWorld}`;
+  if (server.vh) return `Valheim · world ${server.vh.worldName}`;
   if (server.mc && server.mc.source === 'curseforge') return `${server.mc.curseforge?.packName || 'Modpack'} · Minecraft ${server.mc.mcVersion || ''}`;
   if (server.mc) return `Minecraft ${server.mc.mcVersion || ''} ${server.mc.loader || ''}`;
   return server.game;
@@ -229,6 +232,10 @@ function onStatus(id, status) {
       fields.push({ name: 'Realmlist', value: `\`set realmlist ${server.wow.address || db.data.settings.publicAddress || '127.0.0.1'}\`` });
       fields[0].value = null; // the "Join" host:port doesn't apply to WoW
     }
+    const joinPw = (server.sf && server.sf.clientPassword) || (server.sdtd && server.sdtd.password) || (server.vh && server.vh.password);
+    if (joinPw) fields.push({ name: 'Password', value: s().includePassword ? `||${joinPw}||` : 'Required (ask in the group)' });
+    if (server.sf && server.sf.mods.length) fields.push({ name: 'Mods', value: `${server.sf.mods.length} (players need them too: Satisfactory Mod Manager)` });
+    if (server.vh && server.vh.crossplay) fields.push({ name: 'Crossplay', value: 'On — join with the code from the server console' });
     if (server.mc) fields.push({ name: 'Version', value: `${server.mc.mcVersion || ''} ${server.mc.loader !== 'vanilla' ? server.mc.loader : ''}`.trim() });
     post(server, { title: `🟢 ${server.name} is online`, color: 'ok', fields });
   } else if (status === 'stopped' && prev && prev !== 'stopped' && prev !== 'installing') {

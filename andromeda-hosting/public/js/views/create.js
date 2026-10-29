@@ -2,7 +2,8 @@ import { api } from '../api.js';
 import { html, $, $$, on, icon, toast, esc } from '../ui.js';
 import { pickCurseForge } from './cfpicker.js';
 
-const ART = { ark: 'ark', 'ark-ase': 'ark', 'mc-cf': 'mc-cf', mc: 'mc', cod: 'cod', wow: 'wow' };
+const ART = { ark: 'ark', 'ark-ase': 'ark', 'mc-cf': 'mc-cf', mc: 'mc', cod: 'cod', wow: 'wow', satisfactory: 'satisfactory', sdtd: 'sdtd', valheim: 'valheim' };
+const LABEL = { ark: 'ARK', wow: 'WoW', minecraft: 'MC', satisfactory: 'Satisfactory', sdtd: '7 Days', valheim: 'Valheim' };
 
 export async function render(root, { navigate, refreshServers }) {
   const [{ templates, curseforgeKey, platform }, { servers: existing }] = await Promise.all([api.get('/api/templates'), api.get('/api/servers')]);
@@ -22,7 +23,7 @@ export async function render(root, { navigate, refreshServers }) {
       <div class="tpl-grid">
         ${templates.map(
           (t) => html`<button class="tpl ${t.supported ? '' : 'tpl-disabled'}" data-tpl="${t.id}" ${t.supported ? '' : 'disabled'}>
-            <span class="tpl-art art-${ART[t.image]}"><span class="art-mono">${t.game === 'ark' ? 'ARK' : t.game === 'cod' ? t.namePrefix.split(' ')[0] : t.game === 'wow' ? 'WoW' : 'MC'}</span></span>
+            <span class="tpl-art art-${ART[t.image]}"><span class="art-mono ${(LABEL[t.game] || '').length > 8 ? 'art-mono-long' : ''}">${t.game === 'cod' ? t.namePrefix.split(' ')[0] : LABEL[t.game]}</span></span>
             <span class="tpl-text"><strong>${t.title}</strong><small>${t.supported ? t.subtitle : `Not available on ${platform === 'win32' ? 'Windows' : platform} — needs Windows`}</small></span>
           </button>`
         )}
@@ -45,7 +46,7 @@ export async function render(root, { navigate, refreshServers }) {
           <small class="hint">Also used for this server's Discord channel.</small></label>
         ${tpl.id === 'mc-curseforge' ? cfSection(curseforgeKey) : ''}
         ${tpl.id === 'mc-custom' ? mcCustomSection() : ''}
-        ${isMc ? mcCommon(ports) : tpl.game === 'cod' ? codSection(tpl, ports) : tpl.game === 'wow' ? wowSection() : arkSection(tpl, ports)}
+        ${isMc ? mcCommon(ports) : tpl.game === 'cod' ? codSection(tpl, ports) : tpl.game === 'wow' ? wowSection() : tpl.game === 'satisfactory' ? sfSection(ports) : tpl.game === 'sdtd' ? sdtdSection(ports) : tpl.game === 'valheim' ? vhSection(ports) : arkSection(tpl, ports)}
         <div class="form-actions span-2">
           <button class="btn btn-primary" type="submit">${icon('plus')}Create &amp; install</button>
           <span class="muted small">You can change all of this later in the server's Settings tab.</span>
@@ -72,6 +73,12 @@ export async function render(root, { navigate, refreshServers }) {
       const body = { template: tpl.id, name: d.name, eulaAccepted: !!d.eula };
       if (tpl.game === 'wow') {
         body.wow = { root: d.root, realmName: d.realmName || d.name };
+      } else if (tpl.game === 'satisfactory') {
+        body.sf = { clientPassword: d.password, maxPlayers: Number(d.maxPlayers), port: Number(d.port), reliablePort: Number(d.reliablePort) };
+      } else if (tpl.game === 'sdtd') {
+        body.sdtd = { password: d.password, maxPlayers: Number(d.maxPlayers), gameWorld: d.gameWorld, worldSize: d.gameWorld === 'RWG' ? d.worldSize : '', seed: d.seed, difficulty: d.difficulty, port: Number(d.port), telnetPort: Number(d.telnetPort) };
+      } else if (tpl.game === 'valheim') {
+        body.vh = { password: d.password, worldName: d.worldName, public: !!d.public, crossplay: !!d.crossplay, preset: d.preset, port: Number(d.port) };
       } else if (tpl.game === 'cod') {
         body.cod = {
           gameDir: d.gameDir, port: Number(d.port), password: d.password, maxClients: Number(d.maxClients), gametype: 'dom',
@@ -229,22 +236,63 @@ export async function render(root, { navigate, refreshServers }) {
   function codSection(t, ports) {
     return html`
       <label class="field span-2"><span>Game folder</span><input name="gameDir" required placeholder="${t.gameHint}" autocomplete="off">
-        <small class="hint">Your own install of the game. ${t.codTitle === 'iw4x' ? 'IW4x must already be installed in it (iw4x.exe).' : t.codTitle === 'cod4x' ? 'Andromeda Hosting downloads the CoD4x server files itself.' : 'Andromeda Hosting downloads and updates Plutonium itself.'}</small></label>
+        <small class="hint">Your own install of the game. ${t.codTitle === 'iw4x' ? 'IW4x must already be installed in it (iw4x.exe).' : t.alterware ? html`The AlterWare client must already be installed in it — get it with the launcher from <a href="https://alterware.dev" target="_blank" rel="noopener">alterware.dev</a>.` : t.codTitle === 'cod4x' ? 'Andromeda Hosting downloads the CoD4x server files itself.' : 'Andromeda Hosting downloads and updates Plutonium itself.'}</small></label>
       ${t.pluto
         ? html`<label class="field span-2"><span>Plutonium server key</span><input name="plutoKey" required autocomplete="off" placeholder="Paste key">
             <small class="hint">Free: sign in at <a href="https://platform.plutonium.pw/serverkeys" target="_blank" rel="noopener">platform.plutonium.pw/serverkeys</a> and create a key.</small></label>`
         : ''}
-      <div class="callout span-2">${icon('info')}<div><strong>Domination</strong> with every base map in a shuffled rotation, <strong>4x XP</strong>${t.weaponXp ? ' and <strong>4x weapon XP</strong>' : ''}, and bots filling empty slots. All of it can be changed later in Settings.</div></div>
+      <div class="callout span-2">${icon('info')}<div><strong>Domination</strong> with every base map in a shuffled rotation, <strong>4x XP</strong>${t.weaponXp ? ' and <strong>4x weapon XP</strong>' : ''}${t.bots ? ', and bots filling empty slots' : ''}. All of it can be changed later in Settings.</div></div>
       <label class="field"><span>Player XP multiplier</span><input type="number" name="xpScale" value="4" min="1" max="100"></label>
       ${t.weaponXp ? html`<label class="field"><span>Weapon XP multiplier</span><input type="number" name="weaponXpScale" value="4" min="1" max="100"></label>` : html`<div></div>`}
-      <label class="switch field-switch span-2"><input type="checkbox" name="bots" checked><span></span>Bots (Bot Warfare)
+      ${t.bots
+        ? html`<label class="switch field-switch span-2"><input type="checkbox" name="bots" checked><span></span>Bots (Bot Warfare)
         <small class="hint">Bots fill the match and step aside as your friends join.</small></label>
       <label class="field"><span>Keep this many players in a match</span><input type="number" name="botFill" value="12" min="0" max="18"><small class="hint">Bots + people. 12 = 6v6.</small></label>
-      <label class="field"><span>Bot difficulty</span><select name="botSkill"><option value="0">Mixed</option><option value="1">1 – Recruit</option><option value="3">3 – Regular</option><option value="5">5 – Hardened</option><option value="7">7 – Veteran</option></select></label>
+      <label class="field"><span>Bot difficulty</span><select name="botSkill"><option value="0">Mixed</option><option value="1">1 – Recruit</option><option value="3">3 – Regular</option><option value="5">5 – Hardened</option><option value="7">7 – Veteran</option></select></label>`
+        : ''}
       <label class="field"><span>Join password</span><input name="password" autocomplete="off" value="${friendlyPassword()}"><small class="hint">Your friends need it to join. Clear it to make the server public.</small></label>
       <label class="field"><span>Max players</span><input type="number" name="maxClients" value="18" min="2" max="64"></label>
       <details class="span-2 adv"><summary>Port</summary><div class="form-grid">
         <label class="field"><span>Port (UDP)</span><input type="number" name="port" value="${ports.port || t.port}"></label></div></details>`;
+  }
+
+  function sfSection(ports) {
+    return html`
+      <label class="field"><span>Join password</span><input name="password" autocomplete="off" value="${friendlyPassword()}"><small class="hint">Your friends need it to join. Clear it to let anyone in.</small></label>
+      <label class="field"><span>Max players</span><input type="number" name="maxPlayers" value="4" min="1" max="64"><small class="hint">The game is balanced for 4.</small></label>
+      <div class="callout span-2">${icon('info')}<div>On the first start the panel <strong>claims the server</strong> (sets an admin password, shown on the server page) and <strong>starts a new game</strong>.
+        Add mods from ficsit.app in the server's <em>Mods</em> tab — the mod loader (SML) and dependencies are installed for you. The first install downloads about 8 GB.</div></div>
+      <details class="span-2 adv"><summary>Ports</summary><div class="form-grid">
+        <label class="field"><span>Game port (UDP + TCP)</span><input type="number" name="port" value="${ports.port || 7777}"></label>
+        <label class="field"><span>Reliable messaging port (TCP)</span><input type="number" name="reliablePort" value="${ports.reliablePort || 8888}"></label></div></details>`;
+  }
+
+  function sdtdSection(ports) {
+    return html`
+      <label class="field"><span>World</span><select name="gameWorld" id="sdtd-world"><option value="Navezgane">Navezgane (hand-made map)</option><option value="RWG">Random world</option></select></label>
+      <label class="field" id="sdtd-size" hidden><span>World size</span><select name="worldSize"><option>6144</option><option selected>8192</option><option>10240</option></select>
+        <small class="hint">Generated on the first start (takes a few minutes).</small></label>
+      <label class="field" id="sdtd-seed" hidden><span>Seed</span><input name="seed" maxlength="64" value="${Math.random().toString(36).slice(2, 10)}"></label>
+      <label class="field"><span>Difficulty</span><select name="difficulty"><option value="0">Scavenger</option><option value="1">Adventurer</option><option value="2" selected>Nomad</option><option value="3">Warrior</option><option value="4">Survivalist</option><option value="5">Insane</option></select></label>
+      <label class="field"><span>Join password</span><input name="password" autocomplete="off" value="${friendlyPassword()}"><small class="hint">Clear it to let anyone in.</small></label>
+      <label class="field"><span>Max players</span><input type="number" name="maxPlayers" value="8" min="1" max="64"></label>
+      <div class="callout span-2">${icon('info')}<div>The first install downloads about 15 GB through SteamCMD. Add mods later from .zip files in the server's <em>Mods</em> tab. Every other setting (zombies, blood moons, loot…) is in Settings.</div></div>
+      <details class="span-2 adv"><summary>Ports</summary><div class="form-grid">
+        <label class="field"><span>Game port (TCP + UDP, uses the next 2 too)</span><input type="number" name="port" value="${ports.port || 26900}"></label>
+        <label class="field"><span>Telnet port (this PC only)</span><input type="number" name="telnetPort" value="${ports.telnetPort || 8081}"></label></div></details>`;
+  }
+
+  function vhSection(ports) {
+    return html`
+      <label class="field"><span>World name</span><input name="worldName" maxlength="40" pattern="[A-Za-z0-9_\- ]+" placeholder="Same as the server name"></label>
+      <label class="field"><span>Join password</span><input name="password" autocomplete="off" required minlength="5" value="${friendlyPassword()}"><small class="hint">At least 5 characters, not part of the server name.</small></label>
+      <label class="field"><span>Difficulty preset</span><select name="preset"><option value="">Normal</option><option value="casual">Casual</option><option value="easy">Easy</option><option value="hard">Hard</option><option value="hardcore">Hardcore</option><option value="immersive">Immersive</option><option value="hammer">Hammer mode</option></select></label>
+      <div></div>
+      <label class="switch field-switch"><input type="checkbox" name="public"><span></span>List in the community server browser</label>
+      <label class="switch field-switch"><input type="checkbox" name="crossplay"><span></span>Crossplay (Xbox / Game Pass)</label>
+      <div class="callout span-2">${icon('info')}<div>The world saves every 10 minutes and whenever the panel stops the server. Fine-tune combat, raids, resources and portals in Settings → World modifiers.</div></div>
+      <details class="span-2 adv"><summary>Port</summary><div class="form-grid">
+        <label class="field"><span>Port (UDP, uses the next one too)</span><input type="number" name="port" value="${ports.port || 2456}"></label></div></details>`;
   }
 
   function arkSection(t, ports) {
@@ -273,6 +321,7 @@ export async function render(root, { navigate, refreshServers }) {
 
   root.addEventListener('change', (e) => {
     if (e.target.id === 'ark-map') $('#custom-map').hidden = e.target.value !== '__custom';
+    if (e.target.id === 'sdtd-world') $('#sdtd-size').hidden = $('#sdtd-seed').hidden = e.target.value !== 'RWG';
   });
   chooser();
 }

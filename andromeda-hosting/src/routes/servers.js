@@ -11,6 +11,8 @@ const { games, templates, CONFIG_KEY } = require('../games');
 const cf = require('../services/curseforge');
 const mapImages = require('../services/mapimages');
 const covers = require('../services/covers');
+const ficsit = require('../services/ficsit');
+const { pipeline } = require('stream/promises');
 const modinfo = require('../services/modinfo');
 const { HttpError, randomId } = require('../util/misc');
 const { parseCpuList, PRIORITIES, CORES } = require('../util/procstats');
@@ -70,9 +72,23 @@ function view(inst, user, full = false) {
     out.cod = {
       title: s.cod.title, label: t.label, short: t.short, gametype: s.cod.gametype, gametypeLabel: (t.gametypes.find((g) => g[0] === s.cod.gametype) || [])[1] || s.cod.gametype,
       maps: s.cod.maps.length, port: s.cod.port, bots: s.cod.bots, botsVersion: s.cod.botsVersion, xpScale: s.cod.xpScale, weaponXp: t.weaponXp, weaponXpScale: s.cod.weaponXpScale,
-      pluto: !!t.pluto, hasPassword: !!s.cod.password, hasKey: !!s.cod.plutoKey,
+      pluto: !!t.pluto, hasPassword: !!s.cod.password, hasKey: !!s.cod.plutoKey, botsAvailable: !!t.botRepo, engine: t.exes ? t.short : null,
     };
     if (perms.includes('settings') || perms.includes('admin')) out.cod.joinPassword = s.cod.password || '';
+  }
+  if (s.sf) {
+    out.sf = { serverName: s.sf.serverName, port: s.sf.port, maxPlayers: s.sf.maxPlayers, mods: s.sf.mods.length, modsDirty: !!s.sf.modsDirty, hasPassword: !!s.sf.clientPassword };
+    if (perms.includes('settings') || perms.includes('admin')) out.sf.joinPassword = s.sf.clientPassword || '';
+    if (perms.includes('admin')) out.sf.adminPassword = s.sf.adminPassword;
+  }
+  if (s.sdtd) {
+    const world = s.sdtd.gameWorld === 'RWG' ? `Random world${s.sdtd.worldSize ? ' ' + s.sdtd.worldSize : ''}` : s.sdtd.gameWorld;
+    out.sdtd = { serverName: s.sdtd.serverName, world, gameName: s.sdtd.gameName, port: s.sdtd.port, maxPlayers: s.sdtd.maxPlayers, eac: s.sdtd.eac !== false, hasPassword: !!s.sdtd.password };
+    if (perms.includes('settings') || perms.includes('admin')) out.sdtd.joinPassword = s.sdtd.password || '';
+  }
+  if (s.vh) {
+    out.vh = { serverName: s.vh.serverName, worldName: s.vh.worldName, port: s.vh.port, crossplay: !!s.vh.crossplay, public: !!s.vh.public, preset: s.vh.preset || '' };
+    if (perms.includes('settings') || perms.includes('admin')) out.vh.joinPassword = s.vh.password || '';
   }
   if (s.wow) {
     out.wow = { realmName: s.wow.realmName, address: s.wow.address || db.data.settings.publicAddress || '', manageDb: !!s.wow.manageDb };
@@ -104,7 +120,7 @@ router.get('/servers', (req, res) => {
 });
 
 router.get('/servers/suggest-ports', auth.requireAdmin, async (req, res) => {
-  const game = ['ark', 'cod'].includes(req.query.game) ? req.query.game : 'minecraft';
+  const game = ['ark', 'cod', 'satisfactory', 'sdtd', 'valheim'].includes(req.query.game) ? req.query.game : 'minecraft';
   res.json(await manager.suggestPorts(game, req.query.title));
 });
 
@@ -202,7 +218,7 @@ router.post('/servers/:id/command', async (req, res) => {
 // ---- game settings ----
 router.get('/servers/:id/settings', (req, res) => {
   const inst = load(req, 'settings');
-  res.json({ schema: inst.game.settingsSchema(inst.server), values: inst.game.readSettings(inst.server) });
+  res.json({ schema: inst.game.settingsSchema(inst.server), values: inst.game.readSettings(inst.server, { admin: req.user.role === 'admin' }) });
 });
 
 router.put('/servers/:id/settings', (req, res) => {
@@ -228,7 +244,7 @@ router.put('/servers/:id/settings', (req, res) => {
     }
   }
   db.save();
-  res.json({ ok: true, warning, restartRequired: !!(result.restartRequired && inst.child), values: inst.game.readSettings(inst.server) });
+  res.json({ ok: true, warning, restartRequired: !!(result.restartRequired && inst.child), values: inst.game.readSettings(inst.server, { admin: req.user.role === 'admin' }) });
 });
 
 // ---- mod configuration (ARK mod INI sections, Minecraft mod config files) ----
@@ -314,7 +330,7 @@ function modFile(inst, name) {
 router.get('/servers/:id/mods', (req, res) => {
   const inst = load(req, 'mods');
   if (inst.server.game === 'minecraft') return res.json({ mods: inst.game.listMods(inst.server) });
-  if (inst.server.game === 'cod' || inst.server.game === 'wow') return res.json({ mods: [] });
+  if (inst.server.game !== 'ark') return res.json({ mods: [] });
   res.json({ mods: inst.server.ark.mods.map((id) => ({ id })) });
 });
 
@@ -367,6 +383,121 @@ router.put('/servers/:id/ark-mods', (req, res) => {
   db.save();
   inst.appendConsole(`[mods] ${req.user.username} set the mod list: ${inst.server.ark.mods.join(', ') || '(none)'}`);
   res.json({ ok: true, mods: inst.server.ark.mods, restartRequired: !!inst.child });
+});
+
+// ---- Satisfactory mods (ficsit.app) ----
+function sfInst(req) {
+  const inst = load(req, 'mods');
+  if (!inst.server.sf) throw new HttpError(400, 'Not a Satisfactory server');
+  return inst;
+}
+
+router.get('/servers/:id/sf-mods', async (req, res) => {
+  const inst = sfInst(req);
+  const s = inst.server.sf;
+  const installed = s.modsInstalled || {};
+  const want = new Set(s.mods.map((m) => m.ref));
+  const describe = async (ref) => {
+    try {
+      return ficsit.slim(await ficsit.getMod(ref));
+    } catch {
+      return { ref, name: ref, summary: '', logo: null, url: `https://ficsit.app/mod/${encodeURIComponent(ref)}` };
+    }
+  };
+  const mods = await Promise.all(s.mods.map(async (m) => ({ ...(await describe(m.ref)), pinned: m.version || null, installed: installed[m.ref] || null })));
+  const deps = await Promise.all(Object.keys(installed).filter((r) => !want.has(r)).map(async (r) => ({ ...(await describe(r)), installed: installed[r] })));
+  res.json({ mods, deps, dirty: !!s.modsDirty, gameBuild: ficsit.gameBuild(inst.server.dir), remote: s.modsRemote || [], running: !!inst.child, target: ficsit.serverTarget() });
+});
+
+router.get('/servers/:id/sf-mods/search', async (req, res) => {
+  sfInst(req);
+  res.json(await ficsit.search(req.query.q, { offset: Number(req.query.offset) || 0 }));
+});
+
+router.post('/servers/:id/sf-mods', async (req, res) => {
+  const inst = sfInst(req);
+  const ref = String((req.body && req.body.ref) || '');
+  if (!ficsit.REF_RE.test(ref)) throw new HttpError(400, 'Invalid mod reference');
+  const mod = await ficsit.getMod(ref, { refresh: true });
+  const target = ficsit.serverTarget();
+  if (!mod.versions.some((v) => (v.targets || []).some((t) => t.targetName === target))) throw new HttpError(400, `${mod.name} doesn't run on dedicated servers (no ${target} build)`);
+  const s = inst.server.sf;
+  if (!s.mods.some((m) => m.ref === mod.mod_reference)) s.mods.push({ ref: mod.mod_reference });
+  s.modsDirty = true;
+  db.save();
+  inst.appendConsole(`[mods] ${req.user.username} added ${mod.name}`);
+  res.json({ ok: true, restartRequired: !!inst.child });
+});
+
+router.delete('/servers/:id/sf-mods/:ref', (req, res) => {
+  const inst = sfInst(req);
+  const s = inst.server.sf;
+  const before = s.mods.length;
+  s.mods = s.mods.filter((m) => m.ref !== req.params.ref);
+  if (s.mods.length === before) throw new HttpError(404, 'Mod not in the list');
+  s.modsDirty = true;
+  db.save();
+  inst.appendConsole(`[mods] ${req.user.username} removed ${req.params.ref}`);
+  res.json({ ok: true, restartRequired: !!inst.child });
+});
+
+// Install / update now (instead of on the next start). The server has to be stopped.
+router.post('/servers/:id/sf-mods/sync', async (req, res) => {
+  const inst = sfInst(req);
+  if (inst.child) throw new HttpError(409, 'Stop the server first (or just restart it: mods are installed on start)');
+  inst.server.sf.modsDirty = true;
+  inst.runJob('mods', 'Install mods', async (log) => {
+    await inst.game.syncMods(inst.server, log);
+    db.save();
+  }).catch(() => db.save());
+  res.json({ ok: true });
+});
+
+// ---- 7 Days to Die mods (folders in Mods/) ----
+function sdtdInst(req) {
+  const inst = load(req, 'mods');
+  if (!inst.server.sdtd) throw new HttpError(400, 'Not a 7 Days to Die server');
+  return inst;
+}
+
+router.get('/servers/:id/sdtd-mods', (req, res) => {
+  const inst = sdtdInst(req);
+  res.json({ mods: inst.game.listMods(inst.server), eac: inst.server.sdtd.eac !== false, running: !!inst.child });
+});
+
+// PUT body is a .zip with one or more mod folders.
+router.put('/servers/:id/sdtd-mods/upload', async (req, res) => {
+  const inst = sdtdInst(req);
+  const tmp = path.join(inst.server.dir, `.mod-upload-${Date.now()}.zip`);
+  fs.mkdirSync(inst.server.dir, { recursive: true });
+  try {
+    let size = 0;
+    const limit = 2 * 1024 * 1024 * 1024;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) req.destroy(new HttpError(413, 'Mod archives can be at most 2 GB'));
+    });
+    await pipeline(req, fs.createWriteStream(tmp));
+    const installed = await inst.game.installModZip(inst.server, tmp, { admin: req.user.role === 'admin' });
+    inst.appendConsole(`[mods] ${req.user.username} installed ${installed.join(', ')}`);
+    res.json({ ok: true, installed, restartRequired: !!inst.child });
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+});
+
+router.patch('/servers/:id/sdtd-mods/:folder', (req, res) => {
+  const inst = sdtdInst(req);
+  inst.game.setModEnabled(inst.server, req.params.folder, !!(req.body && req.body.enabled));
+  inst.appendConsole(`[mods] ${req.user.username} turned ${req.body && req.body.enabled ? 'on' : 'off'} ${req.params.folder}`);
+  res.json({ ok: true, restartRequired: !!inst.child });
+});
+
+router.delete('/servers/:id/sdtd-mods/:folder', (req, res) => {
+  const inst = sdtdInst(req);
+  inst.game.removeMod(inst.server, req.params.folder);
+  inst.appendConsole(`[mods] ${req.user.username} removed ${req.params.folder}`);
+  res.json({ ok: true, restartRequired: !!inst.child });
 });
 
 // ---- backups ----

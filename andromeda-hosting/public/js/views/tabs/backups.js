@@ -9,7 +9,7 @@ export async function render(root, { server, navigate }) {
       <div class="panel">
         <div class="panel-head"><h3>Backups <span class="count">${backups.length}</span></h3>
           <button class="btn btn-primary btn-sm" id="create">${icon('archive')}Back up now</button></div>
-        <p class="muted small">${server.ark ? 'Backs up ShooterGame/Saved (map saves, tribes, configs).' : 'Backs up the whole server folder (worlds, mods, configs) except libraries and logs.'}
+        <p class="muted small">${server.ark ? 'Backs up ShooterGame/Saved (map saves, tribes, configs).' : server.sf ? 'Backs up the Satisfactory saves folder (saves and the server\'s claim/settings).' : server.sdtd ? 'Backs up UserData (saves, generated worlds, serveradmin.xml).' : server.vh ? 'Backs up the saves folder (worlds and the admin / allow / ban lists).' : 'Backs up the whole server folder (worlds, mods, configs) except libraries and logs.'}
           The newest ${keep} are kept. Running servers are saved first. Add a schedule to back up automatically.</p>
         ${backups.length
           ? html`<table class="table"><thead><tr><th>Created</th><th>Type</th><th>Size</th><th></th></tr></thead><tbody>

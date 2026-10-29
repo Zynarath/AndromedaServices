@@ -1,5 +1,6 @@
 'use strict';
-// Community Call of Duty dedicated servers: CoD4x, IW4x (MW2) and Plutonium T6 (BO2), T5 (BO1), IW5 (MW3).
+// Community Call of Duty dedicated servers: CoD4x, IW4x (MW2), Plutonium T6 (BO2), T5 (BO1), IW5 (MW3),
+// and AlterWare's S1x (Advanced Warfare) and IW6x (Ghosts).
 // They all run on your own game install; Andromeda Hosting writes the server config (game mode, shuffled
 // map rotation, XP rates, bots) right before every start.
 const fs = require('fs');
@@ -123,14 +124,53 @@ const TITLES = {
       ['mp_plaza2', 'Arkaden'], ['mp_radar', 'Outpost'], ['mp_seatown', 'Seatown'], ['mp_underground', 'Underground'], ['mp_village', 'Village'],
     ],
   },
+  // AlterWare clients (alterware.dev): installed into your own game folder by the AlterWare launcher,
+  // like IW4x. Older XLabs builds used s1x.exe / iw6x.exe, so those names work too.
+  s1x: {
+    wikiGame: 'Advanced Warfare',
+    label: 'Advanced Warfare (S1x)',
+    short: 'S1x',
+    namePrefix: 'S1x Server',
+    port: 27016,
+    platforms: ['win32'],
+    botRepo: null,
+    weaponXp: false,
+    gameHint: 'Your Advanced Warfare folder with the AlterWare client installed (contains s1-mod.exe)',
+    exes: ['s1-mod.exe', 's1x.exe'],
+    gametypes: [['dom', 'Domination'], ['war', 'Team Deathmatch'], ['dm', 'Free-for-all'], ['conf', 'Kill Confirmed'], ['hp', 'Hardpoint'], ['sd', 'Search & Destroy'], ['ctf', 'Capture the Flag'], ['ball', 'Uplink'], ['twar', 'Momentum'], ['infect', 'Infected']],
+    maps: [
+      ['mp_laser2', 'Ascend'], ['mp_lab2', 'Bio Lab'], ['mp_comeback', 'Comeback'], ['mp_detroit', 'Detroit'], ['mp_greenband', 'Greenband'], ['mp_levity', 'Horizon'],
+      ['mp_instinct', 'Instinct'], ['mp_recovery', 'Recovery'], ['mp_venus', 'Retreat'], ['mp_prison', 'Riot'], ['mp_solar', 'Solar'], ['mp_terrace', 'Terrace'],
+    ],
+  },
+  iw6x: {
+    wikiGame: 'Ghosts',
+    label: 'Ghosts (IW6x)',
+    short: 'IW6x',
+    namePrefix: 'IW6x Server',
+    port: 27016,
+    platforms: ['win32'],
+    botRepo: null,
+    weaponXp: false,
+    gameHint: 'Your Call of Duty: Ghosts folder with the AlterWare client installed (contains iw6-mod.exe)',
+    exes: ['iw6-mod.exe', 'iw6x.exe'],
+    gametypes: [['dom', 'Domination'], ['war', 'Team Deathmatch'], ['dm', 'Free-for-all'], ['conf', 'Kill Confirmed'], ['sd', 'Search & Destroy'], ['sr', 'Search & Rescue'], ['blitz', 'Blitz'], ['cranked', 'Cranked'], ['grind', 'Grind'], ['infect', 'Infected']],
+    maps: [
+      ['mp_chasm', 'Chasm'], ['mp_flooded', 'Flooded'], ['mp_frag', 'Freight'], ['mp_dart', 'Octane'], ['mp_zebra', 'Overlord'], ['mp_prisonbreak', 'Prison Break'],
+      ['mp_hashima', 'Siege'], ['mp_sovereign', 'Sovereign'], ['mp_skeleton', 'Stonehaven'], ['mp_fahrenheit', 'Stormfront'], ['mp_strikezone', 'Strikezone'],
+      ['mp_lonestar', 'Tremor'], ['mp_warhawk', 'Warhawk'], ['mp_snow', 'Whiteout'],
+    ],
+  },
 };
+// Titles run from your game folder with the client's own executable (no extra downloads).
+const findExe = (t, dir) => (t.exes || []).map((e) => path.join(dir, e)).find((p) => fs.existsSync(p)) || null;
 
 // Match rules, written the way each game takes them:
 //  - BO2 (Plutonium T6): "gts" names from Plutonium's T6 server configs (storage/t6/gamesettings/*.cfg)
-//  - CoD4x, MW2 (IW4x), BO1 (Plutonium T5): the series' scr_ dvars (scr_<mode>_timelimit, ...)
+//  - CoD4x, MW2 (IW4x), BO1 (Plutonium T5), AW (S1x), Ghosts (IW6x): the series' scr_ dvars (scr_<mode>_timelimit, ...)
 //  - MW3 (Plutonium IW5) takes them from DSR files instead, so the panel doesn't offer them there.
 // `key` is what's stored; blank = the game mode's default; `always` = written even when blank.
-const RULES_KIND = { t6: 'gts', cod4x: 'scr', iw4x: 'scr', t5: 'scr' };
+const RULES_KIND = { t6: 'gts', cod4x: 'scr', iw4x: 'scr', t5: 'scr', s1x: 'scr', iw6x: 'scr' };
 const MATCH_RULES = [
   { key: 'hardcoreMode', scr: 'scr_hardcore', label: 'Hardcore', type: 'bool' },
   { key: 'friendlyfiretype', scr: 'scr_team_fftype', label: 'Friendly fire', type: 'select', options: [['0', 'Off'], ['1', 'On'], ['2', 'Reflect'], ['3', 'Shared']] },
@@ -264,14 +304,16 @@ function buildConfig(server) {
   lines.push(`set logfile "2"`, `set g_log "hp_${server.id}_games.log"`);
   if (!t.pluto) lines.push(`set sv_allowDownload "1"`);
   const b = c.bots || {};
-  lines.push(
-    '// Bots (Bot Warfare)',
-    `set bots_manage_add "0"`,
-    `set bots_manage_fill "${b.enabled ? Math.max(0, Number(b.fill) || 0) : 0}"`,
-    `set bots_manage_fill_kick "${b.kick !== false ? 1 : 0}"`,
-    `set bots_skill "${clean(b.skill ?? skillsFor(c.title).def)}"`
-  );
-  for (const f of botFieldsFor(c.title)) lines.push(`set ${f.dvar} "${dvarValue(f, b[f.key] ?? f.def)}"`);
+  if (t.botRepo) {
+    lines.push(
+      '// Bots (Bot Warfare)',
+      `set bots_manage_add "0"`,
+      `set bots_manage_fill "${b.enabled ? Math.max(0, Number(b.fill) || 0) : 0}"`,
+      `set bots_manage_fill_kick "${b.kick !== false ? 1 : 0}"`,
+      `set bots_skill "${clean(b.skill ?? skillsFor(c.title).def)}"`
+    );
+    for (const f of botFieldsFor(c.title)) lines.push(`set ${f.dvar} "${dvarValue(f, b[f.key] ?? f.def)}"`);
+  }
   if (RULES_KIND[c.title] === 'scr') lines.push(...scrRuleLines(c));
   if (c.extraConfig) lines.push('// Extra config lines from the panel', ...String(c.extraConfig).split(/\r?\n/));
   const gametype = c.gametype || 'dom';
@@ -348,7 +390,9 @@ function checkGameDir(server) {
   const t = title(server);
   if (!c.gameDir || !path.isAbsolute(c.gameDir)) throw new HttpError(400, `Set the game folder for ${t.label} (e.g. ${t.gameHint})`);
   if (!fs.existsSync(c.gameDir)) throw new HttpError(400, `Game folder not found: ${c.gameDir}`);
-  if (!fs.existsSync(path.join(c.gameDir, t.marker))) {
+  if (t.exes) {
+    if (!findExe(t, c.gameDir)) throw new HttpError(400, `${c.gameDir} doesn't have the ${t.short} client (${t.exes.join(' or ')}). Install it into your game folder with the AlterWare launcher (alterware.dev) first.`);
+  } else if (!fs.existsSync(path.join(c.gameDir, t.marker))) {
     throw new HttpError(400, `${c.gameDir} doesn't look like a ${t.label} install (no "${t.marker}" inside).${server.cod.title === 'iw4x' ? ' Install IW4x into your MW2 folder first (iw4x.exe must be there).' : ''}`);
   }
 }
@@ -430,7 +474,7 @@ const cod = {
       xpScale: Number(c.xpScale) || 4,
       weaponXpScale: Number(c.weaponXpScale) || 4,
       bots: {
-        enabled: b.enabled !== false,
+        enabled: !!t.botRepo && b.enabled !== false,
         fill: Number(b.fill ?? 12) || 0,
         skill: skillsFor(key).options.some((o) => o[0] === String(b.skill)) ? String(b.skill) : skillsFor(key).def,
         kick: b.kick !== false,
@@ -460,9 +504,9 @@ const cod = {
     } else if (t.pluto) {
       await tools.updatePlutonium(log);
     } else {
-      log.info(`Using IW4x from ${server.cod.gameDir}`);
+      log.info(`Using ${t.short} from ${server.cod.gameDir}`);
     }
-    if (server.cod.bots.enabled || opts.reinstallBots) {
+    if (t.botRepo && (server.cod.bots.enabled || opts.reinstallBots)) {
       try {
         server.cod.botsVersion = await tools.installBotWarfare({ repo: t.botRepo, title: server.cod.title, modBase: botsBase(server), storage: t.storage }, log);
       } catch (err) {
@@ -495,6 +539,16 @@ const cod = {
         command: path.join(c.gameDir, 'iw4x.exe'),
         args: ['-dedicated', '-stdout', '+set', 'net_port', port, ...fsGame, '+exec', cfgName(server), '+map_rotate'],
         cwd: c.gameDir,
+      };
+    }
+    if (t.exes) {
+      // The game's console log (logfile 2 in the generated config) is followed, since these clients
+      // print to their own console window.
+      return {
+        command: findExe(t, c.gameDir),
+        args: ['-dedicated', '+set', 'net_port', port, '+exec', cfgName(server), '+map_rotate'],
+        cwd: c.gameDir,
+        logFile: [path.join(c.gameDir, 'main', 'console_mp.log'), path.join(c.gameDir, 'players2', 'console_mp.log'), path.join(c.gameDir, 'console_mp.log')],
       };
     }
     if (!fs.existsSync(tools.plutoBootstrapper())) throw new HttpError(400, 'Plutonium is not installed yet. Install it from plutonium.pw, or use Reinstall in Settings.');
@@ -587,7 +641,7 @@ const cod = {
           ...(t.weaponXp ? [{ key: 'cod.weaponXpScale', label: 'Weapon XP multiplier', type: 'number', step: 1 }] : []),
         ],
       },
-      {
+      ...(t.botRepo ? [{
         title: 'Bots',
         fields: [
           { key: 'cod.bots.enabled', label: 'Fill the server with bots', type: 'bool' },
@@ -596,7 +650,7 @@ const cod = {
           { key: 'cod.bots.kick', label: 'Remove a bot when a real player joins', type: 'bool' },
           ...botFieldsFor(server.cod.title).map((f) => schemaField('cod.bots.' + f.key, f)),
         ],
-      },
+      }] : []),
       {
         title: 'Advanced',
         fields: [
@@ -652,7 +706,7 @@ const cod = {
     }
     if ('cod.xpScale' in v) c.xpScale = num(v['cod.xpScale'], 1, 100, 1);
     if ('cod.weaponXpScale' in v) c.weaponXpScale = num(v['cod.weaponXpScale'], 1, 100, 1);
-    if ('cod.bots.enabled' in v) c.bots.enabled = !!v['cod.bots.enabled'];
+    if ('cod.bots.enabled' in v) c.bots.enabled = !!t.botRepo && !!v['cod.bots.enabled'];
     if ('cod.bots.fill' in v) c.bots.fill = num(v['cod.bots.fill'], 0, 64, 12);
     if ('cod.bots.skill' in v && skillsFor(c.title).options.some((o) => o[0] === String(v['cod.bots.skill']))) c.bots.skill = String(v['cod.bots.skill']);
     if ('cod.bots.kick' in v) c.bots.kick = !!v['cod.bots.kick'];

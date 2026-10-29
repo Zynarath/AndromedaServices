@@ -1,11 +1,13 @@
 import { api } from '../../api.js';
-import { html, $, on, icon, toast, fmtBytes, confirmBox, fmtDate } from '../../ui.js';
+import { html, $, on, icon, toast, fmtBytes, confirmBox, fmtDate, modal } from '../../ui.js';
 import { pickCurseForge } from '../cfpicker.js';
 
 export async function render(root, ctx) {
   const { server } = ctx;
   if (server.ark) return renderArk(root, ctx);
   if (server.cod) return renderCod(root, ctx);
+  if (server.sf) return renderSatisfactory(root, ctx);
+  if (server.sdtd) return renderSdtd(root, ctx);
   return renderMc(root, ctx);
 }
 
@@ -219,18 +221,18 @@ async function renderArk(root, { server, navigate }) {
 // ---------- Call of Duty ----------
 async function renderCod(root, { server, navigate }) {
   const c = server.cod;
-  const engine = c.title === 'cod4x' ? 'CoD4x server files' : c.pluto ? 'Plutonium' : 'IW4x';
+  const engine = c.title === 'cod4x' ? 'CoD4x server files' : c.pluto ? 'Plutonium' : c.engine || 'IW4x';
   root.innerHTML = html`
-    <div class="panel">
+    ${c.botsAvailable === false ? '' : html`<div class="panel">
       <h3>Bots</h3>
       <p>${c.botsVersion ? html`<span class="pill pill-ok">${icon('check')}Bot Warfare ${c.botsVersion}</span>` : html`<span class="pill pill-warn">not installed</span>`}
         ${c.bots.enabled ? html` · fills to ${c.bots.fill} players` : ' · bots are off in Settings'}</p>
       <p class="muted small">Bots come from the Bot Warfare mod (by ineedbots). ${c.pluto ? 'It is loaded from Plutonium\'s storage folder, so players don\'t need to download anything.' : 'It runs as a server-only mod (mods/mp_bots/z_svr_bots.iwd), so players don\'t need to download anything.'}</p>
       <button class="btn" data-cod-update="bots">${icon('download')}${c.botsVersion ? 'Update' : 'Install'} Bot Warfare</button>
-    </div>
+    </div>`}
     <div class="panel">
       <h3>${engine}</h3>
-      <p class="muted small">${c.title === 'iw4x' ? 'IW4x is updated by its own launcher on your PC; this re-checks the game folder and rewrites the config.' : `Downloads the latest ${engine} and rewrites the config. The server is stopped first and started again if it was running.`}</p>
+      <p class="muted small">${c.title === 'iw4x' || c.engine ? `${engine} is updated by its own launcher on your PC; this re-checks the game folder and rewrites the config.` : `Downloads the latest ${engine} and rewrites the config. The server is stopped first and started again if it was running.`}</p>
       <button class="btn btn-primary" data-cod-update="engine">${icon('refresh')}Update ${engine}</button>
     </div>`.s;
   on(root, 'click', '[data-cod-update]', async () => {
@@ -242,4 +244,225 @@ async function renderCod(root, { server, navigate }) {
       toast(err.message, 'error');
     }
   });
+}
+
+// ---------- Satisfactory (ficsit.app) ----------
+const fmtNum = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'K' : String(n || 0));
+const modLogo = (m) => (m.logo ? html`<img src="${m.logo}" alt="" loading="lazy">` : html`<span class="cf-noimg">${icon('box')}</span>`);
+
+async function renderSatisfactory(root, { server, navigate }) {
+  let state = null;
+  const draw = async () => {
+    state = await api.get(`/api/servers/${server.id}/sf-mods`);
+    const { mods, deps, dirty, gameBuild, remote, running, target } = state;
+    root.innerHTML = html`
+      <div class="panel">
+        <div class="panel-head"><h3>Mods <span class="count">${mods.length}</span></h3>
+          <div class="btn-row">
+            <button class="btn btn-sm" id="sf-browse" ${target ? '' : 'disabled'}>${icon('search')}Browse ficsit.app</button>
+            <button class="btn btn-sm btn-primary" id="sf-sync" ${running ? 'disabled title="Stop the server first, or just restart it"' : ''}>${icon('download')}Install / update now</button>
+          </div></div>
+        <p class="muted small">Mods come from <a href="https://ficsit.app" target="_blank" rel="noopener">ficsit.app</a>. The panel picks versions that work together${gameBuild ? html` and with this game build (<code>${gameBuild}</code>)` : ''}, adds what they need (like the mod loader, SML) and installs the dedicated-server build of each.
+          ${dirty ? html`<strong>Changes are installed on the next start</strong> (or now with the button above while the server is stopped).` : ''}</p>
+        ${mods.length
+          ? html`<ul class="mod-list unordered">${mods.map((m) => html`<li data-ref="${m.ref}">${modLogo(m)}
+              <div class="mod-text"><strong>${m.name}</strong><small>${m.summary}</small>
+                <small class="mono">${m.ref} · ${m.installed ? html`installed ${m.installed}` : html`<span class="pill pill-warn">not installed yet</span>`} · <a href="${m.url}" target="_blank" rel="noopener">page</a></small></div>
+              <div class="btn-row"><button class="icon-btn" data-sf-remove title="Remove">${icon('trash')}</button></div></li>`)}</ul>`
+          : html`<p class="muted">No mods yet. Browse ficsit.app to add some.</p>`}
+        ${deps.length
+          ? html`<h4>Installed because other mods need them</h4>
+            <ul class="mod-list unordered compact">${deps.map((m) => html`<li>${modLogo(m)}<div class="mod-text"><strong>${m.name}</strong><small class="mono">${m.ref} · ${m.installed}</small></div></li>`)}</ul>`
+          : ''}
+      </div>
+      ${remote.length
+        ? html`<div class="panel">
+            <h3>Players need these too</h3>
+            <p class="muted small">These mods run on both sides, so everyone who joins installs them with the <a href="https://ficsit.app/satisfactory-mod-manager" target="_blank" rel="noopener">Satisfactory Mod Manager</a> (same versions):</p>
+            <ul class="chips">${remote.map((r) => html`<li class="chip">${r.name} ${r.version}</li>`)}</ul>
+          </div>`
+        : ''}
+      <div class="panel">
+        <h3>Game updates</h3>
+        <p class="muted small">Updates the Satisfactory dedicated server through SteamCMD, then brings mods up to versions that support the new build. The server is stopped, backed up and started again if it was running.</p>
+        <div class="btn-row"><button class="btn btn-primary" data-sf-update="0">${icon('download')}Update server</button><button class="btn" data-sf-update="1">${icon('check')}Update &amp; validate files</button></div>
+      </div>`.s;
+  };
+
+  on(root, 'click', '#sf-browse', async () => {
+    const picked = await pickFicsit(server, new Set(state.mods.map((m) => m.ref)));
+    if (!picked) return;
+    for (const m of picked) {
+      try {
+        await api.post(`/api/servers/${server.id}/sf-mods`, { ref: m.ref });
+        toast(`Added ${m.name}`, 'ok');
+      } catch (err) {
+        toast(`${m.name}: ${err.message}`, 'error', 8000);
+      }
+    }
+    draw();
+  });
+  on(root, 'click', '[data-sf-remove]', async (_e, el) => {
+    const ref = el.closest('[data-ref]').dataset.ref;
+    if (!(await confirmBox('Remove mod?', `Remove ${ref}? It's uninstalled on the next start, along with dependencies nothing else needs.`, { danger: true, confirm: 'Remove' }))) return;
+    try {
+      await api.del(`/api/servers/${server.id}/sf-mods/${encodeURIComponent(ref)}`);
+      draw();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  on(root, 'click', '#sf-sync', async () => {
+    try {
+      await api.post(`/api/servers/${server.id}/sf-mods/sync`);
+      toast('Installing mods', 'ok');
+      navigate(`/server/${server.id}/overview`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  on(root, 'click', '[data-sf-update]', async (_e, el) => {
+    try {
+      await api.post(`/api/servers/${server.id}/update`, { validate: el.dataset.sfUpdate === '1' });
+      toast('Update started', 'ok');
+      navigate(`/server/${server.id}/overview`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  await draw();
+}
+
+// Search ficsit.app in a modal. Resolves to the picked mods, or null.
+function pickFicsit(server, have) {
+  const picked = new Map();
+  return modal({
+    title: 'Add Satisfactory mods',
+    wide: true,
+    body: html`<form class="cf-search" id="fx-form"><input name="q" placeholder="Search ficsit.app…" autocomplete="off"><button class="btn">${icon('search')}Search</button></form>
+      <div id="fx-results" class="cf-results"><div class="loading">Loading popular mods…</div></div>`,
+    actions: [{ label: 'Cancel', value: null }, { label: 'Add selected', kind: 'btn-primary', onClick: () => [...picked.values()] }],
+    onOpen: (wrap) => {
+      const results = $('#fx-results', wrap);
+      let items = [];
+      const search = async (q = '') => {
+        results.innerHTML = '<div class="loading">Searching…</div>';
+        try {
+          items = (await api.get(`/api/servers/${server.id}/sf-mods/search?q=${encodeURIComponent(q)}`)).mods;
+          results.innerHTML = items.length
+            ? items
+                .map(
+                  (m) => html`<button type="button" class="cf-item ${picked.has(m.ref) ? 'selected' : ''}" data-ref="${m.ref}" ${have.has(m.ref) ? 'disabled' : ''}>
+                    ${modLogo(m)}
+                    <span class="cf-text"><strong>${m.name}</strong><small>${m.summary}</small>
+                      <span class="cf-meta">${icon('download')}${fmtNum(m.downloads)} · ${m.ref}${have.has(m.ref) ? ' · already added' : ''}</span></span>
+                    <span class="cf-check">${icon('check')}</span>
+                  </button>`.s
+                )
+                .join('')
+            : '<div class="empty-mini">No results</div>';
+        } catch (err) {
+          results.innerHTML = html`<div class="form-error">${err.message}</div>`.s;
+        }
+      };
+      $('#fx-form', wrap).onsubmit = (e) => {
+        e.preventDefault();
+        search(e.target.q.value.trim());
+      };
+      on(results, 'click', '[data-ref]', (_e, el) => {
+        const m = items.find((x) => x.ref === el.dataset.ref);
+        if (!m) return;
+        if (picked.has(m.ref)) picked.delete(m.ref);
+        else picked.set(m.ref, m);
+        el.classList.toggle('selected');
+      });
+      search();
+    },
+  }).then((r) => (Array.isArray(r) && r.length ? r : null));
+}
+
+// ---------- 7 Days to Die ----------
+async function renderSdtd(root, { server, navigate }) {
+  const draw = async () => {
+    const { mods, eac, running } = await api.get(`/api/servers/${server.id}/sdtd-mods`);
+    const codeMods = mods.filter((m) => m.enabled && m.code && !m.builtin);
+    root.innerHTML = html`
+      ${codeMods.length && eac
+        ? html`<div class="callout callout-warn">${icon('alert')}<div><strong>Easy Anti-Cheat is on, but ${codeMods.map((m) => m.name).join(', ')} ${codeMods.length === 1 ? 'has' : 'have'} its own code (.dll).</strong>
+            Code mods only load with EAC off: turn it off in <a href="#/server/${server.id}/settings">Settings → Advanced</a>. Players then start the game without EAC too.</div></div>`
+        : ''}
+      <div class="panel">
+        <div class="panel-head"><h3>Mods <span class="count">${mods.filter((m) => !m.builtin).length}</span></h3>
+          <div class="btn-row"><label class="btn btn-sm btn-primary">${icon('upload')}Install from .zip<input type="file" id="sdtd-zip" accept=".zip,application/zip" hidden></label>
+            <a class="btn btn-sm btn-ghost" href="https://www.nexusmods.com/7daystodie" target="_blank" rel="noopener">${icon('external')}Find mods</a></div></div>
+        <p class="muted small">Download a mod's <strong>.zip</strong> (from Nexus Mods, 7daystodiemods.com, GitHub…) and install it here — the panel finds the mod folders (with a ModInfo.xml) inside and puts them in <code>Mods</code>, replacing older copies.
+          Server-side mods (XML only) work for everyone right away; mods with new models, sounds or UI also need to be installed by each player. ${running ? html`<strong>Restart the server to apply changes.</strong>` : ''}</p>
+        <div id="sdtd-progress"></div>
+        ${mods.length
+          ? html`<table class="table"><thead><tr><th>Mod</th><th>Version</th><th class="right">Enabled</th><th></th></tr></thead><tbody>
+            ${mods.map((m) => html`<tr data-folder="${m.folder}">
+              <td><strong>${m.name}</strong>${m.builtin ? html` <span class="pill">built in</span>` : ''}${m.code ? html` <span class="pill pill-warn" title="Contains .dll files: needs EAC off">code</span>` : ''}${!m.valid ? html` <span class="pill pill-bad" title="No ModInfo.xml: the game ignores this folder">no ModInfo.xml</span>` : ''}
+                <div class="muted small">${m.author ? 'by ' + m.author + ' · ' : ''}<span class="mono">${m.folder}</span>${m.website ? html` · <a href="${m.website}" target="_blank" rel="noopener">page</a>` : ''}</div>
+                ${m.description ? html`<div class="muted small">${m.description}</div>` : ''}</td>
+              <td>${m.version || '—'}</td>
+              <td class="right">${m.builtin ? html`<span class="muted small">always</span>` : html`<label class="switch"><input type="checkbox" data-sdtd-toggle ${m.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label>`}</td>
+              <td class="right">${m.builtin ? '' : html`<button class="icon-btn" data-sdtd-del title="Delete">${icon('trash')}</button>`}</td></tr>`)}
+            </tbody></table>`
+          : html`<p class="muted">No mods yet.</p>`}
+      </div>
+      <div class="panel">
+        <h3>Game updates</h3>
+        <p class="muted small">Updates the 7 Days to Die server through SteamCMD (pick stable or experimental in Settings → Advanced). The server is stopped, backed up and started again if it was running. Mods may need updating after a new game version.</p>
+        <div class="btn-row"><button class="btn btn-primary" data-sdtd-update="0">${icon('download')}Update server</button><button class="btn" data-sdtd-update="1">${icon('check')}Update &amp; validate files</button></div>
+      </div>`.s;
+    $('#sdtd-zip').onchange = async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const box = $('#sdtd-progress');
+      box.innerHTML = html`<div class="mini-job"><div class="bar"><span style="width:2%"></span></div><small>Uploading ${file.name}…</small></div>`.s;
+      try {
+        const r = await api.upload(`/api/servers/${server.id}/sdtd-mods/upload`, file, (p) => {
+          const bar = box.querySelector('.bar span');
+          if (bar) bar.style.width = `${Math.round(p * 100)}%`;
+          if (p >= 1) box.querySelector('small').textContent = 'Installing…';
+        });
+        toast(`Installed ${r.installed.join(', ')}${r.restartRequired ? ' — restart to apply' : ''}`, 'ok', 6000);
+        draw();
+      } catch (err) {
+        box.innerHTML = '';
+        toast(err.message, 'error', 8000);
+      }
+    };
+  };
+  on(root, 'change', '[data-sdtd-toggle]', async (_e, el) => {
+    const folder = el.closest('tr').dataset.folder;
+    try {
+      await api.patch(`/api/servers/${server.id}/sdtd-mods/${encodeURIComponent(folder)}`, { enabled: el.checked });
+      draw();
+    } catch (err) {
+      toast(err.message, 'error');
+      el.checked = !el.checked;
+    }
+  });
+  on(root, 'click', '[data-sdtd-del]', async (_e, el) => {
+    const folder = el.closest('tr').dataset.folder;
+    if (!(await confirmBox('Delete mod?', `Delete the ${folder} folder from the server?`, { danger: true, confirm: 'Delete' }))) return;
+    try {
+      await api.del(`/api/servers/${server.id}/sdtd-mods/${encodeURIComponent(folder)}`);
+      draw();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  on(root, 'click', '[data-sdtd-update]', async (_e, el) => {
+    try {
+      await api.post(`/api/servers/${server.id}/update`, { validate: el.dataset.sdtdUpdate === '1' });
+      toast('Update started', 'ok');
+      navigate(`/server/${server.id}/overview`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  await draw();
 }

@@ -108,6 +108,20 @@ class Manager extends EventEmitter {
   async suggestPorts(game, codTitle) {
     const used = this.usedPorts();
     if (game === 'minecraft') return { port: await this.freePort(25565, 1, 'tcp', used) };
+    if (game === 'satisfactory') {
+      const port = await this.freePort(7777, 1, 'udp', used);
+      used.add(port);
+      return { port, reliablePort: await this.freePort(8888, 1, 'tcp', used) };
+    }
+    if (game === 'sdtd') {
+      // Each server takes three ports in a row, and a telnet port.
+      let port = 26900;
+      while ([0, 1, 2].some((i) => used.has(port + i))) port += 10;
+      port = await this.freePort(port, 10, 'udp', used);
+      [0, 1, 2].forEach((i) => used.add(port + i));
+      return { port, telnetPort: await this.freePort(8081, 1, 'tcp', used) };
+    }
+    if (game === 'valheim') return { port: await this.freePort(2456, 10, 'udp', used) };
     if (game === 'cod') {
       const t = games.cod.TITLES[codTitle] || games.cod.TITLES.iw4x;
       return { port: await this.freePort(t.port, 1, 'udp', used) };

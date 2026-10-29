@@ -319,6 +319,7 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 .cf-item { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; font: inherit; }
 .cf-item:hover { border-color: var(--border-strong); background: var(--surface-3); }
 .cf-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+.cf-item:disabled { opacity: 0.5; cursor: default; }
 .cf-item img, .cf-noimg { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex: none; display: flex; align-items: center; justify-content: center; background: var(--surface-3); }
 .cf-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cf-text small { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -387,6 +388,10 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 .mod-list li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); counter-increment: mods; }
 .mod-list li::before { content: counter(mods); color: var(--muted); font-weight: 600; width: 18px; text-align: right; }
 .mod-list img, .mod-list .cf-noimg { width: 36px; height: 36px; border-radius: 6px; }
+.mod-list.unordered li::before { content: none; }
+.mod-list.compact li { padding: 6px 10px; }
+.mod-list.compact img, .mod-list.compact .cf-noimg { width: 28px; height: 28px; }
+ul.chips { list-style: none; padding: 0; margin: 8px 0 0; }
 .mod-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .danger-zone { border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
 .danger-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid var(--border); }
@@ -471,6 +476,10 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 
 /* WoW */
 .art-wow { background: radial-gradient(circle at 70% 25%, #6fc3ff 0, transparent 50%), linear-gradient(135deg, #0b1d3a, #2a4f7a 55%, #8fd0ff); }
+.art-satisfactory { background: radial-gradient(circle at 72% 25%, #f9a43a 0, transparent 52%), linear-gradient(135deg, #1d2430, #5b4426 60%, #e08a2c); }
+.art-sdtd { background: radial-gradient(circle at 70% 30%, #b8432f 0, transparent 50%), linear-gradient(135deg, #16120f, #3d2a1e 60%, #7a2c1c); }
+.art-valheim { background: radial-gradient(circle at 70% 25%, #8fd3c7 0, transparent 50%), linear-gradient(135deg, #0f1d22, #26414a 55%, #5f8a83); }
+.art-mono-long { font-size: 24px; letter-spacing: 0.04em; }
 .checklist { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
 .checklist li.ok { color: var(--ok); }
 .checklist li.bad { color: var(--bad); }

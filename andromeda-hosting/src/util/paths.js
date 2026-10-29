@@ -74,4 +74,13 @@ function findFiles(root, predicate, maxDepth = 8) {
   return out;
 }
 
-module.exports = { safeResolve, relTo, dirSize, findFiles };
+// Files a non-admin must not create or overwrite: native executables, scripts, and launch-argument
+// files that the panel or the OS could later run as the host account.
+// (.jar stays allowed because mods are .jar; that is the mods workflow, gated by its own permission.)
+const BLOCKED_EXT = /\.(exe|dll|so|dylib|bat|cmd|com|scr|msi|ps1|psm1|vbs|vbe|wsf|jse|hta|cpl|sh|bash)$/i;
+const BLOCKED_NAME = /^user_jvm_args\.txt$/i;
+function blockedForNonAdmin(name) {
+  return BLOCKED_EXT.test(name) || BLOCKED_NAME.test(name);
+}
+
+module.exports = { safeResolve, relTo, dirSize, findFiles, blockedForNonAdmin };

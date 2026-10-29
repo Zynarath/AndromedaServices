@@ -55,14 +55,15 @@ function server(title, extra = {}) {
   return s;
 }
 
-test('every title defaults to Domination, all base maps shuffled, 4x XP and bots', () => {
+test('every title defaults to Domination, all base maps shuffled, 4x XP, and bots where Bot Warfare exists', () => {
   for (const [key, t] of Object.entries(cod.TITLES)) {
     const s = server(key);
     const cfg = cod.buildConfig(s);
     assert.match(cfg, /set g_gametype "dom"/, key);
     assert.match(cfg, /set scr_xpscale "4"/, key);
     assert.equal(/scr_weaponxpscale "4"/.test(cfg), t.weaponXp, `${key} weapon XP only where the game has it`);
-    assert.match(cfg, /set bots_manage_fill "12"/, key);
+    if (t.botRepo) assert.match(cfg, /set bots_manage_fill "12"/, key);
+    else assert.doesNotMatch(cfg, /bots_/, `${key} has no Bot Warfare, so no bot settings`);
     assert.match(cfg, /set g_password "rex-1234"/, key);
     const rot = /set sv_mapRotation "([^"]+)"/.exec(cfg)[1];
     const maps = [...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]);
@@ -76,6 +77,8 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP and bots
   assert.equal(cod.TITLES.iw5.maps.length, 16);
   assert.equal(cod.TITLES.t5.maps.length, 14);
   assert.equal(cod.TITLES.t6.maps.filter((m) => !m[2]).length, 14);
+  assert.equal(cod.TITLES.iw6x.maps.length, 14);
+  assert.equal(cod.TITLES.s1x.maps.length, 12);
 });
 
 test('rotation is reshuffled on each config write', () => {
@@ -330,4 +333,27 @@ test('CoD4x, MW2 and BO1 get match rules as scr_ dvars; every game gets its own 
   assert.match(cfg, /set bots_manage_fill_mode "4"/);
   assert.match(cfg, /set bots_team_force "1"/);
   assert.doesNotMatch(cod.buildConfig(server('cod4x')), /bots_loadout_prestige/);
+});
+
+test('S1x and IW6x run the AlterWare client from the game folder, without bots', async () => {
+  for (const [key, exes] of [['s1x', ['s1-mod.exe', 's1x.exe']], ['iw6x', ['iw6-mod.exe', 'iw6x.exe']]]) {
+    const s = server(key);
+    assert.equal(s.cod.bots.enabled, false, `${key} has no Bot Warfare`);
+    fs.mkdirSync(s.cod.gameDir, { recursive: true });
+    await assert.rejects(cod.buildLaunch(s), /AlterWare/, `${key} without the client explains what's missing`);
+    // Older XLabs builds are found too.
+    fs.writeFileSync(path.join(s.cod.gameDir, exes[1]), '');
+    let l = await cod.buildLaunch(s);
+    assert.equal(path.basename(l.command), exes[1]);
+    fs.writeFileSync(path.join(s.cod.gameDir, exes[0]), '');
+    l = await cod.buildLaunch(s);
+    assert.equal(path.basename(l.command), exes[0], 'the AlterWare name wins');
+    assert.deepEqual(l.args, ['-dedicated', '+set', 'net_port', String(s.cod.port), '+exec', 'hp_abc123.cfg', '+map_rotate']);
+    assert.ok(fs.existsSync(path.join(s.cod.gameDir, 'main', 'hp_abc123.cfg')));
+    assert.ok(Array.isArray(l.logFile));
+    // No bot settings in the schema, and turning bots on is ignored.
+    assert.ok(!cod.settingsSchema(s).sections.some((x) => x.title === 'Bots'));
+    cod.writeSettings(s, { 'cod.bots.enabled': true });
+    assert.equal(s.cod.bots.enabled, false);
+  }
 });

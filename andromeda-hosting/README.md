@@ -13,6 +13,10 @@ There are no monthly hosting fees; your only cost is electricity.
 | **Minecraft — CurseForge modpack** | Search CurseForge, pick a version, one-click install. Uses the pack's official server files when available, otherwise builds the server from the manifest. One-click **update / downgrade** with automatic backup that keeps worlds, `server.properties`, ops and whitelist |
 | **Minecraft — Vanilla / Fabric / Forge / NeoForge** | Any version + loader, add individual CurseForge mods, enable/disable mods, change versions later |
 | **Call of Duty: CoD4x, IW4x (MW2), Plutonium BO2 / BO1 / MW3** (Windows; CoD4x also Linux) | Multiplayer with bots (Bot Warfare), Domination with every base map shuffled, 4x player and weapon XP by default, RCON console, live player/bot counts. Uses your own game install. See [docs/call-of-duty.md](docs/call-of-duty.md) |
+| **Call of Duty: S1x (Advanced Warfare), IW6x (Ghosts)** (Windows) | AlterWare clients run from your own game folder (install them with the AlterWare launcher first). Domination with a shuffled rotation, 4x XP, match rules, RCON console. No Bot Warfare exists for these, so no bots |
+| **Satisfactory** (Windows/Linux) | SteamCMD install/update. On the first start the panel claims the server (sets the admin password, shown on the server page) and starts a new game; name, join password, autosave and pause options are applied through the server's API on every start, and stops save first. **Mods from ficsit.app**: search and add them in the Mods tab — the panel picks versions that fit each other and the game build, installs SML and dependencies, and lists the ones players need too |
+| **7 Days to Die** (Windows/Linux) | SteamCMD install/update (stable or experimental), 40+ settings written to the server config (world, difficulty, zombies, blood moons, loot, land claims), saves in the server's own folder, telnet console, player list and clean shutdown. **Mods**: install from a mod's .zip, switch mods on/off, warning when a code mod needs Easy Anti-Cheat off |
+| **Valheim** (Windows/Linux) | SteamCMD install/update, world name, password, crossplay, presets and world modifiers, admin / allow / ban lists, autosave interval; stops with Ctrl+C so the world is saved |
 | **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md) |
 | **ARK: Survival Evolved** (Windows/Linux) | SteamCMD install/update, Workshop mods via `-automanagedmods`, same settings form, RCON console and player list as ASA |
 
@@ -60,7 +64,7 @@ Eclipse Temurin). You don't need to install Java.
    - Run `scripts\open-firewall.ps1` as Administrator to open the Windows Firewall.
    - Run `scripts\install-autostart.ps1` to start the panel when you log in.
 
-You can also run it on Linux with `./start.sh` (Minecraft and ARK: SE; ARK: SA needs Windows).
+You can also run it on Linux with `./start.sh` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim; ARK: SA and most Call of Duty titles need Windows).
 
 ### Creating servers
 
@@ -71,6 +75,10 @@ server's Overview tab. When it's done, press **Start**.
 - *ARK mods*: **Mods** tab → *Browse CurseForge* or paste IDs → restart. ASA downloads and updates
   mods itself on every start, so a daily restart schedule keeps them current.
 - *ARK game update*: **Mods** tab → *Update server* (or add an "Update" schedule).
+- *Satisfactory mods*: **Mods** tab → *Browse ficsit.app* → add → restart (mods are installed on
+  start). Players install the same mods with the Satisfactory Mod Manager.
+- *7 Days to Die mods*: **Mods** tab → *Install from .zip*. Mods with their own code (.dll) need Easy
+  Anti-Cheat off (Settings → Advanced), and only an admin can install them.
 
 ---
 
