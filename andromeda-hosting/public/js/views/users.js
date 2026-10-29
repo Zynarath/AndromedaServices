@@ -16,6 +16,7 @@ export async function render(root, { state }) {
           <td>${u.totpEnabled ? html`<span class="pill pill-ok">On</span>` : html`<span class="muted">Off</span>`}</td>
           <td class="muted">${fmtAgo(u.lastLogin)}</td>
           <td class="right nowrap">
+            ${u.role !== 'admin' && !u.disabled && u.id !== state.user.id ? html`<button class="btn btn-sm btn-ghost" data-viewas title="See the panel exactly as ${u.username} does (read-only)">${icon('activity')}View as</button>` : ''}
             <button class="btn btn-sm btn-ghost" data-pw>${icon('key')}Password</button>
             ${u.totpEnabled ? html`<button class="btn btn-sm btn-ghost" data-reset2fa>Reset 2FA</button>` : ''}
             ${u.id !== state.user.id ? html`<button class="btn btn-sm btn-ghost" data-disable>${u.disabled ? 'Enable' : 'Disable'}</button><button class="icon-btn" data-del title="Delete">${icon('trash')}</button>` : ''}
@@ -51,6 +52,16 @@ export async function render(root, { state }) {
       actions: [{ label: 'Cancel', value: null }, { label: 'Set password', kind: 'btn-primary', onClick: (w) => api.patch(`/api/users/${id(el)}`, { password: w.querySelector('#npw').value }) }],
     });
     if (r) toast('Password changed', 'ok');
+  });
+  on(root, 'click', '[data-viewas]', async (_e, el) => {
+    try {
+      await api.post(`/api/users/${id(el)}/view-as`);
+      // A full reload so every page and the live connection switch to their view.
+      location.hash = '#/';
+      location.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   });
   on(root, 'click', '[data-reset2fa]', async (_e, el) => {
     if (await confirmBox('Reset 2FA?', 'They will be able to sign in with just their password and can set up 2FA again.')) api.patch(`/api/users/${id(el)}`, { resetTotp: true }).then(draw, (e) => toast(e.message, 'error'));

@@ -90,7 +90,20 @@ function sessionFromRequest(req) {
     session.lastSeen = Date.now();
     db.save();
   }
+  // An admin viewing the panel as someone else: requests run as that user (realUser is the admin).
+  if (session.viewAs) {
+    const target = user.role === 'admin' ? viewableUser(session.viewAs, user) : null;
+    if (target) return { session, user: target, realUser: user };
+    delete session.viewAs; // the admin lost admin rights, or the user is gone / disabled / an admin now
+    db.save();
+  }
   return { session, user };
+}
+
+// Who an admin may view the panel as: an enabled, non-admin user other than themselves.
+function viewableUser(id, admin) {
+  const u = db.data.users.find((x) => x.id === id);
+  return u && !u.disabled && u.role !== 'admin' && u.id !== admin.id ? u : null;
 }
 
 function setSessionCookie(req, res, token) {
@@ -113,6 +126,11 @@ function requireAuth(req, _res, next) {
   if (!s) return next(new HttpError(401, 'Please sign in'));
   req.user = s.user;
   req.session = s.session;
+  req.realUser = s.realUser || null;
+  // Viewing as someone is look-only: nothing can be changed in their name.
+  if (s.realUser && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next(new HttpError(403, `You're viewing the panel as ${s.user.username} (read-only). Stop viewing to make changes.`));
+  }
   next();
 }
 
@@ -187,5 +205,6 @@ module.exports = {
   recordFailure,
   clearFailures,
   publicUser,
+  viewableUser,
   sha,
 };

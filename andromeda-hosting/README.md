@@ -27,6 +27,8 @@ Eclipse Temurin). You don't need to install Java.
 
 - Accounts for you and your friends, each with their own password, optional **2FA**, and
   per-server permissions (start/stop, console, settings, files, mods, backups, schedules)
+- **View as a user** (admins): *Users & access → View as* shows the panel exactly as that friend
+  sees it — their servers, tabs and permissions — read-only, until you press *Stop viewing*
 - Dashboard with host CPU/RAM/disk and every server's status, players, CPU and RAM
 - Each server card shows the game's cover art (downloaded once from Steam or Wikipedia). Change it
   under **Settings → Cover picture** by uploading your own, or go back to the game's default

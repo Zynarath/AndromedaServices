@@ -79,6 +79,10 @@ function shell() {
         </div>
       </aside>
       <div class="main">
+        ${state.viewingAs
+          ? html`<div class="viewas-bar" role="status">${icon('activity')}<span>You're seeing the panel as <strong>${state.user.username}</strong> sees it — read-only. (Signed in as ${state.viewingAs.admin.username}.)</span>
+              <button class="btn btn-sm" id="stop-viewas">Stop viewing</button></div>`
+          : ''}
         <header class="topbar">
           <button class="icon-btn" id="menu-toggle" aria-label="Menu">${icon('menu')}</button>
           <span class="topbar-title">${state.panelName}</span>
@@ -92,6 +96,13 @@ function shell() {
     disconnectSocket();
     state.user = null;
     boot();
+  };
+  const stop = $('#stop-viewas');
+  if (stop) stop.onclick = async () => {
+    stop.disabled = true;
+    await api.post('/api/auth/view-as/stop').catch(() => {});
+    location.hash = '#/users';
+    location.reload();
   };
   $('#menu-toggle').onclick = () => $('#sidebar').classList.toggle('open');
   on($('#sidebar'), 'click', 'a', (_e, a) => {
@@ -180,6 +191,7 @@ async function boot() {
     return;
   }
   state.user = auth.user;
+  state.viewingAs = auth.viewingAs || null;
   shell();
   connectSocket();
   await refreshServers();

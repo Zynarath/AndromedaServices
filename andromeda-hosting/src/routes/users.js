@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
 const { HttpError } = require('../util/misc');
+const log = require('../util/log')('users');
 
 const router = express.Router();
 router.use('/users', auth.requireAuth, auth.requireAdmin);
@@ -29,6 +30,19 @@ function target(req) {
 }
 
 const otherAdmins = (u) => db.data.users.some((x) => x.id !== u.id && x.role === 'admin' && !x.disabled);
+
+// See the panel exactly as this user does (their servers, tabs and permissions), read-only, until
+// "Stop viewing" (POST /auth/view-as/stop). It only changes the admin's current browser session.
+router.post('/users/:id/view-as', (req, res) => {
+  const u = target(req);
+  if (u.id === req.user.id) throw new HttpError(400, "That's you");
+  if (u.role === 'admin') throw new HttpError(400, `${u.username} is an admin and sees the same as you`);
+  if (!auth.viewableUser(u.id, req.user)) throw new HttpError(400, `${u.username} is disabled`);
+  req.session.viewAs = u.id;
+  db.save();
+  log.info(`${req.user.username} is viewing the panel as ${u.username}`);
+  res.json({ ok: true, user: auth.publicUser(u) });
+});
 
 router.patch('/users/:id', (req, res) => {
   const u = target(req);

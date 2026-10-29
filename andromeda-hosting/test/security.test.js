@@ -128,3 +128,47 @@ test('cover pictures: only real images are accepted, and only from known hosts',
   assert.ok(!covers.allowedImageUrl('https://192.168.1.1/x.jpg'));
   assert.ok(!covers.allowedImageUrl('https://evil.example/steamstatic.com.jpg'));
 });
+
+test('admins can view the panel as a user: their permissions, read-only, and only while still admin', () => {
+  const db = require('../src/db');
+  const venya = auth.createUser({ username: 'Venya', password: 'password123', role: 'admin' });
+  const korrupted = auth.createUser({ username: 'Korrupted', password: 'password123' });
+  const other = auth.createUser({ username: 'OtherAdmin', password: 'password123', role: 'admin' });
+  const fakeReq = (token, method = 'GET') => ({ method, ip: '127.0.0.1', headers: { cookie: token ? `hp_session=${token}` : '', 'user-agent': 'test' } });
+  const token = auth.createSession(venya, fakeReq());
+  const session = db.data.sessions.find((s) => s.id === auth.sha(token));
+  const run = (method) => {
+    const req = fakeReq(token, method);
+    let err = null;
+    auth.requireAuth(req, {}, (e) => (err = e || null));
+    return { req, err };
+  };
+
+  assert.equal(auth.viewableUser(korrupted.id, venya), korrupted);
+  assert.equal(auth.viewableUser(other.id, venya), null, 'not other admins');
+  assert.equal(auth.viewableUser(venya.id, venya), null, 'not yourself');
+
+  session.viewAs = korrupted.id;
+  let r = run('GET');
+  assert.equal(r.err, null);
+  assert.equal(r.req.user, korrupted, 'requests run as Korrupted');
+  assert.equal(r.req.realUser, venya);
+  assert.ok(!auth.can(r.req.user, { access: {} }, 'view'), "so Venya only sees Korrupted's servers");
+  for (const m of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    r = run(m);
+    assert.equal(r.err && r.err.status, 403, `${m} is refused while viewing`);
+    assert.match(r.err.message, /viewing the panel as Korrupted/);
+  }
+
+  // Disabled user, or Venya no longer an admin: back to normal.
+  korrupted.disabled = true;
+  assert.equal(run('GET').req.user, venya);
+  assert.equal(session.viewAs, undefined);
+  korrupted.disabled = false;
+  session.viewAs = korrupted.id;
+  venya.role = 'user';
+  r = run('POST');
+  assert.equal(r.req.user, venya);
+  assert.equal(r.err, null);
+  assert.equal(session.viewAs, undefined);
+});

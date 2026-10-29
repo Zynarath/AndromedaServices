@@ -88,6 +88,9 @@ kbd { border: 1px solid var(--border-strong); border-bottom-width: 2px; padding:
 .me span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me small { color: var(--muted); margin-left: auto; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.viewas-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 16px; background: var(--accent-soft); border-bottom: 1px solid var(--accent); color: var(--text); font-size: 13.5px; position: sticky; top: 0; z-index: 25; }
+.viewas-bar > span { flex: 1; min-width: 200px; }
+.viewas-bar .ic { color: var(--accent); flex: none; }
 .topbar { display: none; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-2); position: sticky; top: 0; z-index: 20; }
 .topbar-title { font-weight: 700; }
 .socket-state { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--warn); color: #000; padding: 6px 14px; border-radius: 99px; font-weight: 600; font-size: 12px; z-index: 60; }

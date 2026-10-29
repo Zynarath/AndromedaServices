@@ -19,7 +19,19 @@ router.get('/auth/state', (req, res) => {
     setupRequired: db.data.users.length === 0,
     setupAllowedHere: isLoopback(req),
     user: s ? auth.publicUser(s.user) : null,
+    viewingAs: s && s.realUser ? { admin: auth.publicUser(s.realUser) } : null,
   });
+});
+
+// Back to the admin's own view (see POST /users/:id/view-as).
+router.post('/auth/view-as/stop', (req, res) => {
+  const s = auth.sessionFromRequest(req);
+  if (!s) throw new HttpError(401, 'Please sign in');
+  if (s.session.viewAs) {
+    delete s.session.viewAs;
+    db.save();
+  }
+  res.json({ ok: true });
 });
 
 // First admin account. Only allowed from the host PC itself so nobody on the internet can claim the panel.
