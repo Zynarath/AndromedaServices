@@ -168,6 +168,31 @@ async function get(server) {
   return hit ? hit.image : fetchDefault(key);
 }
 
+// The Create page's game cards: a template's default picture, by the same keys as servers.
+function templateKey(t) {
+  if (t.game === 'ark') return `ark-${t.edition}`;
+  if (t.game === 'cod') return `cod-${t.codTitle}`;
+  return isGame(t.game) ? t.game : null;
+}
+
+// The address of a game's default picture, or null when it couldn't be fetched recently. A picture
+// that isn't cached yet gets an address without a version; that request waits for the download.
+const isGame = (key) => Object.hasOwn(DEFAULTS, key);
+
+function defaultInfo(key) {
+  if (!isGame(key)) return null;
+  const hit = cachedDefault(key);
+  if (hit) return hit.image ? { url: `/api/covers/${key}?v=${hit.image.at}`, cached: true } : null;
+  fetchDefault(key);
+  return { url: `/api/covers/${key}`, cached: false };
+}
+
+async function getDefault(key) {
+  if (!isGame(key)) return null;
+  const hit = cachedDefault(key);
+  return hit ? hit.image : fetchDefault(key);
+}
+
 // Save an uploaded picture as this server's cover. Returns the new server.cover record.
 function setCustom(server, buf) {
   if (!buf || !buf.length) throw new HttpError(400, 'Choose a picture to upload');
@@ -190,4 +215,4 @@ function removeCustom(server) {
   delete server.cover;
 }
 
-module.exports = { info, get, setCustom, removeCustom, defaultKey, sniff, allowedImageUrl, DEFAULTS, MAX_UPLOAD };
+module.exports = { info, get, templateKey, defaultInfo, getDefault, setCustom, removeCustom, defaultKey, sniff, allowedImageUrl, DEFAULTS, MAX_UPLOAD };

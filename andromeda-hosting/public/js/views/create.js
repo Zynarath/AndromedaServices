@@ -23,7 +23,7 @@ export async function render(root, { navigate, refreshServers }) {
       <div class="tpl-grid">
         ${templates.map(
           (t) => html`<button class="tpl ${t.supported ? '' : 'tpl-disabled'}" data-tpl="${t.id}" ${t.supported ? '' : 'disabled'}>
-            <span class="tpl-art art-${ART[t.image]}"><span class="art-mono ${(LABEL[t.game] || '').length > 8 ? 'art-mono-long' : ''}">${t.game === 'cod' ? t.namePrefix.split(' ')[0] : LABEL[t.game]}</span></span>
+            <span class="tpl-art art-${ART[t.image]}">${t.cover ? html`<span class="art-cover" style="background-image:url('${t.cover}')"></span>` : ''}<span class="art-mono ${(LABEL[t.game] || '').length > 8 ? 'art-mono-long' : ''}">${t.game === 'cod' ? t.namePrefix.split(' ')[0] : LABEL[t.game]}</span></span>
             <span class="tpl-text"><strong>${t.title}</strong><small>${t.supported ? t.subtitle : `Not available on ${platform === 'win32' ? 'Windows' : platform} — needs Windows`}</small></span>
           </button>`
         )}

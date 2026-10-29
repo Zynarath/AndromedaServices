@@ -46,6 +46,10 @@ test('templates and game registry include the new games', () => {
   assert.equal(covers.defaultKey({ sdtd: {} }), 'sdtd');
   assert.equal(covers.defaultKey({ vh: {} }), 'valheim');
   for (const k of ['satisfactory', 'sdtd', 'valheim', 'cod-s1x', 'cod-iw6x']) assert.ok(covers.DEFAULTS[k], k);
+  // Every game card on the Create page has a default picture.
+  for (const t of templates) assert.ok(Object.hasOwn(covers.DEFAULTS, covers.templateKey(t) || ''), t.id);
+  assert.equal(covers.defaultInfo('constructor'), null, 'only real games');
+  assert.equal(covers.defaultInfo('../x'), null);
 });
 
 // ---------- ficsit.app ----------

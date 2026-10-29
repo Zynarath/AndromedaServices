@@ -286,8 +286,8 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 .server-art { position: relative; }
 .art-cover { position: absolute; inset: 0; background: center / cover no-repeat; transition: transform 0.3s; }
 .art-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 14, 20, 0.2), rgba(10, 14, 20, 0.6)); }
-.card-art:hover .art-cover { transform: scale(1.04); }
-.card-art > .art-mono, .card-art > img, .server-art > .art-mono, .server-art > img { position: relative; }
+.card-art:hover .art-cover, .tpl:hover:not(:disabled) .art-cover { transform: scale(1.04); }
+.card-art > .art-mono, .card-art > img, .server-art > .art-mono, .server-art > img, .tpl-art > .art-mono { position: relative; }
 .art-cover + .art-mono { color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75), 0 0 2px rgba(0, 0, 0, 0.6); }
 .cover-edit { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .cover-preview { width: 300px; max-width: 100%; border-radius: var(--radius-sm); flex: none; }
@@ -302,7 +302,7 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .tpl { display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; transition: border-color 0.15s, transform 0.15s; }
 .tpl:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); }
-.tpl-art { height: 110px; display: flex; align-items: center; justify-content: center; }
+.tpl-art { height: 110px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
 .tpl-text { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 4px; }
 .tpl-text small { color: var(--muted); }
 .tpl-disabled { opacity: 0.5; cursor: not-allowed; }

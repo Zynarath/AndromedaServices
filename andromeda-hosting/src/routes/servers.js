@@ -111,7 +111,24 @@ function view(inst, user, full = false) {
 }
 
 router.get('/templates', (_req, res) => {
-  res.json({ templates: templates.map((t) => ({ ...t, supported: t.platforms.includes(process.platform) })), curseforgeKey: cf.hasKey(), platform: process.platform });
+  res.json({
+    templates: templates.map((t) => {
+      const key = covers.templateKey(t);
+      const cover = key && covers.defaultInfo(key);
+      return { ...t, supported: t.platforms.includes(process.platform), cover: cover ? cover.url : null };
+    }),
+    curseforgeKey: cf.hasKey(),
+    platform: process.platform,
+  });
+});
+
+// A game's default cover picture, for the Create page (downloaded once, then cached).
+router.get('/covers/:key', async (req, res) => {
+  const img = await covers.getDefault(String(req.params.key));
+  if (!img) return res.status(404).set('Cache-Control', 'no-store').json({ error: 'No cover picture' });
+  // Versioned addresses never change; the plain one is re-checked now and then.
+  res.set('Cache-Control', req.query.v ? 'private, max-age=604800' : 'private, max-age=3600');
+  res.type(img.type).sendFile(img.file);
 });
 
 router.get('/servers', (req, res) => {
