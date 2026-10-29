@@ -267,6 +267,13 @@ const minecraft = {
   connectAddress(server, host) {
     return server.mc.port === 25565 ? host : `${host}:${server.mc.port}`;
   },
+  describe(server) {
+    const mc = server.mc;
+    if (mc.source === 'curseforge') return { game: mc.curseforge?.packName || 'CurseForge modpack', detail: `${mc.curseforge?.versionName || ''} · MC ${mc.mcVersion || '?'}` };
+    const loader = { vanilla: 'Vanilla', forge: 'Forge', neoforge: 'NeoForge', fabric: 'Fabric' }[mc.loader] || mc.loader;
+    return { game: `Minecraft ${mc.mcVersion || ''} · ${loader}${mc.loaderVersion ? ' ' + mc.loaderVersion : ''}`, detail: `${(mc.memoryMb / 1024).toFixed(1)} GB RAM` };
+  },
+
 
   prepareProperties(server) {
     const props = readProps(server);

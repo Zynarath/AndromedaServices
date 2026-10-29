@@ -1,32 +1,6 @@
 import { api, onSocket } from '../api.js';
 import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artInner, copyText } from '../ui.js';
 
-function gameLabel(s) {
-  if (s.ark) return s.ark.editionLabel;
-  if (s.cod) return s.cod.label;
-  if (s.wow) return 'WoW: Wrath of the Lich King';
-  if (s.sf) return 'Satisfactory';
-  if (s.sdtd) return '7 Days to Die';
-  if (s.vh) return 'Valheim';
-  if (s.mc) {
-    if (s.mc.source === 'curseforge') return s.mc.curseforge?.packName || 'CurseForge modpack';
-    const l = { vanilla: 'Vanilla', forge: 'Forge', neoforge: 'NeoForge', fabric: 'Fabric' }[s.mc.loader] || s.mc.loader;
-    return `Minecraft ${s.mc.mcVersion || ''} · ${l}`;
-  }
-  return s.game;
-}
-
-function subLabel(s) {
-  if (s.ark) return `${s.ark.map} · ${s.ark.mods.length} mod${s.ark.mods.length === 1 ? '' : 's'}`;
-  if (s.wow) return `Realm: ${s.wow.realmName}`;
-  if (s.sf) return `${s.sf.mods ? `${s.sf.mods} mod${s.sf.mods === 1 ? '' : 's'}` : 'No mods'} · ${s.sf.maxPlayers} players`;
-  if (s.sdtd) return `${s.sdtd.world} · ${s.sdtd.maxPlayers} players`;
-  if (s.vh) return `World: ${s.vh.worldName}${s.vh.crossplay ? ' · crossplay' : ''}`;
-  if (s.cod) return `${s.cod.gametypeLabel} · ${s.cod.maps} maps · ${s.cod.xpScale}x XP${s.cod.bots.enabled ? ' · bots' : ''}`;
-  if (s.mc && s.mc.source === 'curseforge') return `${s.mc.curseforge?.versionName || ''} · MC ${s.mc.mcVersion || '?'}`;
-  return `${(s.mc.memoryMb / 1024).toFixed(1)} GB RAM`;
-}
-
 function card(s) {
   const rt = s.runtime;
   const running = ['running', 'starting', 'stopping'].includes(rt.status);
@@ -41,8 +15,8 @@ function card(s) {
       </a>
       <div class="card-body">
         <a href="#/server/${s.id}" class="card-title">${s.name}</a>
-        <div class="card-sub">${gameLabel(s)}</div>
-        <div class="card-sub muted">${subLabel(s)}</div>
+        <div class="card-sub">${s.summary.game}</div>
+        <div class="card-sub muted">${s.summary.detail}</div>
         ${job
           ? html`<div class="mini-job"><div class="bar"><span style="width:${job.progress ?? 5}%"></span></div><small>${job.label}${job.progressLabel ? ' · ' + job.progressLabel : ''}</small></div>`
           : html`<dl class="card-stats">

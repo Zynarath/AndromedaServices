@@ -150,18 +150,8 @@ async function ensureChannel(server) {
 }
 
 function describe(server) {
-  if (server.ark) return games.ark.EDITIONS[server.ark.edition].label + ' · ' + server.ark.map;
-  if (server.wow) return `WoW: Wrath of the Lich King · realm ${server.wow.realmName || server.name}`;
-  if (server.cod) {
-    const t = games.cod.TITLES[server.cod.title];
-    return `${t.label} · ${(t.gametypes.find((g) => g[0] === server.cod.gametype) || [])[1] || server.cod.gametype}`;
-  }
-  if (server.sf) return `Satisfactory · ${server.sf.mods.length ? `${server.sf.mods.length} mod${server.sf.mods.length === 1 ? '' : 's'}` : 'no mods'}`;
-  if (server.sdtd) return `7 Days to Die · ${server.sdtd.gameWorld === 'RWG' ? 'random world' : server.sdtd.gameWorld}`;
-  if (server.vh) return `Valheim · world ${server.vh.worldName}`;
-  if (server.mc && server.mc.source === 'curseforge') return `${server.mc.curseforge?.packName || 'Modpack'} · Minecraft ${server.mc.mcVersion || ''}`;
-  if (server.mc) return `Minecraft ${server.mc.mcVersion || ''} ${server.mc.loader || ''}`;
-  return server.game;
+  const d = games[server.game].describe(server);
+  return `${d.game} · ${d.detail}`;
 }
 
 function address(server) {

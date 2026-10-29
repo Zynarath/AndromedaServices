@@ -364,6 +364,10 @@ const wow = {
   connectAddress(server, host) {
     return `set realmlist ${server.wow.address || host}`;
   },
+  describe(server) {
+    return { game: 'WoW: Wrath of the Lich King', detail: `Realm: ${server.wow.realmName || server.name}` };
+  },
+
 
   async install(server, log) {
     const d = detect(server.wow.root);

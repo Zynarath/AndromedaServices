@@ -24,18 +24,6 @@ const TABS = [
   { id: 'access', label: 'Access', icon: 'shield', perm: 'admin', mod: accessTab },
 ];
 
-export function gameLine(s) {
-  if (s.ark) return `${s.ark.editionLabel} · ${s.ark.map}`;
-  if (s.cod) return `${s.cod.label} · ${s.cod.gametypeLabel}`;
-  if (s.wow) return `WoW: Wrath of the Lich King · realm "${s.wow.realmName}"`;
-  if (s.sf) return `Satisfactory · ${s.sf.mods ? `${s.sf.mods} mod${s.sf.mods === 1 ? '' : 's'}` : 'no mods'}`;
-  if (s.sdtd) return `7 Days to Die · ${s.sdtd.world} · save "${s.sdtd.gameName}"`;
-  if (s.vh) return `Valheim · world "${s.vh.worldName}"${s.vh.crossplay ? ' · crossplay' : ''}`;
-  if (s.mc.source === 'curseforge') return `${s.mc.curseforge?.packName || 'Modpack'} ${s.mc.curseforge?.versionName ? '· ' + s.mc.curseforge.versionName : ''}`;
-  const l = { vanilla: 'Vanilla', forge: 'Forge', neoforge: 'NeoForge', fabric: 'Fabric' }[s.mc.loader] || s.mc.loader;
-  return `Minecraft ${s.mc.mcVersion || ''} · ${l} ${s.mc.loaderVersion || ''}`;
-}
-
 export async function render(root, ctx) {
   const [id, tabParam] = ctx.params;
   const { server: initial } = await api.get(`/api/servers/${id}`);
@@ -51,7 +39,7 @@ export async function render(root, ctx) {
       <div class="server-art art-${gameArt(s)}" id="server-art">${artInner(s, { short: true })}</div>
       <div class="server-title">
         <h1>${s.name}</h1>
-        <div class="server-meta"><span id="status-pill">${statusPill(s.runtime.status)}</span><span class="muted">${gameLine(s)}</span></div>
+        <div class="server-meta"><span id="status-pill">${statusPill(s.runtime.status)}</span><span class="muted">${s.summary.game} · ${s.summary.detail}</span></div>
       </div>
       <div class="power" id="power"></div>
     </div>

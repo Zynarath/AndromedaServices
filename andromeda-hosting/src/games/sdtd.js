@@ -297,6 +297,12 @@ const sdtd = {
     return `${host}:${sd(server).port}`;
   },
 
+  describe(server) {
+    const s = sd(server);
+    const world = s.gameWorld === 'RWG' ? `Random world${s.worldSize ? ' ' + s.worldSize : ''}` : s.gameWorld;
+    return { game: '7 Days to Die', detail: `${world} · ${s.maxPlayers} players` };
+  },
+
   async install(server, log, opts = {}) {
     if (!EXE[process.platform]) throw new Error('The 7 Days to Die dedicated server runs on Windows and Linux.');
     const s = sd(server);

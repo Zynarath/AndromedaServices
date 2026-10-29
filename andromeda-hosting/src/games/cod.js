@@ -558,6 +558,13 @@ const cod = {
     return `${host}:${server.cod.port}`;
   },
 
+  describe(server) {
+    const c = server.cod;
+    const t = title(server);
+    const mode = (t.gametypes.find((g) => g[0] === c.gametype) || [])[1] || c.gametype;
+    return { game: t.label, detail: `${mode} · ${c.maps.length} maps · ${c.xpScale}x XP${c.bots.enabled ? ' · bots' : ''}` };
+  },
+
   async install(server, log, opts = {}) {
     const t = title(server);
     if (!t.platforms.includes(process.platform)) throw new Error(`${t.label} servers need Windows.`);

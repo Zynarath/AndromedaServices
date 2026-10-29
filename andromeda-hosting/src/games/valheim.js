@@ -207,6 +207,10 @@ const valheim = {
     return `${host}:${vh(server).port}`;
   },
 
+  describe(server) {
+    return { game: 'Valheim', detail: `World: ${vh(server).worldName}${vh(server).crossplay ? ' · crossplay' : ''}` };
+  },
+
   async install(server, log, opts = {}) {
     if (!EXE[process.platform]) throw new Error('The Valheim dedicated server runs on Windows and Linux.');
     log.info(`${opts.isUpdate ? 'Updating' : 'Installing'} the Valheim dedicated server via SteamCMD (app ${APP_ID}).`);

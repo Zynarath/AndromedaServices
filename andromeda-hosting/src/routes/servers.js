@@ -47,6 +47,7 @@ function view(inst, user, full = false) {
     autoRestart: !!s.autoRestart,
     lastInstallError: s.lastInstallError || null,
     cover: covers.info(s),
+    summary: game.describe(s),
     perms,
     runtime: inst.toJSON(),
     ports: game.ports(s),

@@ -200,6 +200,11 @@ const satisfactory = {
     return `${host}:${sf(server).port}`;
   },
 
+  describe(server) {
+    const s = sf(server);
+    return { game: 'Satisfactory', detail: `${s.mods.length ? `${s.mods.length} mod${s.mods.length === 1 ? '' : 's'}` : 'No mods'} · ${s.maxPlayers} players` };
+  },
+
   async install(server, log, opts = {}) {
     if (!BINARIES[process.platform]) throw new Error('The Satisfactory dedicated server runs on Windows and Linux.');
     log.info(`${opts.isUpdate ? 'Updating' : 'Installing'} the Satisfactory dedicated server via SteamCMD (app ${APP_ID}).`);

@@ -542,6 +542,12 @@ const ark = {
     return `${host}:${server.ark.port}`;
   },
 
+  // One line about the server for cards, its page and Discord.
+  describe(server) {
+    const a = server.ark;
+    return { game: edition(server).label, detail: `${a.map} · ${a.mods.length} mod${a.mods.length === 1 ? '' : 's'}` };
+  },
+
   exePath(server) {
     const rel = edition(server).exe[process.platform];
     return rel ? path.join(server.dir, rel) : null;
