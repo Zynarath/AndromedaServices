@@ -109,12 +109,28 @@ async function downloadFirst(urls) {
   throw lastErr;
 }
 
+// What's known about each game's default picture, read from disk once instead of on every
+// server list request: { file, type, at } after a download, { missAt } after a failed one.
+const known = new Map();
+
+function remember(key, meta) {
+  known.set(key, meta);
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CACHE_DIR, key + '.json'), JSON.stringify(meta));
+}
+
 function cachedDefault(key) {
-  try {
-    const meta = JSON.parse(fs.readFileSync(path.join(CACHE_DIR, key + '.json'), 'utf8'));
-    if (meta.file && fs.existsSync(path.join(CACHE_DIR, meta.file))) return { image: { file: path.join(CACHE_DIR, meta.file), type: meta.type, at: meta.at } };
-    if (meta.missAt && Date.now() - meta.missAt < RETRY_MS) return { image: null };
-  } catch {}
+  if (!known.has(key)) {
+    let meta = null;
+    try {
+      meta = JSON.parse(fs.readFileSync(path.join(CACHE_DIR, key + '.json'), 'utf8'));
+      if (meta.file && !fs.existsSync(path.join(CACHE_DIR, meta.file))) meta = null;
+    } catch {}
+    known.set(key, meta);
+  }
+  const meta = known.get(key);
+  if (meta && meta.file) return { image: { file: path.join(CACHE_DIR, meta.file), type: meta.type, at: meta.at } };
+  if (meta && meta.missAt && Date.now() - meta.missAt < RETRY_MS) return { image: null };
   return null;
 }
 
@@ -127,12 +143,11 @@ function fetchDefault(key) {
       const file = key + EXT[type];
       fs.writeFileSync(path.join(CACHE_DIR, file), buf);
       const at = Date.now();
-      fs.writeFileSync(path.join(CACHE_DIR, key + '.json'), JSON.stringify({ file, type, source: url, at }));
+      remember(key, { file, type, source: url, at });
       return { file: path.join(CACHE_DIR, file), type, at };
     } catch (err) {
       log.warn(`Default cover for ${key}: ${err.message}`);
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
-      fs.writeFileSync(path.join(CACHE_DIR, key + '.json'), JSON.stringify({ missAt: Date.now(), error: err.message }));
+      remember(key, { missAt: Date.now(), error: err.message });
       return null;
     }
   })().finally(() => pending.delete(key));

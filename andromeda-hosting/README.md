@@ -204,13 +204,17 @@ Windows PC without build tools.
 
 ```
 src/
-  index.js            web server, WebSocket, shutdown handling
-  auth.js             users, sessions, permissions
-  games/              minecraft.js, ark.js — install, launch, settings, stop, player query
-  services/           java (Temurin), steamcmd, curseforge API, loaders (Forge/NeoForge/Fabric), modpack installer
+  index.js            web server, WebSocket, shutdown handling (checkDeps.js runs first)
+  auth.js             users, sessions, permissions, 2FA, "view as"
+  games/              one module per game: install, launch, settings, stop, player query
+                      (minecraft, ark, cod, wow, satisfactory, sdtd = 7 Days to Die, valheim)
+  services/           downloads and integrations: SteamCMD, Java, CurseForge, ficsit.app,
+                      modpacks, cover art, Discord, dynamic DNS, file share, self-update
   manager/            process lifecycle, jobs, backups, scheduler
   routes/             REST API
-public/               the web UI
+  util/               shared helpers: config file formats (ini, properties, conf), zip,
+                      downloads, paths/uploads, settings forms, RCON, process stats
+public/               the web UI (plain ES modules, no build step)
 test/                 unit tests (npm test)
 ```
 
