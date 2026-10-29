@@ -357,3 +357,28 @@ test('S1x and IW6x run the AlterWare client from the game folder, without bots',
     assert.equal(s.cod.bots.enabled, false);
   }
 });
+
+test('CoD4x install takes the server binary from a release, never the plugins zip', async (t) => {
+  const rel = (names) => ({ tag_name: '21.3', assets: names.map((name) => ({ name, browser_download_url: `https://github.com/callofduty4x/CoD4x_Server/releases/download/21.3/${name}` })) });
+  // How releases look now: bare binaries plus plugin archives.
+  const current = rel(['cod4x18_dedrun', 'cod4x18_dedrun.exe', 'plugins_linux.zip', 'plugins_windows.zip']);
+  assert.deepEqual(tools.pickCod4xAsset(current, 'win32'), { url: current.assets[1].browser_download_url, name: 'cod4x18_dedrun.exe', binary: true });
+  assert.equal(tools.pickCod4xAsset(current, 'linux').name, 'cod4x18_dedrun');
+  // Older releases packed the server in a zip; a plugins zip alone is not a server.
+  assert.equal(tools.pickCod4xAsset(rel(['cod4x_server-windows.zip', 'plugins_windows.zip']), 'win32').name, 'cod4x_server-windows.zip');
+  assert.equal(tools.pickCod4xAsset(rel(['plugins_windows.zip']), 'win32'), null);
+
+  // End to end with a fake GitHub: the binary lands in the server folder.
+  const realFetch = global.fetch;
+  t.after(() => (global.fetch = realFetch));
+  const binName = process.platform === 'win32' ? 'cod4x18_dedrun.exe' : 'cod4x18_dedrun';
+  global.fetch = async (url) => {
+    if (url.includes('api.github.com')) return new Response(JSON.stringify(current), { headers: { 'content-type': 'application/json' } });
+    if (url.endsWith('/' + binName)) return new Response(Buffer.from('server-binary'));
+    return new Response('wrong file', { status: 404 });
+  };
+  const dir = path.join(tmp, 'cod4x-install');
+  assert.equal(await tools.installCod4x(dir, { info() {}, warn() {} }), '21.3');
+  assert.equal(fs.readFileSync(path.join(dir, binName), 'utf8'), 'server-binary');
+  assert.equal(tools.findCod4xExe(dir), path.join(dir, binName));
+});

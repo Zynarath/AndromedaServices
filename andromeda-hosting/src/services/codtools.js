@@ -56,21 +56,41 @@ function copyDir(src, dest) {
 }
 
 // ---- CoD4x ----
+// Each release has the server as a bare binary (cod4x18_dedrun.exe / cod4x18_dedrun) next to
+// plugins_windows.zip / plugins_linux.zip, which hold only optional plugins. Older releases
+// packed the server in a zip, so that's still understood, but a plugins archive never is.
+function pickCod4xAsset(release, platform = process.platform) {
+  const win = platform === 'win32';
+  const binName = win ? 'cod4x18_dedrun.exe' : 'cod4x18_dedrun';
+  const assets = (release.assets || []).filter((a) => !/plugin/i.test(a.name));
+  const bin = assets.find((a) => a.name.toLowerCase() === binName);
+  if (bin) return { url: bin.browser_download_url, name: bin.name, binary: true };
+  const zip = pickAsset({ assets }, win ? [/windows.*\.zip$/i, /win.*\.zip$/i] : [/linux.*\.zip$/i, /linux.*\.tar\.gz$/i]);
+  return zip ? { ...zip, binary: false } : null;
+}
+
 async function installCod4x(serverDir, log) {
   log.info('Looking up the latest CoD4x server release on GitHub...');
   const rel = await latestRelease('callofduty4x/CoD4x_Server');
   const win = process.platform === 'win32';
-  const asset = pickAsset(rel, win ? [/windows.*\.zip$/i, /win.*\.zip$/i] : [/linux.*\.zip$/i, /linux.*\.tar\.gz$/i]);
-  if (!asset) throw new Error(`CoD4x release ${rel.tag_name} has no ${win ? 'Windows' : 'Linux'} download. Get it from github.com/callofduty4x/CoD4x_Server/releases and put cod4x18_dedrun in ${serverDir}`);
-  const file = path.join(config.cacheDir, asset.name);
-  log.info(`Downloading ${asset.name} (${rel.tag_name})...`);
-  await downloadFile(asset.url, file);
+  const asset = pickCod4xAsset(rel);
+  if (!asset) throw new Error(`CoD4x release ${rel.tag_name} has no ${win ? 'Windows' : 'Linux'} server download. Get ${win ? 'cod4x18_dedrun.exe' : 'cod4x18_dedrun'} from github.com/callofduty4x/CoD4x_Server/releases and put it in ${serverDir}`);
   fs.mkdirSync(serverDir, { recursive: true });
-  if (asset.name.endsWith('.zip')) await extractZip(file, serverDir, { stripRoot: true });
-  else await new Promise((res, rej) => execFile('tar', ['-xzf', file, '-C', serverDir], (e) => (e ? rej(e) : res())));
-  fs.rmSync(file, { force: true });
+  log.info(`Downloading ${asset.name} (${rel.tag_name})...`);
+  if (asset.binary) {
+    const dest = path.join(serverDir, win ? 'cod4x18_dedrun.exe' : 'cod4x18_dedrun');
+    const tmp = dest + '.download';
+    await downloadFile(asset.url, tmp);
+    fs.renameSync(tmp, dest);
+  } else {
+    const file = path.join(config.cacheDir, asset.name);
+    await downloadFile(asset.url, file);
+    if (asset.name.endsWith('.zip')) await extractZip(file, serverDir, { stripRoot: true });
+    else await new Promise((res, rej) => execFile('tar', ['-xzf', file, '-C', serverDir], (e) => (e ? rej(e) : res())));
+    fs.rmSync(file, { force: true });
+  }
   const exe = findCod4xExe(serverDir);
-  if (!exe) throw new Error('Downloaded CoD4x but could not find cod4x18_dedrun in it');
+  if (!exe) throw new Error(`Downloaded ${asset.name} but could not find ${win ? 'cod4x18_dedrun.exe' : 'cod4x18_dedrun'} in it`);
   if (!win) fs.chmodSync(exe, 0o755);
   log.info(`CoD4x server ${rel.tag_name} installed.`);
   return rel.tag_name;
@@ -180,4 +200,4 @@ function linkGameFiles(gameDir, serverDir, log) {
   if (linked || copied) log.info(`Game files: ${linked} linked, ${copied} copied into the server folder.`);
 }
 
-module.exports = { installCod4x, findCod4xExe, updatePlutonium, plutoStorage, installBotWarfare, packBotWarfare, linkGameFiles, latestRelease, plutoRoot, plutoBootstrapper };
+module.exports = { installCod4x, pickCod4xAsset, findCod4xExe, updatePlutonium, plutoStorage, installBotWarfare, packBotWarfare, linkGameFiles, latestRelease, plutoRoot, plutoBootstrapper };
