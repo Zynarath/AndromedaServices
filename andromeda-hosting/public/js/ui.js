@@ -230,3 +230,10 @@ export function gameArt(server) {
   if (server.mc && server.mc.source === 'curseforge') return 'mc-cf';
   return 'mc';
 }
+
+// What goes inside a server's art box: the game's cover picture behind its label (or modpack logo).
+export function artInner(server) {
+  return html`${server.cover ? html`<span class="art-cover" style="background-image:url('${server.cover.url}')"></span>` : ''}${
+    server.mc?.curseforge?.logo ? html`<img src="${server.mc.curseforge.logo}" alt="" loading="lazy">` : html`<span class="art-mono">${artLabel(server)}</span>`
+  }`;
+}

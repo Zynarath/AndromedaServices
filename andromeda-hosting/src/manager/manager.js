@@ -11,6 +11,7 @@ const { games, templates, CONFIG_KEY } = require('../games');
 const procstats = require('../util/procstats');
 const { HttpError, randomId, isTcpPortFree, isUdpPortFree } = require('../util/misc');
 const cf = require('../services/curseforge');
+const covers = require('../services/covers');
 const logger = require('../util/log');
 
 const log = logger('manager');
@@ -299,6 +300,7 @@ class Manager extends EventEmitter {
     this.instances.delete(id);
     db.data.servers = db.data.servers.filter((s) => s.id !== id);
     db.save();
+    covers.removeCustom(server);
     if (deleteFiles) {
       const inside = path.resolve(server.dir).startsWith(path.resolve(config.serversDir) + path.sep);
       if (inside) fs.rmSync(server.dir, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import { api } from '../../api.js';
-import { html, $, icon, toast, confirmBox, modal } from '../../ui.js';
+import { html, $, icon, toast, confirmBox, modal, gameArt, artInner } from '../../ui.js';
 
 export function field(f, value) {
   const id = 'f-' + f.key.replace(/\W/g, '_');
@@ -75,6 +75,21 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
       <div class="form-actions"><button class="btn btn-primary">Save</button></div>
     </form>
 
+    <div class="panel" id="cover">
+      <h3>Cover picture</h3>
+      <p class="muted small">Shown behind the server's name on the dashboard. Until you pick your own, it's the game's default art.</p>
+      <div class="cover-edit">
+        <div class="card-art cover-preview art-${gameArt(server)}" id="cover-preview"></div>
+        <div class="cover-controls">
+          <div class="btn-row">
+            <label class="btn">${icon('upload')}Upload picture…<input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label>
+            <button type="button" class="btn btn-ghost" id="cover-reset">${icon('restart')}Use the game's default</button>
+          </div>
+          <small class="hint">JPG, PNG, WebP or GIF, up to 8 MB. Wide pictures (about 3:1) fit the card best.</small>
+        </div>
+      </div>
+    </div>
+
     <form id="game" class="panel" novalidate>
       <h3>Game settings</h3>
       ${schema.note ? html`<p class="muted small">${schema.note}</p>` : ''}
@@ -112,6 +127,37 @@ export async function render(root, { server, can, refresh, navigate, refreshServ
       });
       toast('Saved', 'ok');
       refreshServers();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  const drawCover = (srv) => {
+    $('#cover-preview').innerHTML = artInner(srv).s;
+    $('#cover-reset').hidden = !(srv.cover && srv.cover.custom);
+  };
+  drawCover(server);
+  const coverChanged = (srv) => {
+    drawCover(srv);
+    refresh();
+    refreshServers();
+  };
+  $('#cover-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) return toast('Pictures can be at most 8 MB', 'error');
+    try {
+      coverChanged((await api.put(`/api/servers/${server.id}/cover`, file)).server);
+      toast('Cover picture saved', 'ok');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  $('#cover-reset').onclick = async () => {
+    try {
+      coverChanged((await api.del(`/api/servers/${server.id}/cover`)).server);
+      toast("Back to the game's default picture", 'ok');
     } catch (err) {
       toast(err.message, 'error');
     }

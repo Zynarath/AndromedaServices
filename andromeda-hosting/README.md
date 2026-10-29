@@ -24,6 +24,8 @@ Eclipse Temurin). You don't need to install Java.
 - Accounts for you and your friends, each with their own password, optional **2FA**, and
   per-server permissions (start/stop, console, settings, files, mods, backups, schedules)
 - Dashboard with host CPU/RAM/disk and every server's status, players, CPU and RAM
+- Each server card shows the game's cover art (downloaded once from Steam or Wikipedia). Change it
+  under **Settings → Cover picture** by uploading your own, or go back to the game's default
 - Live console (WebSocket) with command history and quick commands
 - File manager: browse, edit configs in the browser, drag-and-drop upload (folders too), download
   files or whole folders as .zip, extract zips

@@ -90,3 +90,41 @@ test('file manager blocks non-admins from writing executables', () => {
   for (const n of ['mangosd.exe', 'evil.dll', 'run.bat', 'x.ps1', 'user_jvm_args.txt', 'payload.sh']) assert.ok(blocked(n), n);
   for (const n of ['server.properties', 'config.yml', 'mod.jar', 'Game.ini', 'notes.txt']) assert.ok(!blocked(n), n);
 });
+
+test('cover pictures: only real images are accepted, and only from known hosts', () => {
+  const covers = require('../src/services/covers');
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)]);
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16)]);
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 ')]);
+  assert.equal(covers.sniff(png), 'image/png');
+  assert.equal(covers.sniff(jpg), 'image/jpeg');
+  assert.equal(covers.sniff(Buffer.from('GIF89a......')), 'image/gif');
+  assert.equal(covers.sniff(webp), 'image/webp');
+  // SVG and HTML can carry scripts, so they are never served back as a cover.
+  assert.equal(covers.sniff(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')), null);
+  assert.equal(covers.sniff(Buffer.from('<html><script>alert(1)</script>')), null);
+
+  const s = { id: 'abcd1234', ark: { edition: 'ase' } };
+  assert.throws(() => covers.setCustom(s, Buffer.from('<svg/>')), /JPG, PNG/);
+  assert.equal(s.cover, undefined);
+  covers.setCustom(s, png);
+  assert.equal(s.cover.type, 'image/png');
+  assert.equal(s.cover.file, 'abcd1234.png');
+  assert.equal(covers.info(s).custom, true);
+  // A new upload of another type replaces the old file.
+  covers.setCustom(s, jpg);
+  assert.equal(s.cover.file, 'abcd1234.jpg');
+  assert.ok(!fs.existsSync(path.join(process.env.ANDROMEDA_DATA, 'covers', 'abcd1234.png')));
+  covers.removeCustom(s);
+  assert.equal(s.cover, undefined);
+  assert.ok(!fs.existsSync(path.join(process.env.ANDROMEDA_DATA, 'covers', 'abcd1234.jpg')));
+
+  assert.equal(covers.defaultKey({ cod: { title: 't6' } }), 'cod-t6');
+  assert.equal(covers.defaultKey({ mc: {} }), 'minecraft');
+  for (const k of Object.keys(require('../src/games/cod').TITLES)) assert.ok(covers.DEFAULTS[`cod-${k}`], k);
+  assert.ok(covers.allowedImageUrl('https://cdn.cloudflare.steamstatic.com/steam/apps/202970/header.jpg'));
+  assert.ok(covers.allowedImageUrl('https://upload.wikimedia.org/wikipedia/en/a/a1/x.jpg'));
+  assert.ok(!covers.allowedImageUrl('http://cdn.cloudflare.steamstatic.com/x.jpg'));
+  assert.ok(!covers.allowedImageUrl('https://192.168.1.1/x.jpg'));
+  assert.ok(!covers.allowedImageUrl('https://evil.example/steamstatic.com.jpg'));
+});

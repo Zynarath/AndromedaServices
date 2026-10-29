@@ -10,6 +10,7 @@ const scheduler = require('../manager/scheduler');
 const { games, templates, CONFIG_KEY } = require('../games');
 const cf = require('../services/curseforge');
 const mapImages = require('../services/mapimages');
+const covers = require('../services/covers');
 const modinfo = require('../services/modinfo');
 const { HttpError, randomId } = require('../util/misc');
 const { parseCpuList, PRIORITIES, CORES } = require('../util/procstats');
@@ -42,6 +43,7 @@ function view(inst, user, full = false) {
     autoStart: !!s.autoStart,
     autoRestart: !!s.autoRestart,
     lastInstallError: s.lastInstallError || null,
+    cover: covers.info(s),
     perms,
     runtime: inst.toJSON(),
     ports: game.ports(s),
@@ -137,6 +139,30 @@ router.patch('/servers/:id', (req, res) => {
     const priority = PRIORITIES[b.tuning.priority] ? b.tuning.priority : 'normal';
     s.tuning = { affinity, priority };
   }
+  db.save();
+  res.json({ server: view(inst, req.user, true) });
+});
+
+// ---- cover picture ----
+// The server's own picture, or the game's default (downloaded once, then cached).
+router.get('/servers/:id/cover', async (req, res) => {
+  const img = await covers.get(load(req).server);
+  if (!img) return res.status(404).set('Cache-Control', 'no-store').json({ error: 'No cover picture' });
+  res.set('Cache-Control', 'private, max-age=604800');
+  res.type(img.type).sendFile(img.file);
+});
+
+// PUT body is the picture itself.
+router.put('/servers/:id/cover', express.raw({ type: () => true, limit: covers.MAX_UPLOAD + 1024 }), (req, res) => {
+  const inst = load(req, 'settings');
+  covers.setCustom(inst.server, Buffer.isBuffer(req.body) ? req.body : null);
+  db.save();
+  res.json({ server: view(inst, req.user, true) });
+});
+
+router.delete('/servers/:id/cover', (req, res) => {
+  const inst = load(req, 'settings');
+  covers.removeCustom(inst.server);
   db.save();
   res.json({ server: view(inst, req.user, true) });
 });

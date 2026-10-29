@@ -1,5 +1,5 @@
 import { api, onSocket } from '../api.js';
-import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artLabel, copyText } from '../ui.js';
+import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artInner, copyText } from '../ui.js';
 
 function gameLabel(s) {
   if (s.ark) return s.ark.editionLabel;
@@ -30,7 +30,7 @@ function card(s) {
   return html`
     <article class="server-card" data-id="${s.id}">
       <a class="card-art art-${gameArt(s)}" href="#/server/${s.id}">
-        ${s.mc?.curseforge?.logo ? html`<img src="${s.mc.curseforge.logo}" alt="" loading="lazy">` : html`<span class="art-mono">${artLabel(s)}</span>`}
+        ${artInner(s)}
         <span class="card-status">${statusPill(rt.status)}</span>
       </a>
       <div class="card-body">

@@ -1,5 +1,5 @@
 import { api, onSocket, subscribe } from '../api.js';
-import { html, $, on, icon, toast, fmtBytes, fmtDuration, statusPill, gameArt, copyText, confirmBox, sparkline, bindSparkHover, esc, raw, artLabel } from '../ui.js';
+import { html, $, on, icon, toast, fmtBytes, fmtDuration, statusPill, gameArt, copyText, confirmBox, sparkline, bindSparkHover, esc, raw, artInner } from '../ui.js';
 import * as settingsTab from './tabs/settings.js';
 import * as modsTab from './tabs/mods.js';
 import * as filesTab from './tabs/files.js';
@@ -45,7 +45,7 @@ export async function render(root, ctx) {
 
   root.innerHTML = html`
     <div class="server-head">
-      <div class="server-art art-${gameArt(s)}">${s.mc?.curseforge?.logo ? html`<img src="${s.mc.curseforge.logo}" alt="">` : html`<span class="art-mono">${artLabel(s)}</span>`}</div>
+      <div class="server-art art-${gameArt(s)}" id="server-art">${artInner(s)}</div>
       <div class="server-title">
         <h1>${s.name}</h1>
         <div class="server-meta"><span id="status-pill">${statusPill(s.runtime.status)}</span><span class="muted">${gameLine(s)}</span></div>
@@ -85,6 +85,7 @@ export async function render(root, ctx) {
   const tabEl = $('#tab');
   const refresh = async () => {
     s = (await api.get(`/api/servers/${s.id}`)).server;
+    $('#server-art').innerHTML = artInner(s).s;
     drawPower();
     if (tab.id === 'overview') drawOverview();
   };
