@@ -10,8 +10,8 @@ const dgram = require('dgram');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'andromeda-cod-'));
 process.env.ANDROMEDA_DATA = path.join(tmp, 'data');
 
-const q3 = require('../src/util/q3');
 const cod = require('../src/games/cod');
+const { q3 } = cod;
 const tools = require('../src/services/codtools');
 const { listZip } = require('../src/util/zip');
 

@@ -4,12 +4,106 @@
 // next to them. Valheim has no RCON or stdin console: it saves and exits on Ctrl+C.
 const fs = require('fs');
 const path = require('path');
+const dgram = require('dgram');
+const { execFile } = require('child_process');
 const steamcmd = require('../services/steamcmd');
-const a2s = require('../util/a2s');
 const fields = require('../util/fields');
-const { sendCtrlC } = require('../util/ctrlc');
-const { HttpError, randomPassword } = require('../util/misc');
-const { splitArgs } = require('./minecraft');
+const { HttpError, randomPassword, splitArgs } = require('../util/misc');
+
+// Ask a console program to shut down the way pressing Ctrl+C in its window would. Some servers
+// (Valheim) only save their world on Ctrl+C, and there is no RCON to ask them otherwise.
+//  - Linux/macOS: SIGINT.
+//  - Windows: there are no signals. Servers are started hidden (windowsHide), which gives each one
+//    its own invisible console, so a helper attaches to that console and raises Ctrl+C in it. The
+//    helper ignores the event itself, and the panel's own console isn't involved.
+const ctrlc = (() => {
+  const PS_SCRIPT = (pid) =>
+    "$ErrorActionPreference = 'Stop'; " +
+    "Add-Type -Namespace AH -Name Con -MemberDefinition '" +
+    '[DllImport("kernel32.dll")] public static extern bool FreeConsole(); ' +
+    '[DllImport("kernel32.dll")] public static extern bool AttachConsole(uint id); ' +
+    '[DllImport("kernel32.dll")] public static extern bool SetConsoleCtrlHandler(System.IntPtr h, bool add); ' +
+    '[DllImport("kernel32.dll")] public static extern bool GenerateConsoleCtrlEvent(uint ev, uint group);' +
+    "'; " +
+    '[void][AH.Con]::FreeConsole(); ' +
+    `if (-not [AH.Con]::AttachConsole(${pid})) { exit 2 }; ` +
+    '[void][AH.Con]::SetConsoleCtrlHandler([IntPtr]::Zero, $true); ' +
+    'if (-not [AH.Con]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }; ' +
+    'Start-Sleep -Milliseconds 300; [void][AH.Con]::FreeConsole(); exit 0';
+
+  // Resolves true when the request was delivered (the program still decides how fast it exits).
+  function sendCtrlC(child) {
+    if (!child || !child.pid) return Promise.resolve(false);
+    if (process.platform !== 'win32') {
+      try {
+        return Promise.resolve(child.kill('SIGINT'));
+      } catch {
+        return Promise.resolve(false);
+      }
+    }
+    const pid = Number(child.pid);
+    if (!Number.isInteger(pid) || pid <= 0) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', PS_SCRIPT(pid)], { windowsHide: true, timeout: 20000 }, (err) => resolve(!err));
+    });
+  }
+  return { sendCtrlC, PS_SCRIPT };
+})();
+const { sendCtrlC } = ctrlc;
+
+// Steam server query (A2S_INFO): name, map and player count from games that answer Steam's
+// server browser protocol (Valheim on its query port). https://developer.valvesoftware.com/wiki/Server_queries
+const a2s = (() => {
+  const HEADER = Buffer.from([0xff, 0xff, 0xff, 0xff]);
+  const INFO_REQUEST = Buffer.concat([HEADER, Buffer.from('TSource Engine Query\0', 'latin1')]);
+
+  function parseInfo(buf) {
+    let o = 4;
+    if (buf.readInt32LE(0) !== -1 || buf[o++] !== 0x49) throw new Error('not an A2S_INFO reply');
+    o++; // protocol
+    const str = () => {
+      const end = buf.indexOf(0, o);
+      if (end < 0) throw new Error('truncated A2S_INFO reply');
+      const s = buf.toString('utf8', o, end);
+      o = end + 1;
+      return s;
+    };
+    const name = str();
+    const map = str();
+    const folder = str();
+    const game = str();
+    o += 2; // app id
+    if (o + 3 > buf.length) throw new Error('truncated A2S_INFO reply');
+    return { name, map, folder, game, players: buf[o], maxPlayers: buf[o + 1], bots: buf[o + 2] };
+  }
+
+  function queryInfo(host, port, { timeout = 3000 } = {}) {
+    return new Promise((resolve, reject) => {
+      const sock = dgram.createSocket('udp4');
+      const done = (err, val) => {
+        clearTimeout(timer);
+        sock.close();
+        err ? reject(err) : resolve(val);
+      };
+      const timer = setTimeout(() => done(new Error('no answer to the Steam query')), timeout);
+      sock.on('error', (err) => done(err));
+      sock.on('message', (msg) => {
+        try {
+          // Newer servers first answer with a challenge (0x41) that has to be sent back.
+          if (msg.length >= 9 && msg.readInt32LE(0) === -1 && msg[4] === 0x41) {
+            sock.send(Buffer.concat([INFO_REQUEST, msg.subarray(5, 9)]), port, host);
+            return;
+          }
+          done(null, parseInfo(msg));
+        } catch (err) {
+          done(err);
+        }
+      });
+      sock.send(INFO_REQUEST, port, host);
+    });
+  }
+  return { queryInfo, parseInfo };
+})();
 
 const APP_ID = 896660;
 const GAME_APP_ID = '892970'; // the game itself; the server needs it in SteamAppId
@@ -199,3 +293,5 @@ const valheim = {
 };
 
 module.exports = valheim;
+module.exports.a2s = a2s;
+module.exports.sendCtrlC = sendCtrlC;

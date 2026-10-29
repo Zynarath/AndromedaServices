@@ -10,8 +10,7 @@ const path = require('path');
 const net = require('net');
 const { spawn } = require('child_process');
 const ddns = require('../services/ddns');
-const { Conf, parseDbInfo } = require('../util/conf');
-const { describeConf, looksBoolean } = require('../util/confdoc');
+const { Conf, parseDbInfo, describeConf, looksBoolean } = require('../util/conf');
 const { findFiles } = require('../util/paths');
 const { HttpError, sleep } = require('../util/misc');
 

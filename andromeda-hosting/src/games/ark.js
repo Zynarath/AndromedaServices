@@ -5,8 +5,7 @@ const Ini = require('../util/ini');
 const Rcon = require('../util/rcon');
 const steamcmd = require('../services/steamcmd');
 const modinfo = require('../services/modinfo');
-const { HttpError, randomPassword } = require('../util/misc');
-const { splitArgs } = require('./minecraft');
+const { HttpError, randomPassword, splitArgs } = require('../util/misc');
 
 const EDITIONS = {
   asa: {

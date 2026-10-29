@@ -13,17 +13,16 @@ const { spawn } = require('child_process');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'andromeda-newgames-'));
 process.env.ANDROMEDA_DATA = path.join(tmp, 'data');
 
-const semver = require('../src/util/semver');
 const ficsit = require('../src/services/ficsit');
-const sfapi = require('../src/util/sfapi');
 const satisfactory = require('../src/games/satisfactory');
 const sdtd = require('../src/games/sdtd');
 const valheim = require('../src/games/valheim');
-const telnet = require('../src/util/telnet7d');
-const a2s = require('../src/util/a2s');
-const { sendCtrlC } = require('../src/util/ctrlc');
 const { createZip } = require('../src/util/zip');
 const { templates, games, CONFIG_KEY } = require('../src/games');
+const { semver } = ficsit;
+const sfapi = satisfactory.api;
+const { telnet } = sdtd;
+const { a2s, sendCtrlC } = valheim;
 
 const quiet = { info() {}, warn() {}, error() {}, progress() {} };
 

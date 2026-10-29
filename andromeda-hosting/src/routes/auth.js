@@ -2,7 +2,7 @@
 const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
-const totp = require('../util/totp');
+const { totp } = auth;
 const { HttpError } = require('../util/misc');
 const { isThisPc, unencryptedFromInternet } = require('../util/netaccess');
 

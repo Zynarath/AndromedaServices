@@ -38,5 +38,13 @@ function isUdpPortFree(port) {
   });
 }
 
+// Split a command line into arguments, keeping "quoted parts" together.
+function splitArgs(str) {
+  const out = [];
+  const re = /"([^"]*)"|(\S+)/g;
+  let m;
+  while ((m = re.exec(str || ''))) out.push(m[1] !== undefined ? m[1] : m[2]);
+  return out;
+}
 
-module.exports = { sleep, randomId, randomPassword, HttpError, isTcpPortFree, isUdpPortFree };
+module.exports = { splitArgs, sleep, randomId, randomPassword, HttpError, isTcpPortFree, isUdpPortFree };

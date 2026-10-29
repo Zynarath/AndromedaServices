@@ -126,7 +126,7 @@ test('WoW: install enables the console; settings write to the .conf files safely
 });
 
 test('WoW: "All options" lists every key from the .conf files with their own descriptions (admins only)', () => {
-  const { describeConf, looksBoolean } = require('../src/util/confdoc');
+  const { describeConf, looksBoolean } = require('../src/util/conf');
   // Shaped like cMaNGOS's mangosd.conf.dist and aiplayerbot.conf.dist.
   const mangosd = [
     '[MangosdConf]', 'ConfVersion=2024020101', '',
