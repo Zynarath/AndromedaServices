@@ -81,7 +81,7 @@ router.put('/settings', auth.requireAdmin, (req, res) => {
     }
     if (x.clearToken) Object.assign(d, { token: '', enabled: false });
     for (const k of ['guildId', 'updatesChannelId', 'categoryId']) if (x[k] !== undefined) d[k] = /^\d{0,25}$/.test(String(x[k])) ? String(x[k]) : '';
-    for (const k of ['enabled', 'perServerChannels', 'playerEvents', 'backupEvents', 'includePassword']) if (x[k] !== undefined) d[k] = !!x[k];
+    for (const k of ['enabled', 'perServerChannels', 'playerEvents', 'backupEvents', 'includePassword', 'cleanup']) if (x[k] !== undefined) d[k] = !!x[k];
     if (d.enabled && (!d.token || !d.guildId || !d.updatesChannelId)) throw new HttpError(400, 'Connect the bot and pick your Discord server and Server Updates channel before turning notifications on');
     s.discord = d;
     // Create the per-server channels right away so they show up when notifications are turned on.

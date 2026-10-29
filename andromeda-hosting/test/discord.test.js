@@ -42,6 +42,14 @@ const mock = http.createServer((req, res) => {
       if (req.method === 'PATCH') Object.assign(c, JSON.parse(body));
       return send(200, c);
     }
+    m = /^\/channels\/(\d+)\/messages\/(m\d+)$/.exec(u);
+    if (m && req.method === 'DELETE') {
+      const msg = messages[Number(m[2].slice(1)) - 1];
+      if (!msg || msg.channel !== m[1] || msg.deleted) return send(404, { message: 'Unknown Message' });
+      msg.deleted = true;
+      res.writeHead(204);
+      return res.end();
+    }
     m = /^\/channels\/(\d+)\/messages$/.exec(u);
     if (m && req.method === 'POST') {
       if (rateLimitOnce) {
@@ -120,6 +128,29 @@ test('setup overview, per-server channels and event messages', async () => {
   await wait(200);
   assert.equal(channels.find((c) => c.id === created.id).name, 'ark-se-ragnarok');
   assert.equal(channels.filter((c) => c.type === 0).length, 2);
+
+  // Old messages are cleared on the second start after going down. It crashed above (down),
+  // so: online (1st start) -> offline -> online (2nd start) = clear everything before that post.
+  const humanMsg = { channel: created.id, embeds: [{ title: 'a person wrote this' }] };
+  messages.push(humanMsg); // not the bot's: never tracked, never deleted
+  manager.emit('status', 's1', 'running');
+  await wait(200);
+  assert.ok(!messages.some((m) => m.deleted), 'one restart: nothing cleared yet');
+  manager.emit('status', 's1', 'stopping');
+  manager.emit('status', 's1', 'stopped');
+  manager.emit('status', 's1', 'running');
+  await wait(600);
+  const alive = messages.filter((m) => !m.deleted);
+  assert.deepEqual(alive.filter((m) => m !== humanMsg).map((m) => m.embeds[0].title), ['🟢 Ark SE Ragnarok is online', '🟢 Ark SE Ragnarok is online'], 'only the newest online posts remain');
+  assert.ok(alive.includes(humanMsg));
+  assert.equal(server.discord.posted.length, 2);
+  assert.equal(server.discord.restarts, 0);
+
+  // Turned off: nothing is deleted.
+  db.data.settings.discord.cleanup = false;
+  for (const st of ['stopped', 'running', 'stopped', 'running']) manager.emit('status', 's1', st);
+  await wait(600);
+  assert.equal(messages.filter((m) => !m.deleted && m !== humanMsg).length, 10, '2 kept + 4 new posts in 2 channels');
 
   // Bad token surfaces a readable error instead of throwing.
   db.data.settings.discord.token = 'bad';

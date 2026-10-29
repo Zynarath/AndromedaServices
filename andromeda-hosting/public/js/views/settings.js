@@ -161,6 +161,7 @@ async function renderDiscord() {
           <label class="switch"><input type="checkbox" name="perServerChannels" ${o.perServerChannels ? 'checked' : ''}><span></span>Create a channel for each game server</label>
           <label class="switch"><input type="checkbox" name="playerEvents" ${o.playerEvents ? 'checked' : ''}><span></span>Post player joins / leaves (server channels)</label>
           <label class="switch"><input type="checkbox" name="backupEvents" ${o.backupEvents ? 'checked' : ''}><span></span>Post successful backups (server channels)</label>
+          <label class="switch" title="Offline → online → offline → online: the bot then deletes its messages from before that last online post (in the server's channel and in Server Updates). Only its own messages."><input type="checkbox" name="cleanup" ${o.cleanup ? 'checked' : ''}><span></span>Clear a server's old messages every second restart</label>
           <label class="switch"><input type="checkbox" name="includePassword" ${o.includePassword ? 'checked' : ''}><span></span>Show join passwords (ARK / Call of Duty, as a spoiler) in "online" messages</label>
         </div>`
       : ''}
@@ -176,7 +177,7 @@ async function renderDiscord() {
     e.preventDefault();
     const body = { token: f.token.value };
     for (const k of ['guildId', 'updatesChannelId', 'categoryId']) if (f.elements[k]) body[k] = f.elements[k].value;
-    for (const k of ['enabled', 'perServerChannels', 'playerEvents', 'backupEvents', 'includePassword']) if (f.elements[k]) body[k] = f.elements[k].checked;
+    for (const k of ['enabled', 'perServerChannels', 'playerEvents', 'backupEvents', 'includePassword', 'cleanup']) if (f.elements[k]) body[k] = f.elements[k].checked;
     if (o.guilds.length === 1 && !body.guildId) body.guildId = o.guilds[0].id;
     try {
       await api.put('/api/settings', { discord: body });

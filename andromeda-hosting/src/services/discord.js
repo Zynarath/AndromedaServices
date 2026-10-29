@@ -28,6 +28,7 @@ function settings() {
     playerEvents: d.playerEvents !== false,
     backupEvents: d.backupEvents !== false,
     includePassword: !!d.includePassword,
+    cleanup: d.cleanup !== false,
   };
 }
 
@@ -169,10 +170,12 @@ function address(server) {
 
 /**
  * Post an event. where: 'server' (its own channel), 'updates' (Server Updates) or 'both'.
+ * Resolves to the messages posted, as [{ c: channelId, m: messageId }].
  */
 async function post(server, { title, description, color = 'info', fields = [], where = 'both' }) {
   const s = settings();
-  if (!s.enabled || !s.token) return;
+  const posted = [];
+  if (!s.enabled || !s.token) return posted;
   const embed = {
     title,
     description,
@@ -194,14 +197,65 @@ async function post(server, { title, description, color = 'info', fields = [], w
   }
   for (const channelId of targets) {
     try {
-      await call('POST', `/channels/${channelId}/messages`, { embeds: [embed], allowed_mentions: { parse: [] } });
+      const msg = await call('POST', `/channels/${channelId}/messages`, { embeds: [embed], allowed_mentions: { parse: [] } });
       state.lastPost = Date.now();
       state.error = null;
+      if (msg && msg.id) posted.push({ c: channelId, m: msg.id });
     } catch (err) {
       state.error = err.message;
       log.warn(err.message);
     }
   }
+  if (server && posted.length) track(server, posted);
+  return posted;
+}
+
+// ---- tidying up ----
+// Every message the bot posts about a server is remembered (in its own channel and in Server
+// Updates). Each time the server comes back online for the second time after going down
+// (offline → online → offline → online), the bot deletes its older messages for that server, so
+// the channel starts again from the newest "online" post. Only the bot's own messages are touched.
+const TRACK_LIMIT = 500;
+
+function track(server, posted) {
+  const d = (server.discord = server.discord || {});
+  d.posted = [...(d.posted || []), ...posted];
+  if (d.posted.length > TRACK_LIMIT) d.posted.splice(0, d.posted.length - TRACK_LIMIT);
+  db.save();
+}
+
+// The server went down (stopped or crashed).
+function noteDown(server) {
+  const d = (server.discord = server.discord || {});
+  d.wentDown = true;
+  db.save();
+}
+
+// The server is online again and `online` is that announcement: count the restart, and on the
+// second one delete everything posted before it.
+async function noteUp(server, online) {
+  const d = (server.discord = server.discord || {});
+  if (!d.wentDown) return;
+  d.wentDown = false;
+  d.restarts = (d.restarts || 0) + 1;
+  db.save();
+  if (d.restarts < 2 || !settings().cleanup || !online.length) return;
+  d.restarts = 0;
+  const keep = new Set(online.map((p) => p.m));
+  const at = (d.posted || []).findIndex((p) => keep.has(p.m));
+  if (at <= 0) return;
+  const old = d.posted.splice(0, at);
+  db.save();
+  let removed = 0;
+  for (const p of old) {
+    try {
+      await call('DELETE', `/channels/${p.c}/messages/${p.m}`);
+      removed++;
+    } catch (err) {
+      if (err.status !== 404) log.warn(`Couldn't delete an old message for ${server.name}: ${err.message}`);
+    }
+  }
+  if (removed) log.info(`Cleared ${removed} old Discord message(s) for ${server.name}`);
 }
 
 // ---- turning panel events into messages ----
@@ -237,10 +291,14 @@ function onStatus(id, status) {
     if (server.sf && server.sf.mods.length) fields.push({ name: 'Mods', value: `${server.sf.mods.length} (players need them too: Satisfactory Mod Manager)` });
     if (server.vh && server.vh.crossplay) fields.push({ name: 'Crossplay', value: 'On — join with the code from the server console' });
     if (server.mc) fields.push({ name: 'Version', value: `${server.mc.mcVersion || ''} ${server.mc.loader !== 'vanilla' ? server.mc.loader : ''}`.trim() });
-    post(server, { title: `🟢 ${server.name} is online`, color: 'ok', fields });
+    post(server, { title: `🟢 ${server.name} is online`, color: 'ok', fields })
+      .then((online) => noteUp(server, online))
+      .catch((err) => log.warn(err.message));
   } else if (status === 'stopped' && prev && prev !== 'stopped' && prev !== 'installing') {
+    if (prev !== 'crashed') noteDown(server); // a crash already counted as going down
     post(server, { title: `⚫ ${server.name} is offline`, color: 'off' });
   } else if (status === 'crashed') {
+    noteDown(server);
     post(server, {
       title: `🔴 ${server.name} crashed`,
       description: server.autoRestart ? 'Auto-restart is on — trying again in 10 seconds.' : 'Auto-restart is off. Start it from the panel.',
