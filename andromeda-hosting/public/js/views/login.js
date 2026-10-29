@@ -15,6 +15,10 @@ export function render(root, { auth, onLogin }) {
               : html`<div class="callout callout-warn">${icon('alert')}<div>No admin account exists yet. For safety, the first account can only be created
                   <strong>on the host PC</strong> at <code>http://localhost:${location.port || 80}</code>, or with <code>npm run create-admin</code>.</div></div>`
             : html`<p class="muted">Sign in to manage your game servers.</p>`}
+          ${auth.insecure
+            ? html`<div class="callout callout-warn">${icon('alert')}<div><strong>This connection isn't encrypted.</strong> Your password would travel over the internet in plain text.
+                Use the panel's <code>https://</code> address instead${!/^[\d.]+$|:/.test(location.hostname) ? html` (try <a href="https://${location.hostname}">https://${location.hostname}</a>)` : ''}, or ask the panel's owner to set one up.</div></div>`
+            : ''}
           ${error ? html`<div class="form-error" role="alert">${error}</div>` : ''}
           ${setup && !auth.setupAllowedHere
             ? ''

@@ -4,7 +4,7 @@ const db = require('../db');
 const auth = require('../auth');
 const totp = require('../util/totp');
 const { HttpError } = require('../util/misc');
-const { isThisPc } = require('../util/netaccess');
+const { isThisPc, unencryptedFromInternet } = require('../util/netaccess');
 
 const router = express.Router();
 
@@ -20,6 +20,7 @@ router.get('/auth/state', (req, res) => {
     setupAllowedHere: isLoopback(req),
     user: s ? auth.publicUser(s.user) : null,
     viewingAs: s && s.realUser ? { admin: auth.publicUser(s.realUser) } : null,
+    insecure: unencryptedFromInternet(req),
   });
 });
 

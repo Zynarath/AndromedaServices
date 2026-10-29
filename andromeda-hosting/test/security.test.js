@@ -172,3 +172,15 @@ test('admins can view the panel as a user: their permissions, read-only, and onl
   assert.equal(r.err, null);
   assert.equal(session.viewAs, undefined);
 });
+
+test('plain HTTP from the internet is flagged; tunnels, LAN and Tailscale are not', () => {
+  const { unencryptedFromInternet } = require('../src/util/netaccess');
+  const req = (ip, secure = false, headers = {}) => ({ secure, headers, socket: { remoteAddress: ip } });
+  assert.equal(unencryptedFromInternet(req('203.0.113.9')), true, 'port-forwarded http');
+  assert.equal(unencryptedFromInternet(req('203.0.113.9', true)), false, 'https');
+  assert.equal(unencryptedFromInternet(req('127.0.0.1', true, { 'cf-ray': 'x', 'x-forwarded-proto': 'https' })), false, 'Cloudflare Tunnel');
+  assert.equal(unencryptedFromInternet(req('127.0.0.1', false, { 'cf-ray': 'x', 'x-forwarded-proto': 'http' })), true, 'a proxy serving plain http');
+  assert.equal(unencryptedFromInternet(req('192.168.1.20')), false, 'home network');
+  assert.equal(unencryptedFromInternet(req('100.101.102.103')), false, 'Tailscale');
+  assert.equal(unencryptedFromInternet(req('::ffff:127.0.0.1')), false, 'this PC');
+});

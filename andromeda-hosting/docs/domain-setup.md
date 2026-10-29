@@ -54,6 +54,25 @@ running on the same PC, so secure cookies, sign-in rate limiting and the live co
 For safety, the **first admin account can still only be created at http://localhost:8080 on the
 PC itself**. Requests through the tunnel are treated as remote.
 
+### Switching an existing http:// panel over to https://
+
+If you and your friends have been opening the panel at an `http://` address (your IP or domain plus
+`:8080`), passwords have been crossing the internet unencrypted. Andromeda Hosting shows a red
+*Not encrypted* bar in that case. To switch:
+
+1. Set up the tunnel and the `panel` hostname above, and check that `https://panel.example.com`
+   loads and you can sign in.
+2. In your **router**, delete the port-forward for the panel's port (8080). Leave the game ports.
+3. In **Cloudflare DNS**, if an older record points the panel's name straight at your IP (an `A`
+   record for `panel`), delete it: the tunnel creates its own `CNAME`. Never put the panel's name in
+   Andromeda Hosting's dynamic DNS list.
+4. Cloudflare dashboard → your domain → **SSL/TLS → Edge Certificates**: turn on **Always Use
+   HTTPS**, so an `http://panel.example.com` link redirects to the encrypted one.
+5. Send everyone the new address, and have each person **change their password** (*Your account*),
+   since the old one may have been seen. Turning on 2FA is a good idea too.
+6. Optional: set `"host": "127.0.0.1"` in `config.json` (see below) so the panel can't be reached
+   over plain http from outside at all, even if a port-forward comes back.
+
 ### Lock the panel to just you and your friend
 
 The panel can run commands on your PC, so only you two should be able to reach it. Use both:

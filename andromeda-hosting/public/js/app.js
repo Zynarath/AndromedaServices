@@ -83,6 +83,10 @@ function shell() {
           ? html`<div class="viewas-bar" role="status">${icon('activity')}<span>You're seeing the panel as <strong>${state.user.username}</strong> sees it — read-only. (Signed in as ${state.viewingAs.admin.username}.)</span>
               <button class="btn btn-sm" id="stop-viewas">Stop viewing</button></div>`
           : ''}
+        ${state.insecure
+          ? html`<div class="insecure-bar" role="alert">${icon('alert')}<span><strong>Not encrypted:</strong> this page reached you over plain <code>http://</code> from the internet, so passwords and sign-ins can be read along the way.
+              ${state.user.role === 'admin' ? html`Put the panel behind HTTPS — see <code>docs/domain-setup.md</code> (Cloudflare Tunnel) — and stop forwarding port ${location.port || 80} on your router.` : 'Ask the panel\'s owner for the https:// address.'}</span></div>`
+          : ''}
         <header class="topbar">
           <button class="icon-btn" id="menu-toggle" aria-label="Menu">${icon('menu')}</button>
           <span class="topbar-title">${state.panelName}</span>
@@ -192,6 +196,7 @@ async function boot() {
   }
   state.user = auth.user;
   state.viewingAs = auth.viewingAs || null;
+  state.insecure = !!auth.insecure;
   shell();
   connectSocket();
   await refreshServers();

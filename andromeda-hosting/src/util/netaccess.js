@@ -29,6 +29,13 @@ function isLocalNetwork(req) {
   return !proxied(req) && (isLoopbackAddr(ip) || isPrivateAddr(ip));
 }
 
+// Passwords would cross the internet in plain text: plain HTTP from outside this PC / home network /
+// Tailscale (Tailscale encrypts on its own). Behind a Cloudflare Tunnel on this PC req.secure is
+// true, because Express trusts the tunnel's X-Forwarded-Proto: https.
+function unencryptedFromInternet(req) {
+  return !req.secure && !isLocalNetwork(req);
+}
+
 // The visitor's real IP. Forwarding headers are only believed when the connection itself comes
 // from this PC (i.e. from cloudflared or another local proxy), so nobody can spoof them.
 function clientIp(req) {
@@ -69,4 +76,4 @@ function validRule(rule) {
   return net.isIPv4(base) && /^\d{1,2}$/.test(bits || '') && Number(bits) <= 32;
 }
 
-module.exports = { isThisPc, isLocalNetwork, clientIp, ipMatches, validRule, isPrivateAddr, normalize, PROXY_HEADERS };
+module.exports = { isThisPc, isLocalNetwork, unencryptedFromInternet, clientIp, ipMatches, validRule, isPrivateAddr, normalize, PROXY_HEADERS };
