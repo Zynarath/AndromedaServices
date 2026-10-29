@@ -1,5 +1,5 @@
 import { api } from '../../api.js';
-import { html, $, on, icon, toast, fmtBytes, fmtDate, confirmBox, modal } from '../../ui.js';
+import { html, $, on, icon, toast, fmtBytes, fmtDate, confirmBox, modal, droppedFiles } from '../../ui.js';
 
 const EDITABLE = /\.(txt|json|json5|properties|cfg|conf|ini|toml|yml|yaml|log|js|zs|snbt|mcmeta|md|csv|xml|sh|bat|ps1|lang|nbt\.txt)$|^(eula\.txt|ops\.json)$/i;
 
@@ -171,18 +171,6 @@ export async function render(root, { server }) {
   };
 
   // Drag & drop, including whole folders.
-  const walk = async (entry, prefix = '') => {
-    if (entry.isFile) return [await new Promise((r) => entry.file((f) => r({ file: f, rel: prefix + f.name })))];
-    if (!entry.isDirectory) return [];
-    const reader = entry.createReader();
-    const all = [];
-    for (;;) {
-      const batch = await new Promise((r) => reader.readEntries(r));
-      if (!batch.length) break;
-      all.push(...batch);
-    }
-    return (await Promise.all(all.map((e) => walk(e, `${prefix}${entry.name}/`)))).flat();
-  };
   root.addEventListener('dragover', (e) => {
     e.preventDefault();
     $('#drop')?.classList.add('dragging');
@@ -194,7 +182,7 @@ export async function render(root, { server }) {
     e.preventDefault();
     $('#drop')?.classList.remove('dragging');
     const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
-    const files = entries.length ? (await Promise.all(entries.map((en) => walk(en)))).flat() : [...e.dataTransfer.files].map((f) => ({ file: f, rel: f.name }));
+    const files = entries.length ? (await Promise.all(entries.map((en) => droppedFiles(en)))).flat() : [...e.dataTransfer.files].map((f) => ({ file: f, rel: f.name }));
     upload(files);
   });
 

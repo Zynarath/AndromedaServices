@@ -19,32 +19,25 @@ function creatorAllowed(server, s) {
   return auth.can(user, server, ACTION_PERM[s.action]);
 }
 
-// Most recent time <= now that a "daily/weekly" schedule should have fired.
-function lastOccurrence(s, now) {
+// When a "daily/weekly" schedule fires nearest to `now`: step = -1 for the latest time at or
+// before now (did it come due?), +1 for the next time after now.
+function occurrence(s, now, step) {
   const [hh, mm] = String(s.time || '04:00').split(':').map(Number);
-  for (let back = 0; back < 8; back++) {
+  for (let n = 0; n < 8; n++) {
     const d = new Date(now);
-    d.setDate(d.getDate() - back);
+    d.setDate(d.getDate() + step * n);
     d.setHours(hh, mm, 0, 0);
-    if (d.getTime() > now) continue;
+    if (step < 0 ? d.getTime() > now : d.getTime() <= now) continue;
     if (Array.isArray(s.days) && s.days.length && !s.days.includes(d.getDay())) continue;
     return d.getTime();
   }
   return null;
 }
+const lastOccurrence = (s, now) => occurrence(s, now, -1);
 
 function nextRun(s, now = Date.now()) {
   if (s.type === 'interval') return (s.lastRun || s.createdAt || now) + Math.max(5, Number(s.everyMinutes) || 60) * 60e3;
-  const [hh, mm] = String(s.time || '04:00').split(':').map(Number);
-  for (let fwd = 0; fwd < 8; fwd++) {
-    const d = new Date(now);
-    d.setDate(d.getDate() + fwd);
-    d.setHours(hh, mm, 0, 0);
-    if (d.getTime() <= now) continue;
-    if (Array.isArray(s.days) && s.days.length && !s.days.includes(d.getDay())) continue;
-    return d.getTime();
-  }
-  return null;
+  return occurrence(s, now, 1);
 }
 
 function isDue(s, now) {

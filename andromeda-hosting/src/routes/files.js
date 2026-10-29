@@ -2,10 +2,9 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { pipeline } = require('stream/promises');
 const auth = require('../auth');
 const manager = require('../manager/manager');
-const { safeResolve, relTo, blockedForNonAdmin } = require('../util/paths');
+const { safeResolve, relTo, cleanName, receiveUpload, listFolder, blockedForNonAdmin } = require('../util/paths');
 const { extractZip, streamZip } = require('../util/zip');
 const { HttpError } = require('../util/misc');
 
@@ -19,12 +18,6 @@ function ctx(req) {
   return { inst, root: inst.server.dir, admin: req.user.role === 'admin' };
 }
 
-function cleanName(name) {
-  const n = String(name || '').trim();
-  if (!n || n === '.' || n === '..' || /[\\/:*?"<>|\x00-\x1f]/.test(n)) throw new HttpError(400, `Invalid file name "${n}"`);
-  return n;
-}
-
 function guardWrite(abs, admin) {
   if (admin) return;
   const name = path.basename(abs);
@@ -36,16 +29,7 @@ router.use('/servers/:id/files', auth.requireAuth);
 router.get('/servers/:id/files', (req, res) => {
   const { root } = ctx(req);
   const dir = safeResolve(root, req.query.path);
-  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new HttpError(404, 'Folder not found');
-  const entries = fs.readdirSync(dir, { withFileTypes: true }).map((e) => {
-    let st = null;
-    try {
-      st = fs.statSync(path.join(dir, e.name));
-    } catch {}
-    return { name: e.name, dir: st ? st.isDirectory() : e.isDirectory(), size: st ? st.size : 0, mtime: st ? st.mtimeMs : 0 };
-  });
-  entries.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
-  res.json({ path: relTo(root, dir), entries });
+  res.json({ path: relTo(root, dir), entries: listFolder(dir) });
 });
 
 router.get('/servers/:id/files/read', (req, res) => {
@@ -102,22 +86,7 @@ router.post('/servers/:id/files/delete', (req, res) => {
 // Raw upload: PUT body is the file contents.
 router.put('/servers/:id/files/upload', async (req, res) => {
   const { inst, root, admin } = ctx(req);
-  const dir = safeResolve(root, req.query.path);
-  const rel = String(req.query.name || '').replace(/\\/g, '/');
-  // Allow "folder/sub/file.txt" from folder uploads, but validate every segment.
-  const parts = rel.split('/').filter(Boolean).map(cleanName);
-  if (!parts.length) throw new HttpError(400, 'Missing file name');
-  const target = safeResolve(root, path.posix.join(relTo(root, dir), ...parts));
-  guardWrite(target, admin);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = target + '.uploading';
-  try {
-    await pipeline(req, fs.createWriteStream(tmp));
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    fs.rmSync(tmp, { force: true });
-    throw err;
-  }
+  const target = await receiveUpload(req, root, req.query.path, req.query.name, (t) => guardWrite(t, admin));
   inst.appendConsole(`[files] ${req.user.username} uploaded ${relTo(root, target)}`);
   res.json({ ok: true });
 });

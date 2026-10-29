@@ -1,5 +1,5 @@
 // The file share page friends open. Access is decided by the server from the visitor's IP.
-import { html, $, on, icon, toast, fmtBytes, fmtDate, copyText, confirmBox, modal } from './ui.js';
+import { html, $, on, icon, toast, fmtBytes, fmtDate, copyText, confirmBox, modal, droppedFiles } from './ui.js';
 
 const root = $('#share');
 const H = { 'X-Requested-With': 'AndromedaHosting' };
@@ -113,19 +113,6 @@ function upload(items) {
   next();
 }
 
-const walk = async (entry, prefix = '') => {
-  if (entry.isFile) return [await new Promise((r) => entry.file((f) => r({ file: f, rel: prefix + f.name })))];
-  if (!entry.isDirectory) return [];
-  const reader = entry.createReader();
-  const all = [];
-  for (;;) {
-    const batch = await new Promise((r) => reader.readEntries(r));
-    if (!batch.length) break;
-    all.push(...batch);
-  }
-  return (await Promise.all(all.map((e) => walk(e, `${prefix}${entry.name}/`)))).flat();
-};
-
 root.addEventListener('dragover', (e) => {
   if (!me?.canUpload) return;
   e.preventDefault();
@@ -137,7 +124,7 @@ root.addEventListener('drop', async (e) => {
   e.preventDefault();
   $('#drop')?.classList.remove('dragging');
   const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
-  upload((await Promise.all(entries.map((en) => walk(en)))).flat());
+  upload((await Promise.all(entries.map((en) => droppedFiles(en)))).flat());
 });
 on(root, 'click', '[data-cd]', (e, el) => {
   e.preventDefault();

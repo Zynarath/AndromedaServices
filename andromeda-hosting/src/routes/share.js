@@ -5,11 +5,10 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { pipeline } = require('stream/promises');
 const config = require('../config');
 const auth = require('../auth');
 const share = require('../services/fileshare');
-const { safeResolve, relTo } = require('../util/paths');
+const { safeResolve, relTo, cleanName, receiveUpload, listFolder } = require('../util/paths');
 const { streamZip } = require('../util/zip');
 const { HttpError } = require('../util/misc');
 
@@ -45,27 +44,10 @@ function needUpload(req, _res, next) {
   next();
 }
 
-const cleanName = (name) => {
-  const n = String(name || '').trim();
-  if (!n || n === '.' || n === '..' || /[\\/:*?"<>|\x00-\x1f]/.test(n)) throw new HttpError(400, `Invalid name "${n}"`);
-  return n;
-};
-
 publicRouter.get('/api/list', (req, res) => {
   const base = share.root();
   const dir = safeResolve(base, req.query.path);
-  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new HttpError(404, 'Folder not found');
-  const entries = fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((e) => !e.name.startsWith('.') && !e.name.endsWith('.uploading'))
-    .map((e) => {
-      let st = null;
-      try {
-        st = fs.statSync(path.join(dir, e.name));
-      } catch {}
-      return { name: e.name, dir: st ? st.isDirectory() : e.isDirectory(), size: st ? st.size : 0, mtime: st ? st.mtimeMs : 0 };
-    })
-    .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name, undefined, { numeric: true }) : a.dir ? -1 : 1));
+  const entries = listFolder(dir, (name) => name.startsWith('.') || name.endsWith('.uploading'));
   res.json({ path: relTo(base, dir) === '.' ? '' : relTo(base, dir), entries, canUpload: req.share.canUpload });
 });
 
@@ -89,20 +71,7 @@ publicRouter.get('/api/download', (req, res) => {
 });
 
 publicRouter.put('/api/upload', needUpload, async (req, res) => {
-  const base = share.root();
-  const dir = safeResolve(base, req.query.path);
-  const parts = String(req.query.name || '').replace(/\\/g, '/').split('/').filter(Boolean).map(cleanName);
-  if (!parts.length) throw new HttpError(400, 'Missing file name');
-  const target = safeResolve(base, path.posix.join(relTo(base, dir), ...parts));
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = target + '.uploading';
-  try {
-    await pipeline(req, fs.createWriteStream(tmp));
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    fs.rmSync(tmp, { force: true });
-    throw err;
-  }
+  await receiveUpload(req, share.root(), req.query.path, req.query.name);
   res.json({ ok: true });
 });
 

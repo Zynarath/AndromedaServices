@@ -245,3 +245,18 @@ export function artInner(server, { short = false } = {}) {
     server.mc?.curseforge?.logo ? html`<img src="${server.mc.curseforge.logo}" alt="" loading="lazy">` : html`<span class="art-mono ${label.length > 8 ? 'art-mono-long' : ''}">${label}</span>`
   }`;
 }
+
+// Files from a drag-and-drop entry (webkitGetAsEntry), whole folders included, as [{ file, rel }]
+// where rel keeps the folder path ("sub/file.txt").
+export async function droppedFiles(entry, prefix = '') {
+  if (entry.isFile) return [await new Promise((r) => entry.file((f) => r({ file: f, rel: prefix + f.name })))];
+  if (!entry.isDirectory) return [];
+  const reader = entry.createReader();
+  const all = [];
+  for (;;) {
+    const batch = await new Promise((r) => reader.readEntries(r));
+    if (!batch.length) break;
+    all.push(...batch);
+  }
+  return (await Promise.all(all.map((e) => droppedFiles(e, `${prefix}${entry.name}/`)))).flat();
+}
