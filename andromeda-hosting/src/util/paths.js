@@ -29,29 +29,6 @@ function relTo(root, abs) {
   return path.relative(root, abs).split(path.sep).join('/');
 }
 
-function dirSize(dir) {
-  let total = 0;
-  const stack = [dir];
-  while (stack.length) {
-    const d = stack.pop();
-    let entries;
-    try {
-      entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      const p = path.join(d, e.name);
-      if (e.isDirectory()) stack.push(p);
-      else if (e.isFile()) {
-        try {
-          total += fs.statSync(p).size;
-        } catch {}
-      }
-    }
-  }
-  return total;
-}
 
 // Recursively find files whose relative path matches a predicate (bounded depth).
 function findFiles(root, predicate, maxDepth = 8) {
@@ -83,4 +60,4 @@ function blockedForNonAdmin(name) {
   return BLOCKED_EXT.test(name) || BLOCKED_NAME.test(name);
 }
 
-module.exports = { safeResolve, relTo, dirSize, findFiles, blockedForNonAdmin };
+module.exports = { safeResolve, relTo, findFiles, blockedForNonAdmin };

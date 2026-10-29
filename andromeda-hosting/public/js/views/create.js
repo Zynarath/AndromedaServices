@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { html, $, $$, on, icon, toast, esc } from '../ui.js';
+import { html, $, on, icon, toast, esc } from '../ui.js';
 import { pickCurseForge } from './cfpicker.js';
 
 const ART = { ark: 'ark', 'ark-ase': 'ark', 'mc-cf': 'mc-cf', mc: 'mc', cod: 'cod', wow: 'wow', satisfactory: 'satisfactory', sdtd: 'sdtd', valheim: 'valheim' };

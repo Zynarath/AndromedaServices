@@ -38,15 +38,5 @@ function isUdpPortFree(port) {
   });
 }
 
-function formatBytes(n) {
-  if (!Number.isFinite(n)) return '?';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
-}
 
-module.exports = { sleep, randomId, randomPassword, HttpError, isTcpPortFree, isUdpPortFree, formatBytes };
+module.exports = { sleep, randomId, randomPassword, HttpError, isTcpPortFree, isUdpPortFree };

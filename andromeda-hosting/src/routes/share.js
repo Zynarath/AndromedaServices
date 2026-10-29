@@ -9,7 +9,6 @@ const { pipeline } = require('stream/promises');
 const config = require('../config');
 const auth = require('../auth');
 const share = require('../services/fileshare');
-const access = require('../util/netaccess');
 const { safeResolve, relTo } = require('../util/paths');
 const { streamZip } = require('../util/zip');
 const { HttpError } = require('../util/misc');

@@ -267,7 +267,7 @@ const minecraft = {
     return { root: server.dir, ignore: ['libraries/**', 'logs/**', 'crash-reports/**', '.cache/**', '**/session.lock', 'cache/**', '*.jar.part'] };
   },
 
-  settingsSchema(server) {
+  settingsSchema() {
     return {
       sections: [
         {

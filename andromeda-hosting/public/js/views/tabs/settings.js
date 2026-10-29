@@ -47,7 +47,7 @@ export function field(f, value) {
     <input id="${id}" name="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" value="${value ?? ''}" ${f.def != null ? html`placeholder="Default: ${f.def}"` : ''} ${f.step ? html`step="${f.step}"` : f.type === 'number' ? html`step="any"` : ''} ${f.min != null ? html`min="${f.min}"` : ''} autocomplete="off">${hint}</label>`;
 }
 
-export async function render(root, { server, can, refresh, navigate, refreshServers }) {
+export async function render(root, { server, refresh, navigate, refreshServers }) {
   const { schema, values } = await api.get(`/api/servers/${server.id}/settings`);
   const admin = server.perms.includes('admin');
   const cores = server.cores || 0;

@@ -9,7 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const net = require('net');
 const { spawn } = require('child_process');
-const db = require('../db');
 const ddns = require('../services/ddns');
 const { Conf, parseDbInfo } = require('../util/conf');
 const { describeConf, looksBoolean } = require('../util/confdoc');

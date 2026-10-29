@@ -500,7 +500,7 @@ test('Mod pages: settings are read from BBCode/HTML descriptions; pictures only 
 });
 
 test('Mod pages: documentation links are followed in readable form; pictures are resized and recognised', async () => {
-  const { docLinks, sniffImage, thumbnailUrl, getModImage } = require('../src/services/modinfo');
+  const { docLinks, sniffImage, thumbnailUrl } = require('../src/services/modinfo');
   const links = docLinks('Config: [url=https://pastebin.com/AbC123xy]settings[/url] and https://github.com/me/mod/blob/main/README.md, https://docs.google.com/document/d/1x-Y_z/edit?usp=sharing and https://steamcommunity.com/workshop/filedetails/discussion/42/9001/ and https://example.com/whatever', '42');
   assert.deepEqual(links.map((l) => [l.label, l.read]), [
     ['Pastebin', 'https://pastebin.com/raw/AbC123xy'],
