@@ -10,6 +10,7 @@ const path = require('path');
 const net = require('net');
 const { spawn } = require('child_process');
 const db = require('../db');
+const ddns = require('../services/ddns');
 const { Conf, parseDbInfo } = require('../util/conf');
 const { describeConf, looksBoolean } = require('../util/confdoc');
 const { findFiles } = require('../util/paths');
@@ -204,7 +205,7 @@ function botPrefix(server) {
 }
 
 function realmAddress(server) {
-  return server.wow.address || db.data.settings.publicAddress || '127.0.0.1';
+  return server.wow.address || ddns.publicAddress() || '127.0.0.1';
 }
 
 // ---------- settings ----------
@@ -572,7 +573,7 @@ const wow = {
     const groups = new Map([['Realm', []]]);
     groups.get('Realm').push(
       { key: 'wow.realmName', label: 'Realm name (shown in the realm list)', type: 'text' },
-      { key: 'wow.address', label: 'Address players connect to', type: 'text', hint: `Blank = the panel's public address (${db.data.settings.publicAddress || 'not set — 127.0.0.1'}). Use a hostname like play.example.com.` }
+      { key: 'wow.address', label: 'Address players connect to', type: 'text', hint: `Blank = the panel's public address (${ddns.publicAddress() || 'not set — 127.0.0.1'}). Use a hostname like play.example.com.` }
     );
     if (p.dbDir) groups.get('Realm').push({ key: 'wow.manageDb', label: 'Start/stop the bundled MySQL with the server', type: 'bool' });
     for (const f of FIELDS) {

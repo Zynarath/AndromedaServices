@@ -100,3 +100,26 @@ test('first-admin setup is refused for requests relayed by a tunnel', async () =
   assert.equal(r.status, 403);
   srv.close();
 });
+
+test('players are shown the dynamic DNS hostname instead of an IP', () => {
+  const db = require('../src/db');
+  const ddns = require('../src/services/ddns');
+  const s = db.data.settings;
+  const saved = { publicAddress: s.publicAddress, ddns: s.ddns };
+  try {
+    s.ddns = { enabled: true, token: 't', hostnames: ['play.thefinalhour.us'] };
+    s.publicAddress = '173.22.68.111';
+    assert.equal(ddns.publicAddress(), 'play.thefinalhour.us', 'public IP -> hostname');
+    s.publicAddress = '';
+    assert.equal(ddns.publicAddress(), 'play.thefinalhour.us', 'blank -> hostname');
+    s.publicAddress = 'mc.example.com';
+    assert.equal(ddns.publicAddress(), 'mc.example.com', 'a hostname typed in wins');
+    s.publicAddress = '100.101.102.103';
+    assert.equal(ddns.publicAddress(), '100.101.102.103', 'a Tailscale IP chosen on purpose stays');
+    s.publicAddress = '173.22.68.111';
+    s.ddns.enabled = false;
+    assert.equal(ddns.publicAddress(), '173.22.68.111', 'no dynamic DNS: the setting as is');
+  } finally {
+    Object.assign(s, saved);
+  }
+});

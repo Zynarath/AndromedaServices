@@ -11,6 +11,7 @@ const { games, templates, CONFIG_KEY } = require('../games');
 const cf = require('../services/curseforge');
 const mapImages = require('../services/mapimages');
 const covers = require('../services/covers');
+const ddns = require('../services/ddns');
 const ficsit = require('../services/ficsit');
 const { pipeline } = require('stream/promises');
 const modinfo = require('../services/modinfo');
@@ -28,7 +29,7 @@ function load(req, perm = 'view') {
 }
 
 function publicHost() {
-  return db.data.settings.publicAddress || '';
+  return ddns.publicAddress();
 }
 
 function view(inst, user, full = false) {
@@ -91,7 +92,7 @@ function view(inst, user, full = false) {
     if (perms.includes('settings') || perms.includes('admin')) out.vh.joinPassword = s.vh.password || '';
   }
   if (s.wow) {
-    out.wow = { realmName: s.wow.realmName, address: s.wow.address || db.data.settings.publicAddress || '', manageDb: !!s.wow.manageDb };
+    out.wow = { realmName: s.wow.realmName, address: s.wow.address || ddns.publicAddress(), manageDb: !!s.wow.manageDb };
     if (perms.includes('admin')) out.wow.root = s.wow.root;
   }
   if (full) {

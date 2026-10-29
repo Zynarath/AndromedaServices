@@ -6,6 +6,7 @@ const db = require('../db');
 const logger = require('../util/log');
 const { sleep, HttpError } = require('../util/misc');
 const { games } = require('../games');
+const ddns = require('./ddns');
 
 const log = logger('discord');
 const API = () => process.env.ANDROMEDA_DISCORD_API || 'https://discord.com/api/v10';
@@ -164,7 +165,7 @@ function describe(server) {
 }
 
 function address(server) {
-  const host = db.data.settings.publicAddress;
+  const host = ddns.publicAddress();
   return host ? games[server.game].connectAddress(server, host) : null;
 }
 
@@ -283,7 +284,7 @@ function onStatus(id, status) {
       if (server.cod.password) fields.push({ name: 'Password', value: s().includePassword ? `||${server.cod.password}||` : 'Required (ask in the group)' });
     }
     if (server.wow) {
-      fields.push({ name: 'Realmlist', value: `\`set realmlist ${server.wow.address || db.data.settings.publicAddress || '127.0.0.1'}\`` });
+      fields.push({ name: 'Realmlist', value: `\`set realmlist ${server.wow.address || ddns.publicAddress() || '127.0.0.1'}\`` });
       fields[0].value = null; // the "Join" host:port doesn't apply to WoW
     }
     const joinPw = (server.sf && server.sf.clientPassword) || (server.sdtd && server.sdtd.password) || (server.vh && server.vh.password);

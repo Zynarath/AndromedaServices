@@ -13,7 +13,10 @@ export async function render(root) {
         <label class="field"><span>Panel name</span><input name="panelName" value="${s.panelName}" maxlength="40"></label>
         <label class="field"><span>Public address players connect to</span>
           <div class="input-row"><input name="publicAddress" value="${s.publicAddress}" placeholder="e.g. play.example.com"><button type="button" class="btn" id="detect">${icon('globe')}Detect</button></div>
-          <small class="hint">Your public IP, a dynamic DNS name (DuckDNS, No-IP) or a Tailscale IP. Shown as the "Connect" address on each server.</small></label>
+          <small class="hint">Shown as the "Connect" address on each server and in Discord.
+            ${s.effectivePublicAddress && s.effectivePublicAddress !== s.publicAddress
+              ? html`Players are shown <strong>${s.effectivePublicAddress}</strong>: your dynamic DNS name below is used automatically, since this is ${s.publicAddress ? 'an IP' : 'blank'}.`
+              : 'Leave it blank to use your dynamic DNS name (below) automatically, or enter a hostname, your public IP or a Tailscale IP.'}</small></label>
       </div>
       <h3>CurseForge</h3>
       <div class="form-grid">

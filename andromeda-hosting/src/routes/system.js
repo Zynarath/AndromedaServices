@@ -55,6 +55,7 @@ router.get('/settings', auth.requireAdmin, (_req, res) => {
   res.json({
     panelName: s.panelName,
     publicAddress: s.publicAddress,
+    effectivePublicAddress: ddns.publicAddress(),
     curseforgeKeySet: !!s.curseforgeApiKey,
     dataDir: config.dataDir,
     serversDir: config.serversDir,

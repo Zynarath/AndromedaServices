@@ -1,7 +1,9 @@
 'use strict';
 // Dynamic DNS for Cloudflare: keeps A records (e.g. play.example.com) pointed at this PC's
 // public IP, so friends can always join by name even when your ISP changes your IP.
+const net = require('net');
 const db = require('../db');
+const { isPrivateAddr } = require('../util/netaccess');
 const logger = require('../util/log');
 const { fetchWithRetry } = require('../util/download');
 const { HttpError } = require('../util/misc');
@@ -155,4 +157,17 @@ function reset() {
   status.error = null;
 }
 
-module.exports = { start, runOnce, publicIp, cleanHostnames, publicStatus, reset, syncRecord };
+// The address players are told to connect to (server cards, Overview, Discord, the WoW realm).
+// A hostname typed into "Public address" always wins. Otherwise, when dynamic DNS keeps a hostname
+// pointed at this PC, that hostname is used instead of a blank or public-IP setting, so it follows
+// IP changes. A LAN or Tailscale IP someone chose on purpose is left alone.
+function publicAddress() {
+  const manual = String(db.data.settings.publicAddress || '').trim();
+  if (manual && !net.isIP(manual)) return manual;
+  if (manual && isPrivateAddr(manual)) return manual;
+  const d = settings();
+  if (d.enabled && d.hostnames.length) return d.hostnames[0];
+  return manual;
+}
+
+module.exports = { publicAddress, start, runOnce, publicIp, cleanHostnames, publicStatus, reset, syncRecord };
