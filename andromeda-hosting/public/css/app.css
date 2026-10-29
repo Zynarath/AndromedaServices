@@ -96,7 +96,7 @@ kbd { border: 1px solid var(--border-strong); border-bottom-width: 2px; padding:
 .topbar { display: none; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-2); position: sticky; top: 0; z-index: 20; }
 .topbar-title { font-weight: 700; }
 .socket-state { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--warn); color: #000; padding: 6px 14px; border-radius: 99px; font-weight: 600; font-size: 12px; z-index: 60; }
-.view { padding: 28px 32px 60px; max-width: 1280px; width: 100%; }
+.view { padding: 28px 32px 60px; max-width: 2560px; width: 100%; }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
@@ -261,7 +261,7 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 .tile-meta { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meter { height: 6px; border-radius: 99px; background: var(--surface-3); margin-top: 10px; overflow: hidden; }
 .meter span { display: block; height: 100%; background: var(--chart); border-radius: 99px; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
 .server-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, transform 0.15s; }
 .server-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
 .card-art { height: 96px; position: relative; display: flex; align-items: center; justify-content: center; }
@@ -278,7 +278,10 @@ a.chip:hover { color: var(--text); text-decoration: none; }
 .card-stats dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
 .card-error { color: var(--bad); font-size: 12.5px; margin: 10px 0; }
 .card-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
-.card-actions .btn-ghost span { max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-weight: 500; }
+.card-actions .btn-ghost { flex: 1 1 auto; min-width: 0; height: auto; min-height: 30px; padding: 4px 8px; justify-content: flex-start; text-align: left; }
+.card-actions .btn-ghost span { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; font-family: var(--mono); font-weight: 500; }
+.card-actions .btn-ghost .ic { flex: none; }
+.card-actions > .btn:not(.btn-ghost) { flex: none; }
 .mini-job { margin: 12px 0 6px; }
 .mini-job small { color: var(--muted); display: block; margin-top: 4px; }
 
