@@ -223,7 +223,7 @@ async function renderUpdates(fresh) {
       : html`<p class="muted small">${u.lastCheck ? `Up to date (checked ${new Date(u.lastCheck).toLocaleTimeString()}).` : 'Checks GitHub every hour.'}</p>`}
     <label class="switch field-switch"><input type="checkbox" id="upd-auto" ${u.auto ? 'checked' : ''}><span></span>Install updates automatically
       <small class="hint">Only while nobody is playing. Running servers are saved, stopped and started again afterwards.</small></label>
-    ${u.canRestart ? '' : html`<p class="muted small">Started without start.bat, so after an update you'll need to restart Andromeda Hosting yourself.</p>`}
+    ${u.canRestart ? '' : html`<p class="muted small">Started without Andromeda Services, so after an update you'll need to restart Andromeda Hosting yourself.</p>`}
     <div class="form-actions"><button type="button" class="btn" id="upd-check">${icon('refresh')}Check now</button>
       ${u.behind ? html`<button type="button" class="btn btn-primary" id="upd-apply">${icon('download')}Update now</button>` : ''}</div>`.s;
   $('#upd-check').onclick = async (e) => {

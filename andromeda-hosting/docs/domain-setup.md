@@ -154,7 +154,7 @@ ports, or Tailscale for friends only.
 
 | Symptom | Fix |
 |---|---|
-| `panel.example.com` shows a Cloudflare 502/1033 error | The tunnel is running but Andromeda Hosting isn't. Start `start.bat` (or `scripts\install-autostart.ps1`) and check the tunnel shows *Healthy* |
+| `panel.example.com` shows a Cloudflare 502/1033 error | The tunnel is running but Andromeda Hosting isn't. Start it in Andromeda Services and check the tunnel shows *Healthy* |
 | Panel loads but the console never updates | Cloudflare dashboard → your domain → **Network** → make sure **WebSockets** is on (it's on by default) |
 | "Create the first admin from the host PC" | Expected. Open `http://localhost:8080` on the gaming PC once to create the admin |
 | DNS status says "No Cloudflare zone found" | The token isn't scoped to `example.com`, or the domain isn't active on Cloudflare yet |

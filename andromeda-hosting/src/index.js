@@ -190,12 +190,12 @@ async function shutdown(signal, exitCode = 0) {
     process.exit(exitCode);
   }
 }
-// After an update, exit with a code start.bat recognises so it starts the new version.
+// After an update, exit with a code Andromeda Services recognises so it starts the new version.
 const updater = require('./services/updater');
 updater.init(manager, (why) => shutdown(`Restarting for ${why}`, updater.RESTART_CODE));
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(sig, () => shutdown(sig));
 // Andromeda Services runs the panel without a console window and asks it to stop by writing
-// "stop" to its input, which gets the same clean shutdown as closing start.bat.
+// "stop" to its input, which gets the same clean shutdown as Ctrl+C in a console window.
 if (process.env.ANDROMEDA_SERVICES === '1' && !process.stdin.isTTY) {
   require('readline').createInterface({ input: process.stdin }).on('line', (l) => {
     const cmd = l.trim().toLowerCase();

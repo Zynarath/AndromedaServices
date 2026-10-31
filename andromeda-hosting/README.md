@@ -54,11 +54,13 @@ Eclipse Temurin). You don't need to install Java.
 
 1. Install **Node.js LTS** (20 or newer) from <https://nodejs.org>.
 2. Download or clone this folder, e.g. to `C:\Andromeda Hosting`.
-3. Double-click **`install.bat`**. It also builds **Andromeda Services** (see below) and adds it
-   to your desktop and Start menu.
+3. Double-click **`install.exe`** and press **Install**. It installs the packages, makes
+   `config.json`, builds **Andromeda Services** (see below) and adds it to your desktop and Start
+   menu. If you downloaded a ZIP, Windows may say it protected your PC: choose *More info* →
+   *Run anyway*.
 4. Optional: open `config.json` and set `serversDir` to a big drive, e.g. `"D:/GameServers"`.
    ARK needs roughly 15–25 GB per server; modpacks need 1–5 GB.
-5. Open **Andromeda Services** (or double-click `start.bat`), then open <http://localhost:8080>
+5. Open **Andromeda Services**, then open <http://localhost:8080>
    **on this PC** and create your admin account. For safety, the first account can only be
    created from the host PC.
 6. Go to **Panel settings**:
@@ -67,7 +69,8 @@ Eclipse Temurin). You don't need to install Java.
    - Set your **public address** (press *Detect*), or a DuckDNS / No-IP name if your IP changes.
 7. Optional:
    - Run `scripts\open-firewall.ps1` as Administrator to open the Windows Firewall.
-   - Run `scripts\install-autostart.ps1` to start the panel when you log in.
+   - In Andromeda Services, turn on *Open Andromeda Services when I sign in to Windows* to start
+     everything when you log in.
 
 You can also run it on Linux with `npm install --omit=dev` then `npm start` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim, Rust; ARK: SA and most Call of Duty titles need Windows).
 
@@ -79,18 +82,16 @@ You can also run it on Linux with `npm install --omit=dev` then `npm start` (Min
   own Start / Stop / Restart / Open buttons, status and live log. The website's **Settings** (SPP
   folder, name, port, sign-up, Discord link) are set here, not in the panel.
 - *Start when Andromeda Services opens* is a setting for each one. *Open Andromeda Services when I
-  sign in to Windows* starts it all at login.
+  sign in to Windows* starts it all at login, quietly in the system tray.
 - Closing the window keeps everything running in the system tray. **Stop all and exit** (in the
-  window or the tray menu) stops cleanly: game servers are saved and stopped first, as when you
-  close `start.bat`.
+  window or the tray menu) stops cleanly: game servers are saved and stopped first.
 - **Check for updates** downloads the latest version from GitHub (see [Updating](#updating)).
 - After an update installed from the panel, it restarts the panel by itself.
 
-`install.bat` builds it as `Andromeda Services.exe` in this folder, using the C# compiler that
+`install.exe` builds it as `Andromeda Services.exe` in this folder, using the C# compiler that
 comes with Windows, so there is nothing extra to install. To rebuild it yourself, run
 `services\build.bat`, or `services\build.bat shortcut` to also recreate the shortcuts.
-`start.bat` still runs the panel in a console window if you prefer that. Use one way or the other,
-not both at once.
+`services\build.bat installer` rebuilds `install.exe` from `services\Installer.cs`.
 
 ### Creating servers
 
@@ -122,7 +123,7 @@ Make your Andromeda Hosting folder a Git copy of the repository once; after that
    Sign in to GitHub in the browser window if it asks (the repository may be private).
 3. Copy your **`data`** folder and **`config.json`** from your old `andromeda-hosting` folder into
    `HomePanel\andromeda-hosting\`. These hold your servers, users and settings; Git never touches them.
-4. From now on, run Andromeda Hosting from `HomePanel\andromeda-hosting` (`install.bat` once, then
+4. From now on, run Andromeda Hosting from `HomePanel\andromeda-hosting` (`install.exe` once, then
    Andromeda Services).
 
 **Check for updates** (in Andromeda Services, at the top right, or in its tray menu) shows what
@@ -134,7 +135,7 @@ After that, updates come from the panel itself: **Panel settings → Updates** c
 hour and shows what changed. Click **Update now**, or turn on **Install updates automatically**,
 which only installs while nobody is playing. Andromeda Hosting saves and stops running servers, installs
 the update, restarts, and starts those servers again. This works when Andromeda Hosting was started with
-Andromeda Services or `start.bat`.
+Andromeda Services.
 
 Don't edit Andromeda Hosting's own files in that folder. Change settings in the panel or `config.json`,
 otherwise Git will refuse to update over your edits.

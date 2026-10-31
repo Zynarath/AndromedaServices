@@ -3,7 +3,8 @@
 // a console window.
 //
 // Built by services\build.bat with the C# compiler that ships with Windows (.NET Framework 4), so
-// it is written for C# 5 (no string interpolation, no ?. operator).
+// it is written for C# 5 (no string interpolation, no ?. operator). install.exe (Installer.cs) is
+// compiled together with this file to share its look, with INSTALLER defined.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -20,10 +21,12 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+#if !INSTALLER
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
 [assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the WotLK website")]
 [assembly: AssemblyVersion("2.0.0.0")]
+#endif
 
 namespace Andromeda
 {
@@ -491,7 +494,7 @@ namespace Andromeda
             Application.SetCompatibleTextRenderingDefault(false);
             if (!File.Exists(Path.Combine(Root, Path.Combine("src", "index.js"))))
             {
-                MessageBox.Show("Andromeda Services must be in the andromeda-hosting folder (next to start.bat).\n\nFolder: " + Root, "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Andromeda Services must be in the andromeda-hosting folder (next to install.exe).\n\nFolder: " + Root, "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
             var form = new MainForm(show);
@@ -576,6 +579,8 @@ namespace Andromeda
         bool trayHintShown;
         bool updating;
         string pendingBranch;
+        bool startHidden = Program.Args.Contains("--tray"); // opened at sign-in: stay in the tray
+        bool loaded;
 
         public MainForm(EventWaitHandle show)
         {
@@ -766,11 +771,27 @@ namespace Andromeda
 
             SystemEvents.SessionEnding += (o, e) => { exiting = true; StopAllAndWait(60, false); };
             HandleCreated += (o, e) => DarkTitleBar(Handle);
-            Load += (o, e) => OnLoaded();
+            Load += (o, e) => { if (!loaded) OnLoaded(); };
+            if (RunAtLogin()) SetRunAtLogin(true); // keeps the sign-in entry pointing at this copy, with --tray
+        }
+
+        // Opened at sign-in: start everything without showing the window. Load only fires when the
+        // window is first shown, so the start-up work runs here instead.
+        protected override void SetVisibleCore(bool value)
+        {
+            if (startHidden && value)
+            {
+                startHidden = false;
+                if (!IsHandleCreated) CreateHandle();
+                OnLoaded();
+                return;
+            }
+            base.SetVisibleCore(value);
         }
 
         void OnLoaded()
         {
+            loaded = true;
             node = FindNode();
             foreach (var s in services) RefreshCard(s);
             ShowLog(panel);
@@ -904,7 +925,7 @@ namespace Andromeda
             if (PortInUse(s.Port()))
             {
                 s.SetState(State.External);
-                s.Write("Port " + s.Port() + " is already in use, so " + s.Name + " seems to be running already (for example from start.bat). Close that one first to manage it here.");
+                s.Write("Port " + s.Port() + " is already in use, so " + s.Name + " seems to be running already (for example from a console window). Close that one first to manage it here.");
                 return;
             }
             if (!Directory.Exists(Path.Combine(Program.Root, "node_modules")))
@@ -914,7 +935,7 @@ namespace Andromeda
                 var t = new Thread(() =>
                 {
                     var r = RunNpmInstall(s);
-                    try { BeginInvoke((Action)(() => { if (r.Ok) Launch(s); else { s.Write("npm install failed. Run install.bat once, then try again."); s.SetState(State.Crashed); } })); } catch { }
+                    try { BeginInvoke((Action)(() => { if (r.Ok) Launch(s); else { s.Write("npm install failed. Run install.exe once, then try again."); s.SetState(State.Crashed); } })); } catch { }
                 });
                 t.IsBackground = true;
                 t.Start();
@@ -1050,7 +1071,7 @@ namespace Andromeda
         }
 
         // Runs a program to the end, copying its output to a service's log. Call from a background thread.
-        static RunResult Run(string file, string args, Service log, int timeoutMs)
+        internal static RunResult Run(string file, string args, Service log, int timeoutMs)
         {
             var r = new RunResult();
             var sb = new StringBuilder();
@@ -1198,7 +1219,7 @@ namespace Andromeda
             if (updating || pendingBranch == null) return;
             if (panel.State == State.External || site.State == State.External)
             {
-                MessageBox.Show(this, "Something was started outside Andromeda Services (for example with start.bat). Close it first, then update.", "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "Something was started outside Andromeda Services (for example in a console window). Close it first, then update.", "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             bool wasPanel = panel.Alive;
@@ -1346,7 +1367,7 @@ namespace Andromeda
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
-        static void DarkTitleBar(IntPtr hwnd)
+        internal static void DarkTitleBar(IntPtr hwnd)
         {
             try
             {
@@ -1522,7 +1543,7 @@ namespace Andromeda
             }
         }
 
-        static string FindNode()
+        internal static string FindNode()
         {
             var custom = Environment.GetEnvironmentVariable("ANDROMEDA_NODE"); // a Node.js somewhere unusual
             if (!string.IsNullOrEmpty(custom) && File.Exists(custom)) return custom;
@@ -1582,7 +1603,7 @@ namespace Andromeda
             {
                 using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
-                    if (on) k.SetValue("Andromeda Services", "\"" + Application.ExecutablePath + "\"");
+                    if (on) k.SetValue("Andromeda Services", "\"" + Application.ExecutablePath + "\" --tray");
                     else k.DeleteValue("Andromeda Services", false);
                 }
             }

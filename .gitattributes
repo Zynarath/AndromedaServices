@@ -1,2 +1,4 @@
 # Windows batch files need CRLF line endings, whatever the cloning machine uses.
 *.bat text eol=crlf
+# Committed binary (built by services\build.bat installer).
+*.exe binary

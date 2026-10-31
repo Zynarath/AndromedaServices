@@ -1,6 +1,6 @@
 'use strict';
 // Runs before anything else: if an update added a package that isn't installed yet
-// (e.g. after pulling new code without re-running install.bat), install it automatically.
+// (e.g. after pulling new code without re-running install.exe), install it automatically.
 const path = require('path');
 const { execSync } = require('child_process');
 

@@ -1,6 +1,6 @@
 'use strict';
 // Self-update from GitHub: the panel folder is a Git clone, so updating is "git pull" + "npm install"
-// and a restart. Andromeda Services and start.bat restart the panel when it exits with RESTART_CODE.
+// and a restart. Andromeda Services restarts the panel when it exits with RESTART_CODE.
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -113,7 +113,7 @@ async function apply({ reason = 'manual' } = {}) {
     log.info('Update downloaded.');
     if (process.env.ANDROMEDA_LAUNCHER !== '1') {
       state.applying = false;
-      return { restarted: false, message: 'Update installed. Restart Andromeda Hosting (close its window and run start.bat) to use it.' };
+      return { restarted: false, message: 'Update installed. Restart Andromeda Hosting (open it with Andromeda Services) to use it.' };
     }
     rememberRunning();
     setTimeout(() => restartHook && restartHook(`update (${reason})`), 500);
