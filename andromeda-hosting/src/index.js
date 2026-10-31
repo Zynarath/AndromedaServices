@@ -167,6 +167,7 @@ wowsite.write(db.data.servers); // settings for the WotLK website, which runs as
 require('./services/ddns').start();
 require('./services/discord').init(manager);
 require('./shareServer').apply();
+require('./services/servicesapp').ensureBuilt(log);
 server.listen(config.port, config.host, () => {
   const proto = useHttps ? 'https' : 'http';
   log.info(`Andromeda Hosting is running at ${proto}://localhost:${config.port}`);
