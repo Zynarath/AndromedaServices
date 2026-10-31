@@ -681,6 +681,8 @@ body::after {
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 .brand-text small, .auth-brand .company { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 .auth-brand h1 { margin: 0; }
+.auth-brand .company { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+.auth-brand img.company-mark { width: 15px; height: 15px; flex: none; }
 
 /* People who turn off animations in Windows get none. */
 @media (prefers-reduced-motion: reduce) {

@@ -225,6 +225,18 @@ This also turns off 2FA for that account.
 - Anyone with *console* or *files* permission can effectively run commands on the server, so only
   give those to people you trust.
 
+## Branding
+
+Andromeda Hosting is made by **Andromeda Services**. The logos are SVG files in `public/img/`:
+
+| File | What it is |
+|---|---|
+| `icon.svg` | **Andromeda Hosting** app icon ("Eclipse"): the panel's logo and browser-tab icon |
+| `andromeda-hosting-mark.svg` | The Eclipse mark on its own, for dark backgrounds |
+| `andromeda-services-icon.svg` | **Andromeda Services** app icon ("Star Gate"); `services/andromeda.ico` is the same for the Windows app |
+| `andromeda-services-logo.svg` | Star Gate mark with the "Andromeda Services" name, for dark backgrounds |
+| `andromeda-services-mark.svg` / `-mark-light.svg` | The Star Gate mark on its own, for dark / light backgrounds |
+
 ## How it works
 
 Node.js + Express backend, WebSocket live updates, plain-JavaScript frontend with no build step, and

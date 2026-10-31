@@ -227,28 +227,35 @@ namespace Andromeda
         }
     }
 
-    // The Andromeda logo (public/img/icon.svg), drawn so it stays sharp at any size.
+    // The Andromeda Services "Star Gate" logo (public/img/icon.svg), drawn so it stays sharp at any
+    // size: an open ring, an inner blue ring and a four-point star on a dark rounded tile.
     class Logo : Control
     {
         public Logo()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
         }
-        PointF P(float x, float y) { float k = Width / 32f; return new PointF(x * k, y * k); }
+        PointF P(float x, float y) { float k = Width / 64f; return new PointF(x * k, y * k); }
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.Clear(Theme.Behind(this));
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            float k = Width / 32f;
-            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), (int)(8 * k)))
-            using (var b = new SolidBrush(Theme.Brand)) g.FillPath(b, path);
-            using (var pen = new Pen(Color.White, 2.4f * k) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round })
+            float k = Width / 64f;
+            using (var tile = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), (int)(15 * k)))
+            using (var b = new SolidBrush(Color.FromArgb(11, 13, 16)))
+            using (var edge = new Pen(Theme.CardBorder, Math.Max(1f, 2 * k)))
             {
-                g.DrawPolygon(pen, new[] { P(8, 22), P(8, 10), P(16, 6), P(24, 10), P(24, 22), P(16, 26) });
-                g.DrawLine(pen, P(16, 14), P(16, 26));
-                g.DrawLines(pen, new[] { P(8, 10), P(16, 14), P(24, 10) });
+                g.FillPath(b, tile);
+                g.DrawPath(edge, tile);
             }
+            // Open outer ring: 280 degrees, starting from the upper right.
+            using (var ring = new Pen(Theme.Text, 4.2f * k) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawArc(ring, 14 * k, 14 * k, 36 * k, 36 * k, -60, 255);
+            using (var inner = new Pen(Theme.Accent, 3.4f * k))
+                g.DrawEllipse(inner, 22.5f * k, 22.5f * k, 19 * k, 19 * k);
+            using (var star = new SolidBrush(Theme.Text))
+                g.FillPolygon(star, new[] { P(32, 25.5f), P(33.8f, 30.2f), P(38.5f, 32), P(33.8f, 33.8f), P(32, 38.5f), P(30.2f, 33.8f), P(25.5f, 32), P(30.2f, 30.2f) });
         }
     }
 
