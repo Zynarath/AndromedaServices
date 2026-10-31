@@ -1,45 +1,38 @@
-/* Andromeda Hosting — dark control panel theme with a light variant. */
+/* Andromeda Hosting: black "X"-style theme with thin tech lines and light motion.
+   Pure black canvas, hairline grey borders, white pill buttons, X-blue accents. */
 :root {
-  --bg: #0d1117;
-  --bg-2: #11161f;
-  --surface: #161c27;
-  --surface-2: #1c2431;
-  --surface-3: #232d3d;
-  --border: #263042;
-  --border-strong: #34405a;
-  --text: #e6ebf2;
-  --text-2: #a8b3c4;
-  --muted: #7d889b;
-  --accent: #ff6a3d;
-  --accent-2: #ff8a5c;
-  --accent-ink: #1a0b05;
-  --accent-soft: rgba(255, 106, 61, 0.14);
-  --ok: #3fc97a;
-  --ok-soft: rgba(63, 201, 122, 0.14);
-  --warn: #f2b543;
-  --warn-soft: rgba(242, 181, 67, 0.14);
-  --bad: #f2555a;
-  --bad-soft: rgba(242, 85, 90, 0.14);
-  --info: #5aa9ff;
-  --info-soft: rgba(90, 169, 255, 0.14);
-  --chart: #5aa9ff;
-  --console-bg: #090c11;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --radius: 12px;
-  --radius-sm: 8px;
+  --bg: #000000;
+  --bg-2: #000000;
+  --surface: #000000;
+  --surface-2: #0d0f11;
+  --surface-3: #16181c;
+  --border: #2f3336;
+  --border-strong: #3e4347;
+  --text: #e7e9ea;
+  --text-2: #b1b6bb;
+  --muted: #71767b;
+  --accent: #1d9bf0;
+  --accent-2: #4cb3f5;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(29, 155, 240, 0.12);
+  --ok: #00ba7c;
+  --ok-soft: rgba(0, 186, 124, 0.14);
+  --warn: #ffd400;
+  --warn-soft: rgba(255, 212, 0, 0.12);
+  --bad: #f4212e;
+  --bad-soft: rgba(244, 33, 46, 0.13);
+  --info: #1d9bf0;
+  --info-soft: rgba(29, 155, 240, 0.12);
+  --chart: #1d9bf0;
+  --console-bg: #050607;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.7);
+  --glow: 0 0 0 1px rgba(29, 155, 240, 0.35), 0 0 22px rgba(29, 155, 240, 0.18);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
   color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    --bg: #f3f5f9; --bg-2: #eef1f6; --surface: #ffffff; --surface-2: #f6f8fb; --surface-3: #eceff5;
-    --border: #dfe4ec; --border-strong: #c9d1de; --text: #141a24; --text-2: #3c4657; --muted: #677285;
-    --accent: #e8522a; --accent-2: #f06a43; --accent-ink: #ffffff; --accent-soft: rgba(232, 82, 42, 0.1);
-    --ok: #1d9a55; --warn: #b77a06; --bad: #d23a3f; --info: #2a78d6; --chart: #2a78d6;
-    --console-bg: #0f141c; --shadow: 0 10px 30px rgba(20, 30, 50, 0.12);
-    color-scheme: light;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -417,7 +410,7 @@ ul.chips { list-style: none; padding: 0; margin: 8px 0 0; }
 
 /* ---------- auth ---------- */
 .auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
-  background: radial-gradient(1000px 500px at 20% -10%, rgba(255, 106, 61, 0.18), transparent 60%), radial-gradient(800px 500px at 110% 110%, rgba(90, 169, 255, 0.12), transparent 60%), var(--bg); }
+  background: radial-gradient(900px 420px at 50% -10%, rgba(29, 155, 240, 0.10), transparent 65%), transparent; }
 .auth-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
 .auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .auth-brand img { width: 40px; height: 40px; }
@@ -499,3 +492,129 @@ ul.chips { list-style: none; padding: 0; margin: 8px 0 0; }
 .diag li.bad > .ic { color: var(--bad); }
 .diag li div { display: flex; flex-direction: column; }
 .diag small { color: var(--text-2); }
+
+
+/* =====================================================================
+   Tech-line layer: grid backdrop, hairlines, light sweeps and motion.
+   ===================================================================== */
+
+/* Faint blueprint grid behind everything, fading out toward the bottom. */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
+}
+body { background: #000; letter-spacing: 0.005em; }
+::selection { background: rgba(29, 155, 240, 0.35); }
+* { scrollbar-width: thin; scrollbar-color: #2f3336 transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 99px; border: 3px solid #000; }
+
+h1 { font-weight: 800; letter-spacing: -0.02em; }
+h4 { letter-spacing: 0.12em; font-size: 11.5px; color: var(--muted); }
+a { color: var(--accent); }
+
+/* Sidebar: black with one hairline, active item marked by a light rail. */
+.sidebar { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(12px); border-right: 1px solid var(--border); }
+.brand { font-weight: 800; letter-spacing: -0.01em; }
+.nav a { position: relative; border-radius: 99px; padding: 9px 14px; font-weight: 600; color: var(--text-2); transition: background 0.2s var(--ease), color 0.2s var(--ease); }
+.nav a:hover { background: var(--surface-3); color: var(--text); }
+.nav a.active { background: transparent; color: var(--text); font-weight: 800; }
+.nav a.active::before { content: ''; position: absolute; left: -10px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: rail-in 0.35s var(--ease); }
+.nav-label { letter-spacing: 0.16em; font-size: 10.5px; }
+.nav-label::after { content: ''; display: block; height: 1px; margin-top: 6px; background: linear-gradient(90deg, var(--border), transparent); }
+.topbar { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(12px); }
+
+/* Status dots breathe while running. */
+.st-running { box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.6); animation: pulse 2.2s infinite; }
+.st-starting, .st-stopping { animation: blink 1s infinite; }
+
+/* Buttons: pills. Primary is X's white pill; others are outlined. */
+.btn { border-radius: 99px; font-weight: 700; background: transparent; border-color: var(--border-strong); transition: background 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.1s; }
+.btn:hover { background: rgba(231, 233, 234, 0.08); border-color: #536471; }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn-primary { background: #e7e9ea; border-color: #e7e9ea; color: #0f1419; }
+.btn-primary:hover { background: #ffffff; border-color: #ffffff; box-shadow: 0 0 18px rgba(255, 255, 255, 0.25); }
+.btn-danger { background: transparent; border-color: rgba(244, 33, 46, 0.6); color: #ff5c66; }
+.btn-danger:hover { background: rgba(244, 33, 46, 0.12); filter: none; }
+.btn-ghost { border-color: transparent; }
+.icon-btn { border-radius: 99px; transition: background 0.2s var(--ease); }
+
+/* Inputs: black wells with a hairline that lights up blue. */
+input, select, textarea { background: #000; border-color: var(--border-strong); border-radius: var(--radius-sm); transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: var(--glow); }
+
+/* Panels, tiles and server cards: black with hairlines, a light sweep across the top edge on
+   hover, and corner ticks like a technical drawing. */
+.panel, .tile, .server-card, .modal { position: relative; background: #000; border-color: var(--border); }
+.panel::before, .tile::before, .server-card::before {
+  content: ''; position: absolute; top: -1px; left: 16px; right: 16px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(29, 155, 240, 0.9), transparent);
+  background-size: 40% 100%; background-repeat: no-repeat; background-position: -60% 0;
+  opacity: 0; transition: opacity 0.3s var(--ease);
+}
+.panel:hover::before, .tile:hover::before, .server-card:hover::before { opacity: 1; animation: sweep 1.6s var(--ease) infinite; }
+.panel::after, .tile::after {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+  background:
+    linear-gradient(var(--muted), var(--muted)) top left / 10px 1px no-repeat,
+    linear-gradient(var(--muted), var(--muted)) top left / 1px 10px no-repeat,
+    linear-gradient(var(--muted), var(--muted)) bottom right / 10px 1px no-repeat,
+    linear-gradient(var(--muted), var(--muted)) bottom right / 1px 10px no-repeat;
+  opacity: 0.45;
+}
+.server-card { transition: border-color 0.25s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease); }
+.server-card:hover { border-color: #536471; transform: translateY(-3px); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(29, 155, 240, 0.15); }
+.tile-value { font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.meter, .bar { background: #16181c; }
+.meter span, .bar span { background: linear-gradient(90deg, var(--accent), #7cc8ff); box-shadow: 0 0 10px rgba(29, 155, 240, 0.5); transition: width 0.6s var(--ease); }
+
+/* Tables and tabs: hairlines only. */
+.table th { color: var(--muted); letter-spacing: 0.1em; font-size: 11px; }
+.table td { border-color: var(--border); }
+.table tbody tr { transition: background 0.15s; }
+.table tbody tr:hover { background: rgba(231, 233, 234, 0.03); }
+.tabs { border-bottom-color: var(--border); }
+.tabs a { position: relative; border-bottom: 0; transition: color 0.2s var(--ease); }
+.tabs a::after { content: ''; position: absolute; left: 50%; right: 50%; bottom: -1px; height: 3px; border-radius: 3px; background: var(--accent); transition: left 0.25s var(--ease), right 0.25s var(--ease); }
+.tabs a.active { font-weight: 800; }
+.tabs a.active::after { left: 14px; right: 14px; box-shadow: 0 0 10px var(--accent); }
+
+/* Pills and callouts: outlined, not filled. */
+.pill { border: 1px solid currentColor; background: transparent !important; }
+.callout { background: #000; border: 1px solid var(--border); }
+
+/* Console: terminal black with a faint scanline. */
+.console, pre.console, .console-out { background: var(--console-bg); }
+
+/* Modals and toasts float in. */
+.modal-backdrop { background: rgba(91, 112, 131, 0.35); backdrop-filter: blur(6px); }
+.modal { border-color: var(--border-strong); animation: pop 0.22s var(--ease); }
+.toast { background: #000; border-color: var(--border-strong); box-shadow: var(--shadow); }
+
+/* Content eases in when a page opens; cards and tiles follow one after another. */
+.view > * { animation: rise 0.45s var(--ease) both; }
+.view > *:nth-child(2) { animation-delay: 0.04s; }
+.view > *:nth-child(3) { animation-delay: 0.08s; }
+.view > *:nth-child(4) { animation-delay: 0.12s; }
+.cards > *, .tiles > *, .tpl-grid > * { animation: rise 0.5s var(--ease) both; }
+.cards > *:nth-child(2), .tiles > *:nth-child(2), .tpl-grid > *:nth-child(2) { animation-delay: 0.05s; }
+.cards > *:nth-child(3), .tiles > *:nth-child(3), .tpl-grid > *:nth-child(3) { animation-delay: 0.1s; }
+.cards > *:nth-child(4), .tiles > *:nth-child(4), .tpl-grid > *:nth-child(4) { animation-delay: 0.15s; }
+.cards > *:nth-child(n+5), .tiles > *:nth-child(n+5), .tpl-grid > *:nth-child(n+5) { animation-delay: 0.2s; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes sweep { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+@keyframes rail-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.55); } 70% { box-shadow: 0 0 0 7px rgba(0, 186, 124, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 186, 124, 0); } }
+@keyframes blink { 50% { opacity: 0.35; } }
+
+/* People who turn off animations in Windows get none. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

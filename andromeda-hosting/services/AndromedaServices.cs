@@ -61,20 +61,23 @@ namespace Andromeda
 
     static class Theme
     {
-        public static readonly Color Bg = Color.FromArgb(13, 15, 20);
-        public static readonly Color Card = Color.FromArgb(22, 25, 33);
-        public static readonly Color CardBorder = Color.FromArgb(38, 42, 54);
-        public static readonly Color Raised = Color.FromArgb(34, 38, 50);
-        public static readonly Color RaisedHover = Color.FromArgb(46, 51, 66);
-        public static readonly Color Text = Color.FromArgb(236, 238, 244);
-        public static readonly Color Muted = Color.FromArgb(142, 148, 166);
-        public static readonly Color Accent = Color.FromArgb(255, 106, 61);
-        public static readonly Color AccentHover = Color.FromArgb(255, 132, 94);
-        public static readonly Color Green = Color.FromArgb(72, 200, 120);
-        public static readonly Color Amber = Color.FromArgb(240, 185, 70);
-        public static readonly Color Red = Color.FromArgb(240, 90, 80);
-        public static readonly Color Blue = Color.FromArgb(110, 165, 255);
-        public static readonly Color LogBg = Color.FromArgb(9, 10, 14);
+        // Same black "X" look as the panel: hairline borders, white primary buttons, blue accents.
+        public static readonly Color Bg = Color.FromArgb(0, 0, 0);
+        public static readonly Color Card = Color.FromArgb(8, 9, 10);
+        public static readonly Color CardBorder = Color.FromArgb(47, 51, 54);
+        public static readonly Color Raised = Color.FromArgb(22, 24, 28);
+        public static readonly Color RaisedHover = Color.FromArgb(39, 44, 48);
+        public static readonly Color Text = Color.FromArgb(231, 233, 234);
+        public static readonly Color Muted = Color.FromArgb(113, 118, 123);
+        public static readonly Color Accent = Color.FromArgb(29, 155, 240);
+        public static readonly Color Primary = Color.FromArgb(231, 233, 234);
+        public static readonly Color PrimaryHover = Color.FromArgb(255, 255, 255);
+        public static readonly Color Brand = Color.FromArgb(255, 106, 61); // the logo
+        public static readonly Color Green = Color.FromArgb(0, 186, 124);
+        public static readonly Color Amber = Color.FromArgb(255, 212, 0);
+        public static readonly Color Red = Color.FromArgb(244, 33, 46);
+        public static readonly Color Blue = Color.FromArgb(29, 155, 240);
+        public static readonly Color LogBg = Color.FromArgb(0, 0, 0);
 
         public static Font UI(float size) { return new Font("Segoe UI", size); }
         public static Font Bold(float size) { return new Font("Segoe UI Semibold", size); }
@@ -174,15 +177,19 @@ namespace Andromeda
             Color fill, fg;
             switch (Kind)
             {
-                case ButtonKind.Primary: fill = hover ? Theme.AccentHover : Theme.Accent; fg = Color.White; break;
-                case ButtonKind.Danger: fill = hover ? Color.FromArgb(96, 40, 40) : Color.FromArgb(64, 30, 32); fg = Color.FromArgb(255, 175, 165); break;
+                case ButtonKind.Primary: fill = hover ? Theme.PrimaryHover : Theme.Primary; fg = Color.FromArgb(15, 20, 25); break;
+                case ButtonKind.Danger: fill = hover ? Color.FromArgb(40, 8, 10) : behind; fg = Color.FromArgb(255, 92, 102); break;
                 case ButtonKind.Ghost: fill = hover ? Theme.Raised : behind; fg = hover ? Theme.Text : Theme.Muted; break;
-                default: fill = hover ? Theme.RaisedHover : Theme.Raised; fg = Theme.Text; break;
+                default: fill = hover ? Theme.Raised : behind; fg = Theme.Text; break;
             }
             if (down) fill = ControlPaint.Dark(fill, 0.05f);
             if (!Enabled) { fill = Theme.Blend(fill, behind, 0.55f); fg = Theme.Blend(fg, behind, 0.55f); }
-            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), 9))
-            using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2)) // pill
+            {
+                using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+                if (Kind == ButtonKind.Secondary || Kind == ButtonKind.Danger)
+                    using (var pen = new Pen(Kind == ButtonKind.Danger ? Color.FromArgb(120, 244, 33, 46) : Theme.CardBorder)) g.DrawPath(pen, path);
+            }
             TextRenderer.DrawText(g, Text, Font, ClientRectangle, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
     }
@@ -235,7 +242,7 @@ namespace Andromeda
             g.SmoothingMode = SmoothingMode.AntiAlias;
             float k = Width / 32f;
             using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), (int)(8 * k)))
-            using (var b = new SolidBrush(Theme.Accent)) g.FillPath(b, path);
+            using (var b = new SolidBrush(Theme.Brand)) g.FillPath(b, path);
             using (var pen = new Pen(Color.White, 2.4f * k) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
                 g.DrawPolygon(pen, new[] { P(8, 22), P(8, 10), P(16, 6), P(24, 10), P(24, 22), P(16, 26) });
@@ -436,7 +443,7 @@ namespace Andromeda
 
             // ---- update banner (hidden until an update is found) ----
             bannerWrap = new Panel { Dock = DockStyle.Top, Height = 120, Padding = new Padding(28, 0, 28, 14), BackColor = Theme.Bg, Visible = false };
-            var banner = new Card { Dock = DockStyle.Fill, Fill = Color.FromArgb(38, 27, 24), Border = Color.FromArgb(112, 58, 40) };
+            var banner = new Card { Dock = DockStyle.Fill, Fill = Color.FromArgb(4, 18, 30), Border = Color.FromArgb(29, 155, 240) };
             updateTitle = new Label { AutoSize = true, Location = new Point(20, 14), Font = Theme.Bold(11f), ForeColor = Theme.Text, BackColor = banner.Fill };
             updateList = new Label { AutoSize = false, Location = new Point(20, 40), Size = new Size(600, 56), ForeColor = Theme.Muted, BackColor = banner.Fill, Font = Theme.UI(9f) };
             var updateNow = new ModernButton("Update now", ButtonKind.Primary);
