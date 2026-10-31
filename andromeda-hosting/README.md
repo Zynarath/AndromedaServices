@@ -68,7 +68,7 @@ Eclipse Temurin). You don't need to install Java.
    - Run `scripts\open-firewall.ps1` as Administrator to open the Windows Firewall.
    - Run `scripts\install-autostart.ps1` to start the panel when you log in.
 
-You can also run it on Linux with `./start.sh` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim; ARK: SA and most Call of Duty titles need Windows).
+You can also run it on Linux with `npm install --omit=dev` then `npm start` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim; ARK: SA and most Call of Duty titles need Windows).
 
 ### Andromeda Services
 
@@ -88,8 +88,8 @@ You can also run it on Linux with `./start.sh` (Minecraft, ARK: SE, Satisfactory
 `install.bat` builds it as `Andromeda Services.exe` in this folder, using the C# compiler that
 comes with Windows, so there is nothing extra to install. To rebuild it yourself, run
 `services\build.bat`, or `services\build.bat shortcut` to also recreate the shortcuts.
-`start.bat` and `start-wow-site.bat` still work if you prefer console windows. Use one way or the
-other, not both at once.
+`start.bat` still runs the panel in a console window if you prefer that. Use one way or the other,
+not both at once.
 
 ### Creating servers
 

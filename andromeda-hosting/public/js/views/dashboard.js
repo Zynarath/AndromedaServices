@@ -37,6 +37,23 @@ function card(s) {
     </article>`;
 }
 
+// Updates a container's children in place instead of swapping them out, so the tiles and cards
+// don't replay their entrance animation every time new numbers arrive.
+function patch(container, markup) {
+  const t = document.createElement('template');
+  t.innerHTML = markup;
+  const next = [...t.content.children];
+  const prev = [...container.children];
+  if (next.length !== prev.length || next.some((n, i) => n.tagName !== prev[i].tagName || n.dataset.id !== prev[i].dataset.id)) {
+    container.replaceChildren(...next);
+    return;
+  }
+  next.forEach((n, i) => {
+    if (prev[i].className !== n.className) prev[i].className = n.className;
+    if (prev[i].innerHTML !== n.innerHTML) prev[i].innerHTML = n.innerHTML;
+  });
+}
+
 export async function render(root, { state, refreshServers }) {
   const [sys, list] = await Promise.all([api.get('/api/system'), api.get('/api/servers')]);
   let servers = list.servers;
@@ -45,13 +62,13 @@ export async function render(root, { state, refreshServers }) {
   const drawTiles = (sys) => {
     const memUsed = sys.memTotal - sys.memFree;
     const online = servers.filter((s) => s.runtime.status === 'running').length;
-    $('#tiles', root).innerHTML = html`
+    patch($('#tiles', root), html`
       <div class="tile"><div class="tile-label">${icon('cpu')} Host CPU</div><div class="tile-value">${sys.cpu.toFixed(0)}<small>%</small></div><div class="tile-meta" title="${sys.cpuModel}">${sys.cores} threads · ${sys.cpuModel.replace(/\s+\d+-Core Processor/, '')}</div></div>
       <div class="tile"><div class="tile-label">${icon('memory')} Host memory</div><div class="tile-value">${fmtBytes(memUsed)}</div><div class="tile-meta">of ${fmtBytes(sys.memTotal)} · ${fmtBytes(sys.memFree)} free</div>
         <div class="meter" role="meter" aria-valuenow="${Math.round((memUsed / sys.memTotal) * 100)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${(memUsed / sys.memTotal) * 100}%"></span></div></div>
       <div class="tile"><div class="tile-label">${icon('archive')} Server drive</div><div class="tile-value">${sys.disk ? fmtBytes(sys.disk.free) : '—'}</div><div class="tile-meta">${sys.disk ? 'free of ' + fmtBytes(sys.disk.total) : 'unknown'}</div>
         ${sys.disk ? html`<div class="meter"><span style="width:${(1 - sys.disk.free / sys.disk.total) * 100}%"></span></div>` : ''}</div>
-      <div class="tile"><div class="tile-label">${icon('server')} Servers online</div><div class="tile-value">${online}<small> / ${servers.length}</small></div><div class="tile-meta">${sys.lanAddresses.length ? 'LAN: ' + sys.lanAddresses.slice(0, 2).join(', ') : sys.hostname}</div></div>`.s;
+      <div class="tile"><div class="tile-label">${icon('server')} Servers online</div><div class="tile-value">${online}<small> / ${servers.length}</small></div><div class="tile-meta">${sys.lanAddresses.length ? 'LAN: ' + sys.lanAddresses.slice(0, 2).join(', ') : sys.hostname}</div></div>`.s);
   };
 
   // Whole-PC CPU and memory over the last hour (the panel samples every 5 seconds).
@@ -62,21 +79,21 @@ export async function render(root, { state, refreshServers }) {
     const span = hist.length > 1 ? Math.round(((hist.length - 1) * step) / 60) : 0;
     const since = span >= 60 ? 'last hour' : span > 0 ? `last ${span} min` : 'collecting…';
     const now = hist[hist.length - 1];
-    $('#host-charts', root).innerHTML = html`
+    patch($('#host-charts', root), html`
       <div class="panel chart-panel"><div class="chart-head"><h3>${icon('cpu')} CPU usage</h3><span class="chart-value">${now ? now.cpu.toFixed(0) + '%' : '—'}</span></div>
         ${sparkline(hist.map((h) => h.cpu), { max: 100, height: 90, step, fmt: (v) => v.toFixed(0) + '%' })}
         <p class="muted small">Whole PC (${sys.cores} threads), ${since}</p></div>
       <div class="panel chart-panel"><div class="chart-head"><h3>${icon('memory')} Memory usage</h3><span class="chart-value">${now ? fmtBytes(now.mem) : '—'}</span></div>
         ${sparkline(hist.map((h) => gb(h.mem)), { max: gb(sys.memTotal), height: 90, step, fmt: (v) => v.toFixed(1) + ' GB' })}
-        <p class="muted small">Of ${fmtBytes(sys.memTotal)}, ${since}</p></div>`.s;
+        <p class="muted small">Of ${fmtBytes(sys.memTotal)}, ${since}</p></div>`.s);
   };
 
   const drawCards = () => {
-    $('#cards', root).innerHTML = servers.length
+    patch($('#cards', root), servers.length
       ? servers.map((s) => card(s).s).join('')
       : html`<div class="empty-state wide">${icon('server')}<h2>No servers yet</h2>
           <p>${admin ? 'Create your first ARK or Minecraft server — the panel downloads everything it needs.' : 'An admin has not given you access to any servers yet.'}</p>
-          ${admin ? html`<a class="btn btn-primary" href="#/new">${icon('plus')}Create a server</a>` : ''}</div>`.s;
+          ${admin ? html`<a class="btn btn-primary" href="#/new">${icon('plus')}Create a server</a>` : ''}</div>`.s);
   };
 
   root.innerHTML = html`

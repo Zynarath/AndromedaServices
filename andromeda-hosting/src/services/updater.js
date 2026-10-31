@@ -1,6 +1,6 @@
 'use strict';
 // Self-update from GitHub: the panel folder is a Git clone, so updating is "git pull" + "npm install"
-// and a restart. start.bat/start.sh restart the panel when it exits with RESTART_CODE.
+// and a restart. Andromeda Services and start.bat restart the panel when it exits with RESTART_CODE.
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');

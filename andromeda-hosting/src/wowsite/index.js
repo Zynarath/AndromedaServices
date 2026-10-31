@@ -1,5 +1,5 @@
 'use strict';
-// Entry point of the WotLK website (started by Andromeda Services, or start-wow-site.bat).
+// Entry point of the WotLK website (started by Andromeda Services).
 // A standalone site, separate from the Andromeda Hosting panel. It follows its settings in
 // data/wowsite.json (edited from Andromeda Services) and applies changes without a restart.
 process.env.ANDROMEDA_LOG_FILE = process.env.ANDROMEDA_LOG_FILE || 'wowsite.log';

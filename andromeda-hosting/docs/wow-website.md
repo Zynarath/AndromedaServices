@@ -6,8 +6,7 @@ with the same look. Your friends can check who's online, look at characters and 
 your news. The original's security problems are fixed.
 
 It's a **standalone site**: separate from the Andromeda Hosting panel, with its own settings.
-Start, stop and set it up in **Andromeda Services** (see the README), or run
-`start-wow-site.bat`.
+Start, stop and set it up in **Andromeda Services** (see the README).
 
 ## Set it up
 
