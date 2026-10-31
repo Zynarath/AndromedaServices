@@ -11,7 +11,7 @@ import * as fileshare from './views/fileshare.js';
 
 // Bump together with package.json "version". If the server is newer than this page, the browser
 // (or Cloudflare) is showing an old cached copy and the user is asked to reload.
-const PAGE_VERSION = '1.1.0';
+const PAGE_VERSION = '1.5.0';
 
 export const state = { user: null, panelName: 'Andromeda Hosting', servers: [], version: PAGE_VERSION };
 

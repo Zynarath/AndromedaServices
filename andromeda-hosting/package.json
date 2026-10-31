@@ -1,6 +1,6 @@
 {
   "name": "andromeda-hosting",
-  "version": "1.1.0",
+  "version": "1.5.0",
   "description": "Self-hosted game server control panel (ARK, modded Minecraft / CurseForge) for your home PC",
   "main": "src/index.js",
   "private": true,
