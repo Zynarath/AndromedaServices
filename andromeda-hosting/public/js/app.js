@@ -60,7 +60,7 @@ function shell() {
   $('#app').innerHTML = html`
     <div class="layout">
       <aside class="sidebar" id="sidebar">
-        <a class="brand" href="#/"><img src="/img/icon.svg" alt=""><span>${state.panelName}</span></a>
+        <a class="brand" href="#/"><img src="/img/icon.svg" alt=""><span class="brand-text"><span>${state.panelName}</span><small>Andromeda Services</small></span></a>
         <nav class="nav">
           <a href="#/" data-nav="/">${icon('grid')}<span>Dashboard</span></a>
           ${admin ? html`<a href="#/new" data-nav="/new">${icon('plus')}<span>New server</span></a>` : ''}

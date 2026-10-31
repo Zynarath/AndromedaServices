@@ -8,7 +8,7 @@ export function render(root, { auth, onLogin }) {
     root.innerHTML = html`
       <div class="auth-page">
         <form class="auth-card" id="auth-form" autocomplete="on">
-          <div class="auth-brand"><img src="/img/icon.svg" alt=""><h1>${auth.panelName || 'Andromeda Hosting'}</h1></div>
+          <div class="auth-brand"><img src="/img/icon.svg" alt=""><div><h1>${auth.panelName || 'Andromeda Hosting'}</h1><div class="company">by Andromeda Services</div></div></div>
           ${setup
             ? auth.setupAllowedHere
               ? html`<p class="muted">Welcome! Create the <strong>admin account</strong> for this panel. You can add your friends as users afterwards.</p>`
