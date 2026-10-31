@@ -77,46 +77,28 @@ test('html: old news HTML keeps simple formatting and loses everything dangerous
   assert.equal(textToHtml('Hi <b>\n\nSee https://example.com/x?a=1&b=2'), '<p>Hi &lt;b&gt;</p><p>See <a href="https://example.com/x?a=1&amp;b=2">https://example.com/x?a=1&amp;b=2</a></p>');
 });
 
-test('website settings: first WoW server with the site on; written for the website process', () => {
-  const servers = [
-    { id: 'a', game: 'minecraft' },
-    { id: 'b', game: 'wow', name: 'Off', wow: { root: '/x', site: { enabled: false } } },
-    { id: 'c', game: 'wow', name: 'Realm C', wow: { root: '/spp', realmName: 'Andromeda', site: { port: 9000, registration: 'invite', discord: 'javascript:alert(1)' } } },
-  ];
-  const c = siteconfig.fromServers(servers);
-  assert.equal(c.serverId, 'c');
-  assert.equal(c.root, '/spp');
-  assert.equal(c.realmName, 'Andromeda');
-  assert.equal(c.port, 9000);
-  assert.equal(c.registration, 'invite');
+test('website settings: its own file, with defaults and invalid values dropped', () => {
+  assert.equal(siteconfig.normalize({}), null, 'nothing runs until the SPP folder is set');
+  const c = siteconfig.normalize({ root: ' C:/Games/SPP_Classics_V2 ', port: 'x', registration: 'everyone', discord: 'javascript:alert(1)', title: '' });
+  assert.equal(c.root, 'C:/Games/SPP_Classics_V2');
+  assert.equal(c.port, 8091);
+  assert.equal(c.host, '0.0.0.0');
+  assert.equal(c.registration, 'off', 'sign-up is off unless turned on');
   assert.equal(c.discord, '', 'only discord.gg / discord.com links');
-  assert.equal(siteconfig.siteOf({ wow: {} }).registration, 'off', 'sign-up is off unless turned on');
-  siteconfig.write(servers);
-  assert.equal(siteconfig.read().serverId, 'c');
-  siteconfig.write([servers[1]]);
-  assert.equal(siteconfig.read(), null);
+  assert.equal(c.title, 'World of Warcraft');
+  assert.equal(c.trustProxy, false);
+  // Files written by older versions (by the panel) keep working.
+  assert.equal(siteconfig.normalize({ root: '/spp', realmName: 'Andromeda', port: 9000, registration: 'invite' }).title, 'Andromeda');
+  fs.mkdirSync(path.dirname(siteconfig.FILE), { recursive: true });
+  fs.writeFileSync(siteconfig.FILE, JSON.stringify({ root: '/spp', port: 9100, registration: 'invite', discord: 'https://discord.gg/abc123' }));
+  assert.deepEqual(siteconfig.read(), { root: '/spp', title: 'World of Warcraft', port: 9100, host: '0.0.0.0', registration: 'invite', discord: 'https://discord.gg/abc123', trustProxy: false, websiteDir: undefined });
 });
 
-test('WoW settings: the Website section is admin-only and validated', async () => {
+test('the panel knows nothing about the website', () => {
   const root = fakeSpp();
   const server = { id: 'w9', name: 'WoW', game: 'wow', wow: wow.defaults({ name: 'WoW', wow: { root } }) };
-  require('../src/db').data.servers.push(server);
-  const fields = wow.settingsSchema(server).sections.find((x) => x.title === 'Website').fields;
-  assert.ok(fields.every((f) => f.admin), 'hidden from friends with only "settings" permission');
-  wow.writeSettings(server, { 'wow.site.registration': 'open', 'wow.site.port': 9100 }, { admin: false });
-  assert.equal(wow.readSettings(server)['wow.site.registration'], 'off', 'non-admins cannot open sign-up');
-  wow.writeSettings(server, { 'wow.site.registration': 'invite', 'wow.site.port': 9100, 'wow.site.discord': 'https://discord.gg/abc123' }, { admin: true });
-  const v = wow.readSettings(server);
-  assert.equal(v['wow.site.registration'], 'invite');
-  assert.equal(v['wow.site.port'], 9100);
-  assert.equal(siteconfig.read().port, 9100, 'wowsite.json follows the panel');
-  assert.deepEqual(wow.ports(server).map((p) => p.port), [3724, 8085, 9100], 'the website server also reserves the site port');
-  const second = { id: 'w10', name: 'WoW 2', game: 'wow', wow: wow.defaults({ name: 'WoW 2', wow: { root } }) };
-  assert.deepEqual(wow.ports(second).map((p) => p.port), [3724, 8085], 'a second WoW server does not');
-  assert.throws(() => wow.writeSettings(server, { 'wow.site.port': 8085 }, { admin: true }), /world server/);
-  assert.throws(() => wow.writeSettings(server, { 'wow.site.port': 80 }, { admin: true }), /between 1024/);
-  assert.throws(() => wow.writeSettings(server, { 'wow.site.registration': 'everyone' }, { admin: true }), /who can create/);
-  assert.throws(() => wow.writeSettings(server, { 'wow.site.discord': 'https://evil.example/x' }, { admin: true }), /Discord/);
+  assert.ok(!wow.settingsSchema(server).sections.some((x) => x.title === 'Website'));
+  assert.deepEqual(wow.ports(server).map((p) => p.port), [3724, 8085]);
 });
 
 function request(port, method, url, { body, cookie } = {}) {
@@ -134,7 +116,7 @@ function request(port, method, url, { body, cookie } = {}) {
 test('website: pages, assets and forms with the realm database offline', async () => {
   const root = fakeSpp();
   data.setRoot(root);
-  const cfg = { root, realmName: 'Andromeda', registration: 'invite', port: 0 };
+  const cfg = siteconfig.normalize({ root, title: 'Andromeda', registration: 'invite' });
   const server = http.createServer(buildApp(() => cfg));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;

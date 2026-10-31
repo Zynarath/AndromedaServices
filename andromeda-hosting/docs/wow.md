@@ -112,7 +112,8 @@ says the random bots need a reset to take effect.
 
 SPP's classic WotLK website is rebuilt in Andromeda Hosting with the same look: news, armory,
 realm status, who's online, honor, auction house, and sign-up only by invite code if you want
-it. Start it from **Andromeda Services**. Setup and details: [wow-website.md](wow-website.md).
+it. It's a standalone site, set up and started from **Andromeda Services**, and it can have its
+own address like `wow.thefinalhour.us`. Setup and details: [wow-website.md](wow-website.md).
 
 ## About the WoW client
 

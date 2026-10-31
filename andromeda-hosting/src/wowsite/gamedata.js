@@ -6,8 +6,11 @@ const RACES = { 1: 'Human', 2: 'Orc', 3: 'Dwarf', 4: 'Night Elf', 5: 'Undead', 6
 const CLASSES = { 1: 'Warrior', 2: 'Paladin', 3: 'Hunter', 4: 'Rogue', 5: 'Priest', 6: 'Death Knight', 7: 'Shaman', 8: 'Mage', 9: 'Warlock', 11: 'Druid' };
 const ALLIANCE = new Set([1, 3, 4, 7, 11]);
 const faction = (race) => (ALLIANCE.has(Number(race)) ? 'Alliance' : 'Horde');
-const CLASS_COLORS = { 1: '#C79C6E', 2: '#F58CBA', 3: '#ABD473', 4: '#FFF569', 5: '#FFFFFF', 6: '#C41F3B', 7: '#0070DE', 8: '#69CCF0', 9: '#9482C9', 11: '#FF7D0A' };
-const QUALITY_COLORS = ['#9d9d9d', '#ffffff', '#1eff00', '#0070dd', '#a335ee', '#ff8000', '#e6cc80', '#e6cc80'];
+// The game's class and item-quality colours are made for dark backgrounds; several (white common
+// items and priests, yellow rogues, light green) vanish on the site's parchment. These are darker
+// versions of the same hues, readable on the light pages.
+const CLASS_COLORS = { 1: '#7d5126', 2: '#b0306f', 3: '#4a7a12', 4: '#8a7200', 5: '#4b4b4b', 6: '#a3172e', 7: '#0055b0', 8: '#14769e', 9: '#5b46a0', 11: '#b45000' };
+const QUALITY_COLORS = ['#6e6e6e', '#2a2a2a', '#1b7a0b', '#0050b0', '#7a22b8', '#b85a00', '#8a6d1f', '#8a6d1f'];
 
 // Equipment slots 0-18, in the order the character sheet shows them.
 const SLOTS = ['Head', 'Neck', 'Shoulder', 'Shirt', 'Chest', 'Waist', 'Legs', 'Feet', 'Wrist', 'Hands', 'Finger', 'Finger', 'Trinket', 'Trinket', 'Back', 'Main Hand', 'Off Hand', 'Ranged', 'Tabard'];

@@ -11,7 +11,6 @@ const db = require('./db');
 const auth = require('./auth');
 const manager = require('./manager/manager');
 const logger = require('./util/log');
-const wowsite = require('./wowsite/siteconfig');
 
 const log = logger('panel');
 const app = express();
@@ -158,12 +157,10 @@ manager.on('console', (id, entry) => broadcast(id, { type: 'console', entry }, '
 manager.on('job', (id, job) => broadcast(id, { type: 'job', job: { ...job, log: job.log.slice(-5) } }));
 manager.on('removed', (id) => {
   for (const ws of wss.clients) send(ws, { type: 'removed', serverId: id });
-  wowsite.write(db.data.servers);
 });
 
 // ---- start ----
 manager.init();
-wowsite.write(db.data.servers); // settings for the WotLK website, which runs as its own process
 require('./services/ddns').start();
 require('./services/discord').init(manager);
 require('./shareServer').apply();

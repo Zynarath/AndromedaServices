@@ -178,7 +178,7 @@ ${(ctx.extraCss || []).map((f) => html`<link rel="stylesheet" href="${f}">`)}
     <center><div id="copyright">
       <div id="blizzlogo-bot"><img alt="Blizzard" border="0" src="${TPL}/images/bot-blizzlogo.gif"></div>
       <span class="textlinks"><small>
-        Hosted with Andromeda Hosting · ${ctx.site.realmName}<br>
+        ${ctx.site.title}<br>
         <b>World of Warcraft images and logos are copyright Blizzard Entertainment.</b>
       </small></span><br><br><br>
     </div></center>

@@ -105,7 +105,7 @@ async function character(req, ctx) {
     return [html`<span class="slot-name">${gd.SLOTS[i]}</span>`, it ? itemLink(it, '') : html`<span class="empty-slot">—</span>`, it ? it.ItemLevel : ''];
   };
   const prof = (map) => skills.filter((s) => map[s.skill]).map((s) => html`<div class="prof"><b>${map[s.skill]}</b> <div class="stat-bar"><div style="width:${Math.min(100, (s.value * 100) / (s.max || 450)).toFixed(0)}%"></div></div> ${s.value} / ${s.max}</div>`);
-  const color = gd.CLASS_COLORS[c.class] || '#fff';
+  const color = gd.CLASS_COLORS[c.class] || '#2a2a2a';
   const body = html`${box(null, html`<div class="char-header">
   <img class="char-portrait" src="${portrait(c)}" width="64" height="64" alt="">
   <div class="char-title">

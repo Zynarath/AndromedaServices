@@ -1,41 +1,79 @@
 # The WotLK website
 
 SPP Classics comes with a website: the old World of Warcraft site design with news, an armory,
-realm status and sign-up. It runs on an old Apache and PHP. Andromeda Hosting has a rebuilt
-version of it in Node.js, with the same look. Your friends can check who's online, look at
-characters and gear, and read your news. The original's security problems are fixed.
+realm status and sign-up. It runs on an old Apache and PHP. This is a rebuilt version in Node.js
+with the same look. Your friends can check who's online, look at characters and gear, and read
+your news. The original's security problems are fixed.
 
-It runs as its own program next to the panel. Start it with **Andromeda Services** (see the
-README) or with `start-wow-site.bat`.
+It's a **standalone site**: separate from the Andromeda Hosting panel, with its own settings.
+Start, stop and set it up in **Andromeda Services** (see the README), or run
+`start-wow-site.bat`.
 
 ## Set it up
 
-1. Add your WoW server to the panel first ([wow.md](wow.md)).
-2. **The original graphics** come from SPP's own website folder (`Server\website`, or any website
+1. **Andromeda Services → WotLK website → Settings**:
+   - **SPP folder**: your `SPP_Classics_V2` folder (or any cMaNGOS WotLK folder). The site reads
+     the realm's database settings from its `mangosd.conf`.
+   - **Site name**: shown in the browser tab and on the page.
+   - **Port**: 8091 by default.
+   - **Who can create game accounts on the site**:
+     - **Nobody** (default): only accounts made in the game or in the panel's Accounts tab.
+     - **Invite code**: GM accounts create single-use codes on the site's Admin panel.
+     - **Anyone**: open sign-up. Don't use this on a public site.
+   - **Discord invite link** (optional): shown in the Community menu.
+
+   **Save**. The running site applies the settings within a few seconds, with no restart. They're
+   stored in `data\wowsite.json`, which you can also edit by hand.
+2. **Start** the WotLK website in Andromeda Services and open `http://localhost:8091`.
+3. **The original graphics** come from SPP's own website folder (`Server\website`, or any website
    folder inside the SPP install). SPP only downloads that folder if you answered **Y** in its
    launcher. If it isn't there, the site downloads the same pictures and stylesheets once from
    SPP's website repository (about 100 MB, into `data\wowsite-assets`). It shows the plain look
    until that finishes; `data\logs\wowsite.log` shows the progress. Don't turn the website on in
    SPP's own launcher: that starts SPP's old Apache on port 80.
-3. In the panel, open **WoW server → Settings → Website** (admins only):
-   - **WotLK website for this realm**: on by default. One website per panel; it shows the first
-     WoW server that has it on.
-   - **Website port**: 8091 by default.
-   - **Who can create game accounts on the website**:
-     - **Nobody** (default): only accounts you make in the Accounts tab.
-     - **Invite code**: GM accounts create single-use codes on the site's Admin panel.
-     - **Anyone**: open sign-up. Only use this if the site isn't reachable from the internet.
-   - **Discord invite link** (optional): shown in the Community menu.
-4. Open **Andromeda Services** and start **WotLK website**, then open
-   `http://localhost:8091`. Settings you change in the panel apply within a few seconds; you
-   don't need to restart anything.
 
-The world server doesn't have to be running, but MySQL does. The panel starts MySQL with the WoW
-server; while it's off, the site shows "The realm is offline".
+The world server doesn't have to be running, but the realm's MySQL does. Andromeda Hosting starts
+MySQL with the WoW server; while it's off, the site shows "The realm is offline".
 
-**Friends outside your network:** forward TCP 8091 on your router, or keep the site on
-Tailscale. The address is the same as the panel's, with `:8091` at the end. The WoW server's
-Overview in the panel shows the link.
+## Your own address: wow.thefinalhour.us
+
+The site is an ordinary website, so it can go through the same free **Cloudflare Tunnel** as the
+panel ([domain-setup.md](domain-setup.md)). You get `https://wow.thefinalhour.us` with HTTPS, no
+router port opened for the site, and your home IP stays hidden.
+
+1. **`thefinalhour.us` on Cloudflare.** The domain's DNS must be managed by Cloudflare
+   ([domain-setup.md](domain-setup.md), step 1). If you already use Cloudflare for the panel, skip
+   this.
+2. **A tunnel on this PC.** If you set one up for the panel, skip this. Otherwise:
+   Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel** → *Cloudflared* →
+   name it `andromeda-hosting` → copy the token (`eyJ...`), then in an **administrator** PowerShell
+   in the `andromeda-hosting` folder:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\setup-cloudflare-tunnel.ps1 -Token eyJ...your-token...
+   ```
+3. **The hostname.** Open the tunnel → **Public hostnames** (also called *published application
+   routes*) → **Add**:
+   - Subdomain: `wow` · Domain: `thefinalhour.us`
+   - Service type: `HTTP` · URL: `localhost:8091` (the site's port)
+
+   Save. Cloudflare creates the DNS record itself. If an older `A` record for `wow` exists in
+   **DNS**, delete it.
+4. **HTTPS only.** Cloudflare → `thefinalhour.us` → **SSL/TLS → Edge Certificates** → turn on
+   **Always Use HTTPS**.
+5. Open **https://wow.thefinalhour.us**. Nothing changes in the site: it already trusts the tunnel
+   running on the same PC, so visitors' real IPs (used for login limits) and secure cookies work.
+6. **Keep it locked down:**
+   - Use **Nobody** or **Invite code** sign-up (Settings). Anyone on the internet can open the
+     site now.
+   - Don't forward port 8091 on your router; the tunnel doesn't need it. To make sure only the
+     tunnel and this PC can reach the site, add `"host": "127.0.0.1"` to `data\wowsite.json`.
+   - Never forward the database port (3310).
+
+**The game itself doesn't go through the tunnel.** Cloudflare's free tunnel only carries websites,
+not WoW's login and world connections. Players connect to the realm at a separate name that points
+at your home IP, such as `play.thefinalhour.us`: [domain-setup.md](domain-setup.md) step 3 and
+[wow.md](wow.md) (forward TCP 3724 and 8085). The site's **How to play** page shows the realmlist
+line with that address, taken from the realm's own settings.
 
 ## Pages
 
@@ -58,8 +96,8 @@ armory database (`wotlkarmory`). Without it, gear shows by name only, and talent
 are left out.
 
 **Admin panel** (`/admin`, accounts with GM level 3 or higher): post and delete news, and create
-or revoke invite codes. To make your own account a GM, use the panel's **Accounts** tab (role
-**Admin**).
+or revoke invite codes. To make your own account a GM, use the Andromeda Hosting panel's
+**Accounts** tab (role **Admin**), or `.account set gmlevel <name> 3` in the world server console.
 
 Logging in uses the **game account**: the same name and password as in WoW. Changing your
 password on the site changes it in the game too.
@@ -100,9 +138,9 @@ because SPP's root password (`123456`) is public. Never forward port 3310.
 
 ## How it works
 
-- `src/wowsite/`: the website. It reads the realm's database settings from `mangosd.conf`.
-  It uses the panel's settings in `data/wowsite.json`, which the panel writes and the site
-  watches. It logs to `data/logs/wowsite.log`.
+- `src/wowsite/`: the website, a separate program from the panel. It reads the realm's database
+  settings from `mangosd.conf` and its own settings from `data/wowsite.json` (written by Andromeda
+  Services; the site watches the file). It logs to `data/logs/wowsite.log`.
 - Accounts: SRP6 salt and verifier, exactly like cMaNGOS and SPP's PHP site, so accounts made in
   the game, the panel or either website all work everywhere. New accounts are WotLK accounts
   (expansion 2).

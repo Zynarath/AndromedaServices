@@ -45,7 +45,7 @@ pre.realmlist { background: #1d1c1b; color: #f4c400; padding: 8px 12px; border: 
 .blog-post img { max-width: 100%; }
 
 .item-cell { display: inline-flex; align-items: center; gap: 4px; text-align: left; }
-.item-cell b { text-shadow: 1px 1px 0 #000; }
+.item-cell b { font-weight: bold; }
 .item-icon { border: 1px solid #000; }
 .coin { white-space: nowrap; }
 .coin img { vertical-align: middle; margin-left: 1px; }
@@ -54,7 +54,7 @@ pre.realmlist { background: #1d1c1b; color: #f4c400; padding: 8px 12px; border: 
 .armory-logo { max-width: 100%; }
 .char-header { display: flex; gap: 14px; align-items: flex-start; }
 .char-portrait { border: 2px solid #000; background: #000; }
-.char-title h2 { margin: 0 0 4px; text-shadow: 1px 1px 0 #000; font-size: 20px; }
+.char-title h2 { margin: 0 0 4px; font-size: 20px; }
 .char-facts { margin-left: auto; text-align: right; }
 .bot-tag { font-size: 10px; text-transform: uppercase; background: #2e2d2b; color: #c7c7c7; padding: 1px 4px; vertical-align: middle; text-shadow: none; }
 .slot-name { color: #4a3a20; }

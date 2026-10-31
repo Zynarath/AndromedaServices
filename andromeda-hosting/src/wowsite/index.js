@@ -1,7 +1,7 @@
 'use strict';
 // Entry point of the WotLK website (started by Andromeda Services, or start-wow-site.bat).
-// Runs separately from the panel, so either can be restarted without the other. It follows
-// data/wowsite.json, which the panel writes, and applies changes without a restart.
+// A standalone site, separate from the Andromeda Hosting panel. It follows its settings in
+// data/wowsite.json (edited from Andromeda Services) and applies changes without a restart.
 process.env.ANDROMEDA_LOG_FILE = process.env.ANDROMEDA_LOG_FILE || 'wowsite.log';
 require('../checkDeps');
 const fs = require('fs');
@@ -18,16 +18,6 @@ let cfg = null;
 let server = null;
 let listening = '';
 
-function load() {
-  let next = siteconfig.read();
-  if (!next) {
-    // No settings written yet (panel not started since this was installed): use the first WoW server.
-    try {
-      next = siteconfig.fromServers(require('../db').data.servers);
-    } catch {}
-  }
-  return next;
-}
 
 function listen() {
   const want = cfg ? `${cfg.host}:${cfg.port}` : '';
@@ -43,7 +33,7 @@ function listen() {
     listening = '';
   });
   s.listen(cfg.port, cfg.host, () => {
-    log.info(`WotLK website for realm "${cfg.realmName}" is running at http://localhost:${cfg.port}`);
+    log.info(`WotLK website "${cfg.title}" is running at http://localhost:${cfg.port}`);
     log.info(`Sign-up: ${{ off: 'off (only accounts made in the panel or game)', invite: 'invite codes', open: 'open to anyone' }[cfg.registration] || 'off'}`);
   });
   server = s;
@@ -51,9 +41,9 @@ function listen() {
 }
 
 function apply() {
-  const next = load();
+  const next = siteconfig.read();
   if (JSON.stringify(next) === JSON.stringify(cfg)) return;
-  if (!next) log.warn('No WoW server has its website turned on. Add a WoW server in Andromeda Hosting (or turn on Settings → Website) and the site starts by itself.');
+  if (!next) log.warn(`The SPP folder isn't set yet. Set it in Andromeda Services (WotLK website → Settings), or in ${siteconfig.FILE}; the site starts by itself.`);
   cfg = next;
   if (cfg) data.setRoot(cfg.root);
   listen();

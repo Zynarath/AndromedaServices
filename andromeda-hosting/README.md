@@ -17,7 +17,7 @@ There are no monthly hosting fees; your only cost is electricity.
 | **Satisfactory** (Windows/Linux) | SteamCMD install/update. On the first start the panel claims the server (sets the admin password, shown on the server page) and starts a new game; name, join password, autosave and pause options are applied through the server's API on every start, and stops save first. **Mods from ficsit.app**: search and add them in the Mods tab — the panel picks versions that fit each other and the game build, installs SML and dependencies, and lists the ones players need too |
 | **7 Days to Die** (Windows/Linux) | SteamCMD install/update (stable or experimental), 40+ settings written to the server config (world, difficulty, zombies, blood moons, loot, land claims), saves in the server's own folder, telnet console, player list and clean shutdown. **Mods**: install from a mod's .zip, switch mods on/off, warning when a code mod needs Easy Anti-Cheat off |
 | **Valheim** (Windows/Linux) | SteamCMD install/update, world name, password, crossplay, presets and world modifiers, admin / allow / ban lists, autosave interval; stops with Ctrl+C so the world is saved |
-| **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md). Plus SPP's **WotLK website** rebuilt with the same look and its security problems fixed: news, armory, realm status, who's online, honor, auction house, and invite-only sign-up. See [docs/wow-website.md](docs/wow-website.md) |
+| **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md). A separate **WotLK website** (SPP's site rebuilt with the same look, its security problems fixed) runs next to it from Andromeda Services: news, armory, realm status, who's online, honor, auction house, invite-only sign-up. See [docs/wow-website.md](docs/wow-website.md) |
 | **ARK: Survival Evolved** (Windows/Linux) | SteamCMD install/update, Workshop mods via `-automanagedmods`, same settings form, RCON console and player list as ASA |
 
 The panel downloads the right Java version for each Minecraft server by itself (Java 8/17/21/25 from
@@ -75,7 +75,8 @@ You can also run it on Linux with `./start.sh` (Minecraft, ARK: SE, Satisfactory
 **Andromeda Services** is a Windows app that runs everything without console windows:
 
 - It starts and stops **Andromeda Hosting** (the panel) and the **WotLK website**, each with its
-  own Start / Stop / Restart / Open buttons, status and live log.
+  own Start / Stop / Restart / Open buttons, status and live log. The website's **Settings** (SPP
+  folder, name, port, sign-up, Discord link) are set here, not in the panel.
 - *Start when Andromeda Services opens* is a setting for each one. *Open Andromeda Services when I
   sign in to Windows* starts it all at login.
 - Closing the window keeps everything running in the system tray. **Stop all and exit** (in the
@@ -233,7 +234,7 @@ Windows PC without build tools.
 ```
 src/
   index.js            web server, WebSocket, shutdown handling (checkDeps.js runs first)
-  wowsite/            the WotLK website (its own process): pages, armory, accounts, news
+  wowsite/            the standalone WotLK website (its own process): pages, armory, accounts, news
   auth.js             users, sessions, permissions, 2FA, "view as"
   games/              one module per game: install, launch, settings, stop, player query
                       (minecraft, ark, cod, wow, satisfactory, sdtd = 7 Days to Die, valheim)

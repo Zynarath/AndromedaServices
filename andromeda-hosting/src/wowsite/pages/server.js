@@ -145,7 +145,7 @@ function coins(copper) {
 
 const itemLink = (it, entry) => {
   if (!it) return `Item #${entry}`;
-  const color = gd.QUALITY_COLORS[it.Quality] || '#fff';
+  const color = gd.QUALITY_COLORS[it.Quality] || '#2a2a2a';
   return html`<span class="item-cell">${it.icon ? html`<img class="item-icon" src="/armory/images/icons/64x64/${it.icon}.png" width="20" height="20" alt="">` : ''}<b style="color:${color}" class="q${Number(it.Quality)}">${it.name}</b></span>`;
 };
 

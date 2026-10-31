@@ -12,7 +12,6 @@ const cf = require('../services/curseforge');
 const mapImages = require('../services/mapimages');
 const covers = require('../services/covers');
 const ddns = require('../services/ddns');
-const wowsite = require('../wowsite/siteconfig');
 const ficsit = require('../services/ficsit');
 const { pipeline } = require('stream/promises');
 const modinfo = require('../services/modinfo');
@@ -94,8 +93,7 @@ function view(inst, user, full = false) {
     if (perms.includes('settings') || perms.includes('admin')) out.vh.joinPassword = s.vh.password || '';
   }
   if (s.wow) {
-    const site = wowsite.fromServers(db.data.servers);
-    out.wow = { realmName: s.wow.realmName, address: s.wow.address || ddns.publicAddress(), manageDb: !!s.wow.manageDb, sitePort: site && site.serverId === s.id ? site.port : null };
+    out.wow = { realmName: s.wow.realmName, address: s.wow.address || ddns.publicAddress(), manageDb: !!s.wow.manageDb };
     if (perms.includes('admin')) out.wow.root = s.wow.root;
   }
   if (full) {

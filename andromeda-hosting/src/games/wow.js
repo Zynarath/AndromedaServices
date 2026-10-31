@@ -13,7 +13,6 @@ const ddns = require('../services/ddns');
 const { Conf, parseDbInfo, describeConf, looksBoolean } = require('../util/conf');
 const { findFiles } = require('../util/paths');
 const { HttpError, sleep } = require('../util/misc');
-const siteconfig = require('../wowsite/siteconfig');
 
 const EXE = process.platform === 'win32' ? '.exe' : '';
 const NAME_RE = /^[A-Za-z0-9]{3,16}$/;
@@ -348,7 +347,7 @@ const wow = {
   defaults(input) {
     const w = input.wow || {};
     const d = detect(w.root);
-    return { root: d.root, realmName: String(w.realmName || input.name).slice(0, 32), address: '', manageDb: true, site: { enabled: true, port: siteconfig.DEFAULT_PORT, registration: 'off', discord: '' } };
+    return { root: d.root, realmName: String(w.realmName || input.name).slice(0, 32), address: '', manageDb: true };
   },
 
   resolveDir(server) {
@@ -356,12 +355,9 @@ const wow = {
   },
 
   ports(server) {
-    // Only the server whose website is the one running reserves its port (one website per panel).
-    const site = siteconfig.fromServers(require('../db').data.servers);
     return [
       { port: confPort(server, 'realmd.conf', 'RealmServerPort', 3724), proto: 'TCP', label: 'Login (realmd)', forward: true },
       { port: confPort(server, 'mangosd.conf', 'WorldServerPort', 8085), proto: 'TCP', label: 'World (mangosd)', forward: true },
-      ...(site && site.serverId === server.id ? [{ port: site.port, proto: 'TCP', label: 'WotLK website (optional)', forward: false }] : []),
     ];
   },
 
@@ -390,7 +386,6 @@ const wow = {
       writeConf(d.confDir, 'mangosd.conf', conf);
       log.info('Turned on Console.Enable in mangosd.conf');
     }
-    siteconfig.write(require('../db').data.servers);
     log.info('Ready. Create game accounts for your friends in the Accounts tab once the server is running.');
   },
 
@@ -583,16 +578,6 @@ const wow = {
       { key: 'wow.address', label: 'Address players connect to', type: 'text', hint: `Blank = the panel's public address (${ddns.publicAddress() || 'not set — 127.0.0.1'}). Use a hostname like play.example.com.` }
     );
     if (p.dbDir) groups.get('Realm').push({ key: 'wow.manageDb', label: 'Start/stop the bundled MySQL with the server', type: 'bool' });
-    groups.set('Website', [
-      { admin: true, key: 'wow.site.enabled', label: 'WotLK website for this realm', type: 'bool', hint: 'The classic WotLK site (news, armory, realm status, who\'s online, honor, auction house). Start it from Andromeda Services or start-wow-site.bat. One website per panel: the first WoW server with this on.' },
-      { admin: true, key: 'wow.site.port', label: 'Website port (TCP)', type: 'number', min: 1024, hint: `Open http://<this PC>:${siteconfig.siteOf(server).port}. Forward this port only if friends outside your network should see the site.` },
-      { admin: true, key: 'wow.site.registration', label: 'Who can create game accounts on the website', type: 'select', options: [
-        { value: 'off', label: 'Nobody: only accounts you create in the Accounts tab (default)' },
-        { value: 'invite', label: 'Anyone with an invite code (GM accounts make codes on the site\'s Admin panel)' },
-        { value: 'open', label: 'Anyone who can open the site (not recommended if the site is public)' },
-      ] },
-      { admin: true, key: 'wow.site.discord', label: 'Discord invite link (optional)', type: 'text', hint: 'Shown under Community, e.g. https://discord.gg/abc123' },
-    ]);
     for (const f of FIELDS) {
       if (f.file === 'aiplayerbot.conf' && !fs.existsSync(path.join(p.confDir, 'aiplayerbot.conf'))) continue;
       if (!groups.has(f.group)) groups.set(f.group, []);
@@ -620,16 +605,7 @@ const wow = {
 
   readSettings(server) {
     const p = paths(server);
-    const site = siteconfig.siteOf(server);
-    const out = {
-      'wow.realmName': server.wow.realmName || server.name,
-      'wow.address': server.wow.address || '',
-      'wow.manageDb': !!server.wow.manageDb,
-      'wow.site.enabled': site.enabled,
-      'wow.site.port': site.port,
-      'wow.site.registration': site.registration,
-      'wow.site.discord': site.discord,
-    };
+    const out = { 'wow.realmName': server.wow.realmName || server.name, 'wow.address': server.wow.address || '', 'wow.manageDb': !!server.wow.manageDb };
     const cache = {};
     for (const f of FIELDS) {
       cache[f.file] = cache[f.file] || readConf(p.confDir, f.file);
@@ -649,32 +625,6 @@ const wow = {
       server.wow.address = a;
     }
     if ('wow.manageDb' in values) server.wow.manageDb = !!values['wow.manageDb'];
-    // Who may sign up decides who gets into the game, so only panel admins change the website.
-    const site = { ...siteconfig.siteOf(server) };
-    if (!opts.admin) for (const k of Object.keys(values)) if (k.startsWith('wow.site.')) delete values[k];
-    if ('wow.site.enabled' in values) site.enabled = !!values['wow.site.enabled'];
-    if ('wow.site.port' in values && values['wow.site.port'] !== '') {
-      const port = Number(values['wow.site.port']);
-      if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new HttpError(400, 'Website port must be between 1024 and 65535');
-      const taken = new Map([
-        [require('../config').port, 'panel'],
-        [confPort(server, 'realmd.conf', 'RealmServerPort', 3724), 'login server'],
-        [confPort(server, 'mangosd.conf', 'WorldServerPort', 8085), 'world server'],
-        [3310, 'database'],
-      ]);
-      if (taken.has(port)) throw new HttpError(400, `Port ${port} is already used by the ${taken.get(port)}`);
-      site.port = port;
-    }
-    if ('wow.site.registration' in values) {
-      if (!siteconfig.REGISTRATION.includes(values['wow.site.registration'])) throw new HttpError(400, 'Pick who can create accounts on the website');
-      site.registration = values['wow.site.registration'];
-    }
-    if ('wow.site.discord' in values) {
-      const d = String(values['wow.site.discord'] || '').trim();
-      if (d && !/^https:\/\/(discord\.gg|discord\.com)\/[\w/-]+$/i.test(d)) throw new HttpError(400, 'The Discord link must look like https://discord.gg/abc123');
-      site.discord = d;
-    }
-    server.wow.site = site;
     const files = {};
     for (const f of FIELDS) {
       const k = `conf.${f.file}.${f.key}`;
@@ -705,7 +655,6 @@ const wow = {
       }
     }
     for (const [file, conf] of Object.entries(files)) writeConf(p.confDir, file, conf);
-    siteconfig.write(require('../db').data.servers); // the website picks this up by itself
     return { restartRequired: true };
   },
 };

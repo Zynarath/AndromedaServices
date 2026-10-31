@@ -1,6 +1,15 @@
 'use strict';
-// What the WotLK website runs with, in data/wowsite.json. The panel writes it from the WoW server's
-// Settings → Website section (and on every start); the website process only reads it.
+// The WotLK website's own settings, in data/wowsite.json. The website is separate from the
+// Andromeda Hosting panel: Andromeda Services edits this file (WotLK website → Settings), and the
+// running site picks changes up by itself. It can also be edited by hand.
+//
+//   root          the SPP Classics folder (SPP_Classics_V2), or any cMaNGOS WotLK folder
+//   title         the site's name (browser tab, header, footer)
+//   port / host   where the site listens (default 8091 on all addresses)
+//   registration  who can create game accounts: "off" (default), "invite" or "open"
+//   discord       optional Discord invite link for the Community menu
+//   trustProxy    true only behind a reverse proxy on another machine (a Cloudflare Tunnel on this
+//                 PC is already trusted)
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
@@ -8,50 +17,30 @@ const config = require('../config');
 const FILE = path.join(config.dataDir, 'wowsite.json');
 const DEFAULT_PORT = 8091;
 const REGISTRATION = ['off', 'invite', 'open'];
+const DISCORD_RE = /^https:\/\/(discord\.gg|discord\.com)\/[\w/-]+$/i;
 
-function siteOf(server) {
-  const s = (server.wow && server.wow.site) || {};
+// Fills in defaults and drops anything invalid. Returns null when no SPP folder is set yet.
+function normalize(c) {
+  if (!c || typeof c !== 'object' || !String(c.root || '').trim()) return null;
+  const port = Number(c.port);
   return {
-    enabled: s.enabled !== false,
-    port: Number(s.port) || DEFAULT_PORT,
-    registration: REGISTRATION.includes(s.registration) ? s.registration : 'off',
-    discord: /^https:\/\/(discord\.gg|discord\.com)\/[\w/-]+$/i.test(s.discord || '') ? s.discord : '',
+    root: String(c.root).trim(),
+    title: String(c.title || c.realmName || 'World of Warcraft').trim().slice(0, 48) || 'World of Warcraft',
+    port: Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_PORT,
+    host: typeof c.host === 'string' && c.host.trim() ? c.host.trim() : '0.0.0.0',
+    registration: REGISTRATION.includes(c.registration) ? c.registration : 'off',
+    discord: DISCORD_RE.test(c.discord || '') ? c.discord : '',
+    trustProxy: c.trustProxy === true,
+    websiteDir: typeof c.websiteDir === 'string' && c.websiteDir ? c.websiteDir : undefined,
   };
-}
-
-// The first WoW server with its website turned on (one website per panel).
-function fromServers(servers) {
-  const server = (servers || []).find((s) => s.game === 'wow' && s.wow && siteOf(s).enabled);
-  if (!server) return null;
-  const s = siteOf(server);
-  return {
-    serverId: server.id,
-    root: server.wow.root,
-    realmName: server.wow.realmName || server.name,
-    port: s.port,
-    host: config.host,
-    registration: s.registration,
-    discord: s.discord,
-    trustProxy: !!config.trustProxy,
-  };
-}
-
-function write(servers) {
-  const text = JSON.stringify(fromServers(servers) || { disabled: true }, null, 2);
-  try {
-    if (fs.existsSync(FILE) && fs.readFileSync(FILE, 'utf8') === text) return;
-    fs.writeFileSync(FILE + '.tmp', text);
-    fs.renameSync(FILE + '.tmp', FILE);
-  } catch {}
 }
 
 function read() {
   try {
-    const c = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    return c && !c.disabled ? c : null;
+    return normalize(JSON.parse(fs.readFileSync(FILE, 'utf8')));
   } catch {
     return null;
   }
 }
 
-module.exports = { FILE, DEFAULT_PORT, REGISTRATION, siteOf, fromServers, write, read };
+module.exports = { FILE, DEFAULT_PORT, REGISTRATION, normalize, read };

@@ -607,11 +607,18 @@ namespace Andromeda
             restart.Click += (o, e) => Restart(s);
             open.Click += (o, e) => OpenUrl(s.Url());
             // Buttons in a row; their widths change with the text (Start/Stop), so place them on resize.
+            ModernButton settingsButton = null;
+            if (s == site)
+            {
+                settingsButton = new ModernButton("Settings", ButtonKind.Ghost);
+                settingsButton.Click += (o, e) => EditSiteSettings();
+            }
             Action place = () =>
             {
                 main.Location = new Point(20, 144);
                 restart.Location = new Point(main.Right + 8, 144);
                 open.Location = new Point(restart.Right + 8, 144);
+                if (settingsButton != null) settingsButton.Location = new Point(open.Right + 8, 144);
             };
             main.SizeChanged += (o, e) => place();
             place();
@@ -619,6 +626,7 @@ namespace Andromeda
             auto.CheckedChanged += (o, e) => settings.Set("autostart." + s.Key, auto.Checked);
 
             card.Controls.AddRange(new Control[] { name, pill, desc, url, main, restart, open, auto });
+            if (settingsButton != null) card.Controls.Add(settingsButton);
             pills[s] = pill;
             urlLabels[s] = url;
             buttons[s] = new[] { main, restart, open };
@@ -660,7 +668,7 @@ namespace Andromeda
                 case State.Stopping: text = s == panel ? "Stopping (saving game servers)…" : "Stopping…"; color = Theme.Amber; break;
                 case State.External: text = "Running outside Andromeda Services"; color = Theme.Blue; break;
                 case State.Crashed: text = "Stopped unexpectedly — see the log"; color = Theme.Red; break;
-                case State.Waiting: text = "Waiting: turn on the website in the panel"; color = Theme.Amber; break;
+                case State.Waiting: text = "Waiting: choose the SPP folder in Settings"; color = Theme.Amber; break;
                 default: text = "Stopped"; color = Theme.Muted; break;
             }
             if (updating && !s.Alive) { text = "Updating…"; color = Theme.Blue; }
@@ -746,7 +754,7 @@ namespace Andromeda
             if (line == null) return;
             s.Write(line);
             if ((s.State == State.Starting || s.State == State.Waiting) && line.Contains(" is running at ")) s.SetState(State.Running);
-            else if (s.State == State.Starting && line.Contains("No WoW server has its website turned on")) s.SetState(State.Waiting);
+            else if (s.State == State.Starting && line.Contains("The SPP folder isn't set yet")) s.SetState(State.Waiting);
         }
 
         void OnExited(Service s, Process p)
@@ -1169,6 +1177,109 @@ namespace Andromeda
         static void OpenUrl(string url)
         {
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+        }
+
+        // ---------- WotLK website settings (data\wowsite.json, which the site follows by itself) ----------
+        void EditSiteSettings()
+        {
+            var file = Path.Combine(DataDir(), "wowsite.json");
+            var cfg = ReadJson(file);
+            Func<string, string, string> str = (k, def) => { object v; return cfg.TryGetValue(k, out v) && v != null && Convert.ToString(v).Length > 0 ? Convert.ToString(v) : def; };
+
+            var dlg = new Form
+            {
+                Text = "WotLK website settings", FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
+                StartPosition = FormStartPosition.CenterParent, ClientSize = new Size(560, 470), BackColor = Theme.Card, ForeColor = Theme.Text, Font = Theme.UI(9.5f),
+                ShowInTaskbar = false,
+            };
+            dlg.HandleCreated += (o, e) => DarkTitleBar(dlg.Handle);
+            int y = 20;
+            Func<string, string, Control> label = (caption, hint) =>
+            {
+                dlg.Controls.Add(new Label { Text = caption, Font = Theme.Bold(9.5f), AutoSize = true, Location = new Point(24, y), BackColor = Theme.Card, ForeColor = Theme.Text });
+                if (hint != null) dlg.Controls.Add(new Label { Text = hint, AutoSize = true, Location = new Point(24, y + 20), BackColor = Theme.Card, ForeColor = Theme.Muted, Font = Theme.UI(8.5f) });
+                y += hint != null ? 42 : 22;
+                return null;
+            };
+            Func<string, int, TextBox> box = (value, width) =>
+            {
+                var t = new TextBox { Text = value, Location = new Point(24, y), Width = width, BackColor = Theme.Raised, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
+                dlg.Controls.Add(t);
+                y += 40;
+                return t;
+            };
+
+            label("SPP folder", "Your SPP_Classics_V2 folder (or a cMaNGOS WotLK folder).");
+            var root = box(str("root", ""), 400);
+            var browse = new ModernButton("Browse…", ButtonKind.Secondary) { Location = new Point(434, root.Top - 4), Height = 30 };
+            browse.Click += (o, e) =>
+            {
+                using (var fb = new FolderBrowserDialog { Description = "Choose your SPP_Classics_V2 folder", SelectedPath = root.Text })
+                    if (fb.ShowDialog(dlg) == DialogResult.OK) root.Text = fb.SelectedPath;
+            };
+            dlg.Controls.Add(browse);
+            label("Site name", null);
+            var title = box(str("title", str("realmName", "World of Warcraft")), 300);
+            label("Port", "Open http://localhost:<port>. Default 8091.");
+            var port = box(str("port", "8091"), 100);
+            label("Who can create game accounts on the site", null);
+            var reg = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(24, y), Width = 510, BackColor = Theme.Raised, ForeColor = Theme.Text, FlatStyle = FlatStyle.Flat };
+            var regValues = new[] { "off", "invite", "open" };
+            reg.Items.AddRange(new object[] {
+                "Nobody: only accounts made in the game or the panel (default)",
+                "People with an invite code (GM accounts make codes on the site's Admin panel)",
+                "Anyone who can open the site (not recommended for a public site)",
+            });
+            reg.SelectedIndex = Math.Max(0, Array.IndexOf(regValues, str("registration", "off")));
+            dlg.Controls.Add(reg);
+            y += 40;
+            label("Discord invite link (optional)", null);
+            var discord = box(str("discord", ""), 400);
+
+            var save = new ModernButton("Save", ButtonKind.Primary);
+            var cancel = new ModernButton("Cancel", ButtonKind.Ghost);
+            save.Location = new Point(dlg.ClientSize.Width - save.Width - 24, dlg.ClientSize.Height - 54);
+            cancel.Location = new Point(save.Left - cancel.Width - 8, save.Top);
+            cancel.Click += (o, e) => dlg.Close();
+            save.Click += (o, e) =>
+            {
+                int p;
+                var folder = root.Text.Trim();
+                if (folder.Length == 0 || !Directory.Exists(folder)) { MessageBox.Show(dlg, "Choose the SPP folder.", "WotLK website", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                if (!new[] { @"Settings\wotlk\mangosd.conf", @"SPP_Server\Settings\wotlk\mangosd.conf", "mangosd.conf", @"etc\mangosd.conf", @"bin\mangosd.conf" }.Any(f => File.Exists(Path.Combine(folder, f))))
+                {
+                    if (MessageBox.Show(dlg, "No mangosd.conf was found in that folder. Use it anyway?", "WotLK website", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                }
+                if (!int.TryParse(port.Text.Trim(), out p) || p < 1024 || p > 65535) { MessageBox.Show(dlg, "The port must be a number from 1024 to 65535.", "WotLK website", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                if (p == panel.Port() || p == 3724 || p == 8085 || p == 3310) { MessageBox.Show(dlg, "Port " + p + " is used by the panel or the realm. Pick another, like 8091.", "WotLK website", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                var d = discord.Text.Trim();
+                if (d.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(d, @"^https://(discord\.gg|discord\.com)/[\w/-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    MessageBox.Show(dlg, "The Discord link must look like https://discord.gg/abc123", "WotLK website", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                cfg["root"] = folder;
+                cfg["title"] = title.Text.Trim().Length > 0 ? title.Text.Trim() : "World of Warcraft";
+                cfg["port"] = p;
+                cfg["registration"] = regValues[reg.SelectedIndex];
+                cfg["discord"] = d;
+                cfg.Remove("realmName");
+                cfg.Remove("serverId");
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(file));
+                    File.WriteAllText(file, new JavaScriptSerializer().Serialize(cfg));
+                }
+                catch (Exception ex) { MessageBox.Show(dlg, "Couldn't save: " + ex.Message, "WotLK website", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+                site.Write("Settings saved. The website applies them within a few seconds.");
+                dlg.DialogResult = DialogResult.OK;
+                dlg.Close();
+            };
+            dlg.Controls.Add(save);
+            dlg.Controls.Add(cancel);
+            dlg.AcceptButton = null;
+            dlg.ShowDialog(this);
+            RefreshCard(site);
         }
 
         // ---------- config ----------

@@ -75,7 +75,7 @@ function buildApp(getConfig) {
     const cfg = getConfig();
     return {
       req,
-      site: { title: cfg.realmName || 'World of Warcraft', realmName: cfg.realmName || 'World of Warcraft', registration: cfg.registration || 'off', discord: cfg.discord || '' },
+      site: { title: cfg.title, realmName: cfg.title, registration: cfg.registration, discord: cfg.discord },
       account: req.account,
       csrf: req.session.csrf,
       assetsMissing: assetsMissing(cfg),
