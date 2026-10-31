@@ -94,7 +94,7 @@ async function apply({ reason = 'manual' } = {}) {
       // A fast-forward is impossible when the GitHub branch's history was rebuilt
       // (e.g. an amended/squashed release), or local tracked files drifted. Match the
       // GitHub branch exactly instead — config.json and data/ are gitignored, so nothing
-      // the user set in the panel is lost. This mirrors what update.bat does.
+      // the user set in the panel is lost. Andromeda Services' updater does the same.
       if (/fast-forward|diverge|non-fast-forward|rejected|unrelated histories/i.test(err.message)) {
         log.warn(`Fast-forward not possible (${err.message}); resetting to the GitHub branch.`);
         await git(['fetch', '--quiet'], 180000);

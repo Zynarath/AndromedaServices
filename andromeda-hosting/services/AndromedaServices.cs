@@ -220,6 +220,31 @@ namespace Andromeda
         }
     }
 
+    // The Andromeda logo (public/img/icon.svg), drawn so it stays sharp at any size.
+    class Logo : Control
+    {
+        public Logo()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+        }
+        PointF P(float x, float y) { float k = Width / 32f; return new PointF(x * k, y * k); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Theme.Behind(this));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            float k = Width / 32f;
+            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), (int)(8 * k)))
+            using (var b = new SolidBrush(Theme.Accent)) g.FillPath(b, path);
+            using (var pen = new Pen(Color.White, 2.4f * k) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round })
+            {
+                g.DrawPolygon(pen, new[] { P(8, 22), P(8, 10), P(16, 6), P(24, 10), P(24, 22), P(16, 26) });
+                g.DrawLine(pen, P(16, 14), P(16, 26));
+                g.DrawLines(pen, new[] { P(8, 10), P(16, 14), P(24, 10) });
+            }
+        }
+    }
+
     // Coloured pill with a dot.
     class Pill : Control
     {
@@ -401,13 +426,7 @@ namespace Andromeda
 
             // ---- header: logo, title, version, Check for updates ----
             var header = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = Theme.Bg };
-            var logo = new PictureBox { Size = new Size(44, 44), Location = new Point(30, 26), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Theme.Bg };
-            try
-            {
-                var ico = Path.Combine(Program.Root, Path.Combine("services", "andromeda.ico"));
-                logo.Image = File.Exists(ico) ? new Icon(ico, 48, 48).ToBitmap() : Icon.ToBitmap();
-            }
-            catch { }
+            var logo = new Logo { Size = new Size(44, 44), Location = new Point(30, 26) };
             var title = new Label { Text = "Andromeda Services", Font = Theme.Bold(17f), AutoSize = true, Location = new Point(84, 22), ForeColor = Theme.Text, BackColor = Theme.Bg };
             versionLabel = new Label { Text = "", AutoSize = true, Location = new Point(87, 58), ForeColor = Theme.Muted, BackColor = Theme.Bg, Font = Theme.UI(9f) };
             updateButton = new ModernButton("Check for updates", ButtonKind.Secondary);
@@ -753,7 +772,16 @@ namespace Andromeda
             s.StopRequested = true;
             s.SetState(State.Stopping);
             s.Write("Stopping " + s.Name + (s == panel ? " (running game servers are saved and stopped first)..." : "..."));
-            try { s.Proc.StandardInput.WriteLine(forUpdate && s == panel ? "stop-for-update" : "stop"); s.Proc.StandardInput.Flush(); } catch { }
+            try
+            {
+                // "stop-for-update" makes the panel bring its running game servers back afterwards. A panel
+                // from before that command ignores it and acts on the plain "stop" that follows; a newer
+                // one is already stopping and ignores the second line.
+                if (forUpdate && s == panel) s.Proc.StandardInput.WriteLine("stop-for-update");
+                s.Proc.StandardInput.WriteLine("stop");
+                s.Proc.StandardInput.Flush();
+            }
+            catch { }
             var proc = s.Proc;
             var watch = new Thread(() =>
             {

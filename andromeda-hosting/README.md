@@ -81,13 +81,14 @@ You can also run it on Linux with `./start.sh` (Minecraft, ARK: SE, Satisfactory
 - Closing the window keeps everything running in the system tray. **Stop all and exit** (in the
   window or the tray menu) stops cleanly: game servers are saved and stopped first, as when you
   close `start.bat`.
+- **Check for updates** downloads the latest version from GitHub (see [Updating](#updating)).
 - After an update installed from the panel, it restarts the panel by itself.
 
 `install.bat` builds it as `Andromeda Services.exe` in this folder, using the C# compiler that
 comes with Windows, so there is nothing extra to install. To rebuild it yourself, run
 `services\build.bat`, or `services\build.bat shortcut` to also recreate the shortcuts.
-`update.bat` rebuilds it after updating. `start.bat` and `start-wow-site.bat` still work if you
-prefer console windows. Use one way or the other, not both at once.
+`start.bat` and `start-wow-site.bat` still work if you prefer console windows. Use one way or the
+other, not both at once.
 
 ### Creating servers
 
@@ -107,8 +108,8 @@ server's Overview tab. When it's done, press **Start**.
 
 ## Updating
 
-Make your Andromeda Hosting folder a Git copy of the repository once; after that, double-click
-**`update.bat`** to download the latest version.
+Make your Andromeda Hosting folder a Git copy of the repository once; after that, press
+**Check for updates** in Andromeda Services to download the latest version.
 
 1. Install [Git for Windows](https://git-scm.com/download/win) (default options are fine).
 2. Close Andromeda Hosting. In PowerShell:
@@ -119,13 +120,19 @@ Make your Andromeda Hosting folder a Git copy of the repository once; after that
    Sign in to GitHub in the browser window if it asks (the repository may be private).
 3. Copy your **`data`** folder and **`config.json`** from your old `andromeda-hosting` folder into
    `HomePanel\andromeda-hosting\`. These hold your servers, users and settings; Git never touches them.
-4. From now on, run Andromeda Hosting from `HomePanel\andromeda-hosting` (`start.bat`).
+4. From now on, run Andromeda Hosting from `HomePanel\andromeda-hosting` (`install.bat` once, then
+   Andromeda Services).
+
+**Check for updates** (in Andromeda Services, at the top right, or in its tray menu) shows what
+changed. It also checks by itself when it opens and every 6 hours. **Update now** saves and
+stops the running game servers and the website, downloads the update, installs any new packages,
+rebuilds Andromeda Services if it changed, and starts everything that was running again.
 
 After that, updates come from the panel itself: **Panel settings → Updates** checks GitHub every
 hour and shows what changed. Click **Update now**, or turn on **Install updates automatically**,
 which only installs while nobody is playing. Andromeda Hosting saves and stops running servers, installs
 the update, restarts, and starts those servers again. This works when Andromeda Hosting was started with
-`start.bat`. `update.bat` still works as a manual fallback.
+Andromeda Services or `start.bat`.
 
 Don't edit Andromeda Hosting's own files in that folder. Change settings in the panel or `config.json`,
 otherwise Git will refuse to update over your edits.

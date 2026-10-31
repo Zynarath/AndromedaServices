@@ -1,9 +1,8 @@
 'use strict';
 // Keeps "Andromeda Services.exe" (the Windows app that starts/stops the panel and the WotLK
-// website) built. The first update that brings it in runs the previous update.bat, which doesn't
-// know about it, and in-panel updates don't run update.bat at all. So when the panel starts on
-// Windows it builds the app if it's missing or older than its source (and adds the shortcuts the
-// first time).
+// website) built. Updates installed from the panel, or with the old update.bat, don't rebuild it,
+// and the app can't replace itself if it was never built. So when the panel starts on Windows it
+// builds the app if it's missing or older than its source (and adds the shortcuts the first time).
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
