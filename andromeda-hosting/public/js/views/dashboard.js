@@ -1,5 +1,5 @@
 import { api, onSocket } from '../api.js';
-import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artInner, copyText } from '../ui.js';
+import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artInner, copyText, sparkline, bindSparkHover } from '../ui.js';
 
 function card(s) {
   const rt = s.runtime;
@@ -54,6 +54,23 @@ export async function render(root, { state, refreshServers }) {
       <div class="tile"><div class="tile-label">${icon('server')} Servers online</div><div class="tile-value">${online}<small> / ${servers.length}</small></div><div class="tile-meta">${sys.lanAddresses.length ? 'LAN: ' + sys.lanAddresses.slice(0, 2).join(', ') : sys.hostname}</div></div>`.s;
   };
 
+  // Whole-PC CPU and memory over the last hour (the panel samples every 5 seconds).
+  const drawCharts = (sys) => {
+    const hist = sys.history || [];
+    const gb = (b) => b / 1073741824;
+    const step = sys.historyStep || 5;
+    const span = hist.length > 1 ? Math.round(((hist.length - 1) * step) / 60) : 0;
+    const since = span >= 60 ? 'last hour' : span > 0 ? `last ${span} min` : 'collecting…';
+    const now = hist[hist.length - 1];
+    $('#host-charts', root).innerHTML = html`
+      <div class="panel chart-panel"><div class="chart-head"><h3>${icon('cpu')} CPU usage</h3><span class="chart-value">${now ? now.cpu.toFixed(0) + '%' : '—'}</span></div>
+        ${sparkline(hist.map((h) => h.cpu), { max: 100, height: 90, step, fmt: (v) => v.toFixed(0) + '%' })}
+        <p class="muted small">Whole PC (${sys.cores} threads), ${since}</p></div>
+      <div class="panel chart-panel"><div class="chart-head"><h3>${icon('memory')} Memory usage</h3><span class="chart-value">${now ? fmtBytes(now.mem) : '—'}</span></div>
+        ${sparkline(hist.map((h) => gb(h.mem)), { max: gb(sys.memTotal), height: 90, step, fmt: (v) => v.toFixed(1) + ' GB' })}
+        <p class="muted small">Of ${fmtBytes(sys.memTotal)}, ${since}</p></div>`.s;
+  };
+
   const drawCards = () => {
     $('#cards', root).innerHTML = servers.length
       ? servers.map((s) => card(s).s).join('')
@@ -68,6 +85,7 @@ export async function render(root, { state, refreshServers }) {
       ${admin ? html`<a class="btn btn-primary" href="#/new">${icon('plus')}New server</a>` : ''}
     </div>
     <section class="tiles" id="tiles"></section>
+    <section class="grid-2 host-charts" id="host-charts"></section>
     <section class="cards" id="cards"></section>`.s;
   drawTiles(sys);
   drawCards();
@@ -121,7 +139,9 @@ export async function render(root, { state, refreshServers }) {
       scheduleRedraw();
     }
   });
-  const timer = setInterval(() => api.get('/api/system').then(drawTiles).catch(() => {}), 5000);
+  drawCharts(sys);
+  bindSparkHover($('#host-charts', root));
+  const timer = setInterval(() => api.get('/api/system').then((s) => { drawTiles(s); drawCharts(s); }).catch(() => {}), 5000);
   return () => {
     off();
     clearInterval(timer);

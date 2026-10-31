@@ -10,7 +10,7 @@ const loaders = require('../services/loaders');
 const java = require('../services/java');
 const ddns = require('../services/ddns');
 const discord = require('../services/discord');
-const procstats = require('../util/procstats');
+const hoststats = require('../services/hoststats');
 const { HttpError } = require('../util/misc');
 
 const router = express.Router();
@@ -31,7 +31,7 @@ router.get('/system', (_req, res) => {
     platform: process.platform,
     cpuModel: (os.cpus()[0] || {}).model || '',
     cores: os.cpus().length,
-    cpu: procstats.systemCpu(),
+    cpu: hoststats.latest().cpu,
     memTotal: os.totalmem(),
     memFree: os.freemem(),
     uptime: os.uptime(),
@@ -43,6 +43,8 @@ router.get('/system', (_req, res) => {
       .filter((i) => i && i.family === 'IPv4' && !i.internal)
       .map((i) => i.address),
     java: java.listInstalled().map((j) => j.major),
+    history: hoststats.history(), // [{ t, cpu, mem }] every 5 s, last hour
+    historyStep: hoststats.EVERY_MS / 1000,
   });
 });
 

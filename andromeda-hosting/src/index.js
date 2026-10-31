@@ -161,6 +161,7 @@ manager.on('removed', (id) => {
 
 // ---- start ----
 manager.init();
+require('./services/hoststats').start();
 require('./services/ddns').start();
 require('./services/discord').init(manager);
 require('./shareServer').apply();

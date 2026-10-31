@@ -145,6 +145,7 @@ const ICONS = {
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
   terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -178,7 +179,7 @@ export function icon(name, cls = '') {
 }
 
 // Single-series sparkline with a hover readout. values: numbers; max: y-axis top.
-export function sparkline(values, { max = 100, height = 56, fmt = (v) => v.toFixed(0) } = {}) {
+export function sparkline(values, { max = 100, height = 56, fmt = (v) => v.toFixed(0), step = 3 } = {}) {
   const w = 300;
   const n = values.length;
   if (n < 2) return html`<div class="spark-empty">Waiting for data…</div>`;
@@ -187,7 +188,7 @@ export function sparkline(values, { max = 100, height = 56, fmt = (v) => v.toFix
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('');
   const area = `${line}L${w},${height}L0,${height}Z`;
   const data = esc(JSON.stringify(values.map((v) => fmt(v))));
-  return raw(`<div class="spark" data-points="${data}">
+  return raw(`<div class="spark" data-points="${data}" data-step="${step}">
     <svg viewBox="0 0 ${w} ${height}" preserveAspectRatio="none" role="img" aria-label="Last ${n} samples">
       <path class="spark-area" d="${area}"/><path class="spark-line" d="${line}" vector-effect="non-scaling-stroke"/>
     </svg><div class="spark-tip" hidden></div><div class="spark-cursor" hidden></div></div>`);
@@ -202,9 +203,10 @@ export function bindSparkHover(root) {
     const tip = el.querySelector('.spark-tip');
     const cur = el.querySelector('.spark-cursor');
     const x = (i / (pts.length - 1)) * r.width;
-    const secsAgo = (pts.length - 1 - i) * 3;
+    const secsAgo = (pts.length - 1 - i) * (Number(el.dataset.step) || 3);
+    const ago = secsAgo >= 60 ? `${Math.floor(secsAgo / 60)}m ${secsAgo % 60 ? (secsAgo % 60) + 's ' : ''}ago` : secsAgo ? secsAgo + 's ago' : 'now';
     tip.hidden = cur.hidden = false;
-    tip.textContent = `${pts[i]} · ${secsAgo ? secsAgo + 's ago' : 'now'}`;
+    tip.textContent = `${pts[i]} · ${ago}`;
     tip.style.left = `${Math.min(Math.max(x, 40), r.width - 40)}px`;
     cur.style.left = `${x}px`;
   });

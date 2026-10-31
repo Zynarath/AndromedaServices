@@ -25,6 +25,11 @@
   --info-soft: rgba(29, 155, 240, 0.12);
   --chart: #1d9bf0;
   --console-bg: #050607;
+  --canvas: #000000;      /* page background */
+  --card: #000000;        /* panels, cards, modals */
+  --well: #000000;        /* inputs */
+  --glass: rgba(0, 0, 0, 0.82); /* sidebar / top bar over the stars */
+  --star-opacity: 1;
   --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.7);
   --glow: 0 0 0 1px rgba(29, 155, 240, 0.35), 0 0 22px rgba(29, 155, 240, 0.18);
   --radius: 16px;
@@ -79,7 +84,7 @@ kbd { border: 1px solid var(--border-strong); border-bottom-width: 2px; padding:
 .me { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--text); padding: 6px 8px; border-radius: var(--radius-sm); min-width: 0; }
 .me:hover { background: var(--surface); text-decoration: none; }
 .me span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.me small { color: var(--muted); margin-left: auto; }
+.me small { color: var(--muted); margin-left: auto; white-space: nowrap; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .insecure-bar { display: flex; align-items: flex-start; gap: 10px; padding: 9px 16px; background: rgba(242, 85, 90, 0.12); border-bottom: 1px solid var(--bad); color: var(--text); font-size: 13.5px; }
 .insecure-bar .ic { color: var(--bad); flex: none; margin-top: 2px; }
@@ -508,18 +513,18 @@ body::before {
   mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
   -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
 }
-body { background: #000; letter-spacing: 0.005em; }
+body { background: var(--canvas); letter-spacing: 0.005em; }
 ::selection { background: rgba(29, 155, 240, 0.35); }
 * { scrollbar-width: thin; scrollbar-color: #2f3336 transparent; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 99px; border: 3px solid #000; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; border: 3px solid var(--canvas); }
 
 h1 { font-weight: 800; letter-spacing: -0.02em; }
 h4 { letter-spacing: 0.12em; font-size: 11.5px; color: var(--muted); }
 a { color: var(--accent); }
 
 /* Sidebar: black with one hairline, active item marked by a light rail. */
-.sidebar { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(12px); border-right: 1px solid var(--border); }
+.sidebar { background: var(--glass); backdrop-filter: blur(12px); border-right: 1px solid var(--border); }
 .brand { font-weight: 800; letter-spacing: -0.01em; }
 .nav a { position: relative; border-radius: 99px; padding: 9px 14px; font-weight: 600; color: var(--text-2); transition: background 0.2s var(--ease), color 0.2s var(--ease); }
 .nav a:hover { background: var(--surface-3); color: var(--text); }
@@ -527,7 +532,7 @@ a { color: var(--accent); }
 .nav a.active::before { content: ''; position: absolute; left: -10px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: rail-in 0.35s var(--ease); }
 .nav-label { letter-spacing: 0.16em; font-size: 10.5px; }
 .nav-label::after { content: ''; display: block; height: 1px; margin-top: 6px; background: linear-gradient(90deg, var(--border), transparent); }
-.topbar { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(12px); }
+.topbar { background: var(--glass); backdrop-filter: blur(12px); }
 
 /* Status dots breathe while running. */
 .st-running { box-shadow: 0 0 0 0 rgba(0, 186, 124, 0.6); animation: pulse 2.2s infinite; }
@@ -545,12 +550,12 @@ a { color: var(--accent); }
 .icon-btn { border-radius: 99px; transition: background 0.2s var(--ease); }
 
 /* Inputs: black wells with a hairline that lights up blue. */
-input, select, textarea { background: #000; border-color: var(--border-strong); border-radius: var(--radius-sm); transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+input, select, textarea { background: var(--well); border-color: var(--border-strong); border-radius: var(--radius-sm); transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease); }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: var(--glow); }
 
 /* Panels, tiles and server cards: black with hairlines, a light sweep across the top edge on
    hover, and corner ticks like a technical drawing. */
-.panel, .tile, .server-card, .modal { position: relative; background: #000; border-color: var(--border); }
+.panel, .tile, .server-card, .modal { position: relative; background: var(--card); border-color: var(--border); }
 .panel::before, .tile::before, .server-card::before {
   content: ''; position: absolute; top: -1px; left: 16px; right: 16px; height: 1px; pointer-events: none;
   background: linear-gradient(90deg, transparent, rgba(29, 155, 240, 0.9), transparent);
@@ -586,7 +591,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 
 /* Pills and callouts: outlined, not filled. */
 .pill { border: 1px solid currentColor; background: transparent !important; }
-.callout { background: #000; border: 1px solid var(--border); }
+.callout { background: var(--card); border: 1px solid var(--border); }
 
 /* Console: terminal black with a faint scanline. */
 .console, pre.console, .console-out { background: var(--console-bg); }
@@ -594,7 +599,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 /* Modals and toasts float in. */
 .modal-backdrop { background: rgba(91, 112, 131, 0.35); backdrop-filter: blur(6px); }
 .modal { border-color: var(--border-strong); animation: pop 0.22s var(--ease); }
-.toast { background: #000; border-color: var(--border-strong); box-shadow: var(--shadow); }
+.toast { background: var(--card); border-color: var(--border-strong); box-shadow: var(--shadow); }
 
 /* Content eases in when a page opens; cards and tiles follow one after another. */
 .view > * { animation: rise 0.45s var(--ease) both; }
@@ -623,7 +628,7 @@ html {
   background:
     radial-gradient(1200px 700px at 85% -10%, rgba(76, 60, 180, 0.10), transparent 70%),
     radial-gradient(900px 600px at -10% 110%, rgba(29, 155, 240, 0.07), transparent 70%),
-    #000;
+    var(--canvas);
 }
 body { background: transparent; }
 body::before { background-image:
@@ -647,7 +652,7 @@ html::before {
     radial-gradient(1px 1px at 30px 158px, rgba(255,236,210,0.31), transparent),
     radial-gradient(1px 1px at 218px 198px, rgba(255,236,210,0.34), transparent);
   background-size: 260px 240px;
-  opacity: 0.55;
+  opacity: calc(0.55 * var(--star-opacity));
   animation: twinkle 9s ease-in-out infinite alternate;
 }
 html::after {
@@ -660,7 +665,7 @@ html::after {
     radial-gradient(1.5px 1.5px at 77px 250px, rgba(255,255,255,0.5), transparent),
     radial-gradient(1.5px 1.5px at 391px 285px, rgba(255,255,255,0.55), transparent);
   background-size: 430px 390px;
-  opacity: 0.6;
+  opacity: calc(0.6 * var(--star-opacity));
   animation: twinkle 13s ease-in-out 2s infinite alternate-reverse;
 }
 body::after {
@@ -669,13 +674,13 @@ body::after {
     radial-gradient(2px 2px at 467px 70px, rgba(255,255,255,0.75), transparent),
     radial-gradient(2px 2px at 485px 66px, rgba(255,255,255,0.52), transparent);
   background-size: 700px 620px;
-  opacity: 0.7;
+  opacity: calc(0.7 * var(--star-opacity));
   animation: drift 120s linear infinite, twinkle 17s ease-in-out 4s infinite alternate;
 }
 @keyframes twinkle { from { opacity: 0.25; } to { opacity: 0.7; } }
 @keyframes drift { from { background-position: 0 0; } to { background-position: -700px 620px; } }
 /* Cards stay solid black so text never sits on stars. */
-.sidebar { background: rgba(0, 0, 0, 0.78); }
+.sidebar { background: var(--glass); }
 
 /* Company name under the product name. */
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
@@ -683,6 +688,38 @@ body::after {
 .auth-brand h1 { margin: 0; }
 .auth-brand .company { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
 .auth-brand img.company-mark { width: 15px; height: 15px; flex: none; }
+
+/* Dark grey theme (Theme button in the sidebar): soft charcoal instead of pure black, still dark
+   enough for the stars and blue accents. Andromeda Services has the same choice. */
+html[data-theme='grey'] {
+  --canvas: #1e1f23;
+  --card: #26282d;
+  --well: #1b1c20;
+  --glass: rgba(30, 31, 35, 0.86);
+  --bg: #1e1f23;
+  --bg-2: #1e1f23;
+  --surface: #26282d;
+  --surface-2: #2c2e34;
+  --surface-3: #33363c;
+  --border: #3a3d44;
+  --border-strong: #4a4e57;
+  --text: #ececee;
+  --text-2: #c2c5cc;
+  --muted: #9a9ea8;
+  --console-bg: #17181b;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 14px 36px rgba(0, 0, 0, 0.45);
+  --star-opacity: 0.6;
+}
+html[data-theme='grey'] .btn:hover { background: rgba(236, 236, 238, 0.07); }
+html[data-theme='grey'] .server-card:hover { box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(29, 155, 240, 0.18); }
+html[data-theme='grey'] .modal-backdrop { background: rgba(10, 11, 13, 0.55); }
+
+/* Dashboard: whole-PC CPU and memory graphs. */
+.host-charts { margin-top: 18px; }
+.host-charts .spark, .host-charts .spark-empty { height: 90px; }
+.host-charts .chart-head h3 { display: flex; align-items: center; gap: 8px; }
+.host-charts .chart-value { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.host-charts .spark-line { filter: drop-shadow(0 0 6px rgba(29, 155, 240, 0.45)); }
 
 /* People who turn off animations in Windows get none. */
 @media (prefers-reduced-motion: reduce) {

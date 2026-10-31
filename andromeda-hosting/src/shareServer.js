@@ -28,7 +28,7 @@ function buildApp() {
   app.get('/', (_req, res) => res.redirect('/share'));
   app.get('/css/app.css', (_req, res) => res.sendFile(path.join(pub, 'css', 'app.css')));
   app.get('/img/icon.svg', (_req, res) => res.sendFile(path.join(pub, 'img', 'icon.svg')));
-  for (const f of ['share.js', 'ui.js']) app.get('/js/' + f, (_req, res) => res.sendFile(path.join(pub, 'js', f)));
+  for (const f of ['share.js', 'ui.js', 'theme.js']) app.get('/js/' + f, (_req, res) => res.sendFile(path.join(pub, 'js', f)));
   app.use('/share', publicRouter);
   app.use((_req, res) => res.status(404).send('Not found'));
   // eslint-disable-next-line no-unused-vars

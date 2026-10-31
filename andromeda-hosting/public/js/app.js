@@ -74,7 +74,8 @@ function shell() {
             : ''}
         </nav>
         <div class="sidebar-foot">
-          <a href="#/account" class="me" data-nav="/account">${icon('user')}<span>${state.user.username}</span><small>${state.user.role} · v${PAGE_VERSION}</small></a>
+          <a href="#/account" class="me" data-nav="/account" title="${state.user.username} (${state.user.role})">${icon('user')}<span>${state.user.username}</span><small>v${PAGE_VERSION}</small></a>
+          <button class="icon-btn" id="theme" title="Theme: black or dark grey" aria-label="Switch between the black and dark grey theme">${icon('moon')}</button>
           <button class="icon-btn" id="logout" title="Sign out" aria-label="Sign out">${icon('logout')}</button>
         </div>
       </aside>
@@ -95,6 +96,11 @@ function shell() {
         <main id="view" class="view"></main>
       </div>
     </div>`.s;
+  $('#theme').onclick = () => {
+    const next = window.getTheme() === 'grey' ? 'black' : 'grey';
+    window.setTheme(next);
+    toast(next === 'grey' ? 'Dark grey theme' : 'Black theme', 'ok', 1500);
+  };
   $('#logout').onclick = async () => {
     await api.post('/api/auth/logout').catch(() => {});
     disconnectSocket();

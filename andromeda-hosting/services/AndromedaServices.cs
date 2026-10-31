@@ -61,14 +61,24 @@ namespace Andromeda
 
     static class Theme
     {
-        // Same black "X" look as the panel: hairline borders, white primary buttons, blue accents.
-        public static readonly Color Bg = Color.FromArgb(0, 0, 0);
-        public static readonly Color Card = Color.FromArgb(8, 9, 10);
-        public static readonly Color CardBorder = Color.FromArgb(47, 51, 54);
-        public static readonly Color Raised = Color.FromArgb(22, 24, 28);
-        public static readonly Color RaisedHover = Color.FromArgb(39, 44, 48);
-        public static readonly Color Text = Color.FromArgb(231, 233, 234);
-        public static readonly Color Muted = Color.FromArgb(113, 118, 123);
+        // Same look as the panel: black ("X" style) or dark grey, hairline borders, white primary
+        // buttons, blue accents. The first eight colours change with the theme.
+        public static Color Bg, Card, CardBorder, Raised, RaisedHover, Text, Muted, LogBg;
+        static readonly Color[] Black = {
+            Color.FromArgb(0, 0, 0), Color.FromArgb(8, 9, 10), Color.FromArgb(47, 51, 54), Color.FromArgb(22, 24, 28),
+            Color.FromArgb(39, 44, 48), Color.FromArgb(231, 233, 234), Color.FromArgb(113, 118, 123), Color.FromArgb(3, 3, 4),
+        };
+        static readonly Color[] Grey = {
+            Color.FromArgb(30, 31, 35), Color.FromArgb(38, 40, 45), Color.FromArgb(58, 61, 68), Color.FromArgb(51, 54, 60),
+            Color.FromArgb(61, 64, 71), Color.FromArgb(236, 236, 238), Color.FromArgb(154, 158, 168), Color.FromArgb(23, 24, 27),
+        };
+        public static Color[] Palette { get { return new[] { Bg, Card, CardBorder, Raised, RaisedHover, Text, Muted, LogBg }; } }
+        public static void Use(bool grey)
+        {
+            var p = grey ? Grey : Black;
+            Bg = p[0]; Card = p[1]; CardBorder = p[2]; Raised = p[3]; RaisedHover = p[4]; Text = p[5]; Muted = p[6]; LogBg = p[7];
+        }
+        static Theme() { Use(false); }
         public static readonly Color Accent = Color.FromArgb(29, 155, 240);
         public static readonly Color Primary = Color.FromArgb(231, 233, 234);
         public static readonly Color PrimaryHover = Color.FromArgb(255, 255, 255);
@@ -77,7 +87,25 @@ namespace Andromeda
         public static readonly Color Amber = Color.FromArgb(255, 212, 0);
         public static readonly Color Red = Color.FromArgb(244, 33, 46);
         public static readonly Color Blue = Color.FromArgb(29, 155, 240);
-        public static readonly Color LogBg = Color.FromArgb(0, 0, 0);
+
+        // Switch a window that is already built: swap each control's colours from the old palette to
+        // the new one; the hand-drawn controls read the current colours when they repaint.
+        public static void Recolor(Control c, Color[] from, Color[] to)
+        {
+            Func<Color, Color> map = col =>
+            {
+                for (int i = 0; i < from.Length; i++) if (from[i].ToArgb() == col.ToArgb()) return to[i];
+                return col;
+            };
+            c.BackColor = map(c.BackColor);
+            c.ForeColor = map(c.ForeColor);
+            var card = c as Card;
+            if (card != null) { card.Fill = map(card.Fill); card.Border = map(card.Border); }
+            var link = c as LinkLabel;
+            if (link != null) link.ActiveLinkColor = map(link.ActiveLinkColor);
+            foreach (Control child in c.Controls) Recolor(child, from, to);
+            c.Invalidate();
+        }
 
         public static Font UI(float size) { return new Font("Segoe UI", size); }
         public static Font Bold(float size) { return new Font("Segoe UI Semibold", size); }
@@ -289,6 +317,151 @@ namespace Andromeda
         }
     }
 
+    // Whole-PC CPU and memory, read every 2 seconds. Windows: GetSystemTimes / GlobalMemoryStatusEx.
+    // Elsewhere (e.g. testing under Mono): /proc/stat and /proc/meminfo.
+    static class PcStats
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        struct FILETIME { public uint Low, High; public ulong Value { get { return ((ulong)High << 32) | Low; } } }
+        [StructLayout(LayoutKind.Sequential)]
+        class MEMORYSTATUSEX
+        {
+            public uint dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
+        }
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetSystemTimes(out FILETIME idle, out FILETIME kernel, out FILETIME user);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX m);
+
+        static ulong lastIdle, lastTotal;
+        static bool windows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+
+        // Percent busy since the previous call, or -1 when unavailable.
+        public static float Cpu()
+        {
+            try
+            {
+                ulong idle, total;
+                if (windows)
+                {
+                    FILETIME i, k, u;
+                    if (!GetSystemTimes(out i, out k, out u)) return -1;
+                    idle = i.Value;
+                    total = k.Value + u.Value; // kernel time includes idle
+                }
+                else
+                {
+                    var f = File.ReadAllLines("/proc/stat")[0].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(ulong.Parse).ToArray();
+                    idle = f[3] + (f.Length > 4 ? f[4] : 0);
+                    total = 0;
+                    foreach (var x in f.Take(8)) total += x;
+                }
+                float pct = -1;
+                if (lastTotal > 0 && total > lastTotal) pct = 100f * (1f - (float)(idle - lastIdle) / (total - lastTotal));
+                lastIdle = idle;
+                lastTotal = total;
+                return pct < 0 ? -1 : Math.Max(0, Math.Min(100, pct));
+            }
+            catch { return -1; }
+        }
+
+        // Bytes in use and total, or false when unavailable.
+        public static bool Memory(out double used, out double total)
+        {
+            used = total = 0;
+            try
+            {
+                if (windows)
+                {
+                    var m = new MEMORYSTATUSEX();
+                    if (!GlobalMemoryStatusEx(m)) return false;
+                    total = m.ullTotalPhys;
+                    used = m.ullTotalPhys - m.ullAvailPhys;
+                    return true;
+                }
+                double t = 0, a = 0;
+                foreach (var line in File.ReadAllLines("/proc/meminfo"))
+                {
+                    var parts = line.Split(new[] { ' ', ':' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts[0] == "MemTotal") t = double.Parse(parts[1]) * 1024;
+                    if (parts[0] == "MemAvailable") a = double.Parse(parts[1]) * 1024;
+                }
+                total = t;
+                used = t - a;
+                return t > 0;
+            }
+            catch { return false; }
+        }
+    }
+
+    // A small line graph on a card: title, current value, the last few minutes as a glowing line.
+    class Graph : Control
+    {
+        public string Title = "";
+        public string Caption = "";
+        public string Value = "—";
+        public float Max = 100;
+        public readonly List<float> Values = new List<float>();
+        public int Keep = 300;
+        public Graph()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+        }
+        public void Add(float v)
+        {
+            Values.Add(v);
+            if (Values.Count > Keep) Values.RemoveRange(0, Values.Count - Keep);
+            Invalidate();
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Theme.Behind(this));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), 14))
+            using (var b = new SolidBrush(Theme.Card))
+            using (var pen = new Pen(Theme.CardBorder))
+            {
+                g.FillPath(b, path);
+                g.DrawPath(pen, path);
+            }
+            using (var f = Theme.Bold(10.5f)) TextRenderer.DrawText(g, Title, f, new Point(18, 14), Theme.Text);
+            using (var f = Theme.Bold(14f))
+            {
+                var sz = TextRenderer.MeasureText(Value, f);
+                TextRenderer.DrawText(g, Value, f, new Point(Width - 18 - sz.Width, 10), Theme.Text);
+            }
+            using (var f = Theme.UI(8.5f)) TextRenderer.DrawText(g, Caption, f, new Point(18, Height - 26), Theme.Muted);
+            var plot = new RectangleF(18, 44, Width - 36, Height - 44 - 34);
+            using (var grid = new Pen(Color.FromArgb(60, Theme.CardBorder)))
+                for (int i = 0; i <= 2; i++) g.DrawLine(grid, plot.Left, plot.Top + plot.Height * i / 2f, plot.Right, plot.Top + plot.Height * i / 2f);
+            if (Values.Count < 2)
+            {
+                using (var f = Theme.UI(9f)) TextRenderer.DrawText(g, "Collecting…", f, new Point((int)plot.Left, (int)(plot.Top + plot.Height / 2 - 8)), Theme.Muted);
+                return;
+            }
+            var pts = new PointF[Values.Count];
+            float top = Math.Max(Max, Values.Max());
+            for (int i = 0; i < Values.Count; i++)
+                pts[i] = new PointF(plot.Left + plot.Width * i / (Keep - 1), plot.Bottom - plot.Height * Math.Max(0, Values[i]) / top);
+            // Draw from the right edge, so the newest reading is always at the right.
+            float shift = plot.Right - pts[pts.Length - 1].X;
+            for (int i = 0; i < pts.Length; i++) pts[i].X += shift;
+            using (var area = new GraphicsPath())
+            {
+                area.AddLines(pts);
+                area.AddLine(pts[pts.Length - 1], new PointF(pts[pts.Length - 1].X, plot.Bottom));
+                area.AddLine(new PointF(pts[pts.Length - 1].X, plot.Bottom), new PointF(pts[0].X, plot.Bottom));
+                area.CloseFigure();
+                using (var fill = new LinearGradientBrush(plot, Color.FromArgb(70, Theme.Accent), Color.FromArgb(0, Theme.Accent), LinearGradientMode.Vertical))
+                    g.FillPath(fill, area);
+            }
+            using (var glow = new Pen(Color.FromArgb(50, Theme.Accent), 6f) { LineJoin = LineJoin.Round }) g.DrawLines(glow, pts);
+            using (var line = new Pen(Theme.Accent, 2f) { LineJoin = LineJoin.Round }) g.DrawLines(line, pts);
+            using (var dot = new SolidBrush(Theme.Accent)) g.FillEllipse(dot, pts[pts.Length - 1].X - 3.5f, pts[pts.Length - 1].Y - 3.5f, 7, 7);
+        }
+    }
+
     static class Program
     {
         public static string Root;      // the andromeda-hosting folder (next to this .exe)
@@ -396,6 +569,7 @@ namespace Andromeda
         readonly Label updateTitle;
         readonly Label updateList;
         readonly System.Windows.Forms.Timer poll;
+        readonly Graph cpuGraph, memGraph;
         Service shownLog;
         string node;
         bool exiting;
@@ -406,6 +580,7 @@ namespace Andromeda
         public MainForm(EventWaitHandle show)
         {
             settings = new Settings(Path.Combine(DataDir(), "services.ini"));
+            Theme.Use(settings.Get("theme.grey", false));
             panel = new Service
             {
                 Key = "panel",
@@ -432,8 +607,8 @@ namespace Andromeda
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = Theme.UI(9.5f);
-            MinimumSize = new Size(900, 660);
-            Size = new Size(1000, 780);
+            MinimumSize = new Size(900, 800);
+            Size = new Size(1000, 900);
             StartPosition = FormStartPosition.CenterScreen;
             DoubleBuffered = true;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
@@ -473,6 +648,16 @@ namespace Andromeda
             cards.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             cards.Controls.Add(BuildCard(panel), 0, 0);
             cards.Controls.Add(BuildCard(site), 1, 0);
+
+            // ---- whole-PC CPU and memory graphs ----
+            var graphs = new TableLayoutPanel { Dock = DockStyle.Top, Height = 168, ColumnCount = 2, RowCount = 1, Padding = new Padding(22, 14, 22, 0), BackColor = Theme.Bg };
+            graphs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            graphs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            graphs.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            cpuGraph = new Graph { Dock = DockStyle.Fill, Margin = new Padding(6, 0, 6, 0), Title = "CPU", Caption = "Whole PC · last 10 minutes", Max = 100 };
+            memGraph = new Graph { Dock = DockStyle.Fill, Margin = new Padding(6, 0, 6, 0), Title = "Memory", Caption = "Whole PC · last 10 minutes" };
+            graphs.Controls.Add(cpuGraph, 0, 0);
+            graphs.Controls.Add(memGraph, 1, 0);
 
             // ---- logs ----
             var logCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(18, 14, 18, 18) };
@@ -514,6 +699,17 @@ namespace Andromeda
             var footer = new Panel { Dock = DockStyle.Bottom, Height = 64, BackColor = Theme.Bg };
             var startup = new Toggle("Open Andromeda Services when I sign in to Windows", RunAtLogin()) { Location = new Point(30, 21) };
             startup.CheckedChanged += (o, e) => SetRunAtLogin(startup.Checked);
+            var greyTheme = new Toggle("Dark grey theme", settings.Get("theme.grey", false)) { Location = new Point(startup.Right + 24, 21) };
+            greyTheme.CheckedChanged += (o, e) =>
+            {
+                var before = Theme.Palette;
+                Theme.Use(greyTheme.Checked);
+                settings.Set("theme.grey", greyTheme.Checked);
+                SuspendLayout();
+                Theme.Recolor(this, before, Theme.Palette);
+                ResumeLayout();
+            };
+            footer.Controls.Add(greyTheme);
             var folder = new ModernButton("Open folder", ButtonKind.Secondary);
             folder.Click += (o, e) => Process.Start("explorer.exe", "\"" + Program.Root + "\"");
             var exit = new ModernButton("Stop all and exit", ButtonKind.Danger);
@@ -527,6 +723,7 @@ namespace Andromeda
 
             Controls.Add(logWrap);
             Controls.Add(footer);
+            Controls.Add(graphs);
             Controls.Add(cards);
             Controls.Add(bannerWrap);
             Controls.Add(header);
@@ -561,7 +758,7 @@ namespace Andromeda
             waiter.Start();
 
             poll = new System.Windows.Forms.Timer { Interval = 2000 };
-            poll.Tick += (o, e) => PollPorts();
+            poll.Tick += (o, e) => { PollPorts(); SamplePc(); };
             poll.Start();
             var updateTimer = new System.Windows.Forms.Timer { Interval = 6 * 60 * 60 * 1000 }; // and quietly every 6 hours
             updateTimer.Tick += (o, e) => CheckForUpdates(false);
@@ -1101,6 +1298,24 @@ namespace Andromeda
             tray.Visible = false;
             Close();
             Application.Exit();
+        }
+
+        void SamplePc()
+        {
+            var cpu = PcStats.Cpu();
+            if (cpu >= 0)
+            {
+                cpuGraph.Value = cpu.ToString("0") + "%";
+                cpuGraph.Add(cpu);
+            }
+            double used, total;
+            if (PcStats.Memory(out used, out total))
+            {
+                const double GB = 1024.0 * 1024 * 1024;
+                memGraph.Max = (float)(total / GB);
+                memGraph.Value = (used / GB).ToString("0.0") + " / " + (total / GB).ToString("0") + " GB";
+                memGraph.Add((float)(used / GB));
+            }
         }
 
         // Catches services started elsewhere, and ones whose "running" line was missed.
