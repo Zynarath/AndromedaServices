@@ -132,7 +132,13 @@ function page(ctx, body) {
 <html lang="en"${ctx.assetsMissing ? raw(' class="no-spp"') : ''}>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=1040">
+<!-- The design is dark text on parchment. Browser dark modes (Chrome's auto dark mode, Dark Reader)
+     turn that text light and unreadable, so the page opts out of them. -->
+<meta name="color-scheme" content="only light">
+<meta name="darkreader-lock">
 <title>${title}</title>
+<script src="/site/fit.js"></script>
 <link rel="shortcut icon" href="${TPL}/images/favicon.ico">
 ${CSS.map((f) => html`<link rel="stylesheet" href="${TPL}/css/${f}">`)}
 ${(ctx.extraCss || []).map((f) => html`<link rel="stylesheet" href="${f}">`)}

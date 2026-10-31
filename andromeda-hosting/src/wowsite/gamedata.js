@@ -9,8 +9,9 @@ const faction = (race) => (ALLIANCE.has(Number(race)) ? 'Alliance' : 'Horde');
 // The game's class and item-quality colours are made for dark backgrounds; several (white common
 // items and priests, yellow rogues, light green) vanish on the site's parchment. These are darker
 // versions of the same hues, readable on the light pages.
-const CLASS_COLORS = { 1: '#7d5126', 2: '#b0306f', 3: '#4a7a12', 4: '#8a7200', 5: '#4b4b4b', 6: '#a3172e', 7: '#0055b0', 8: '#14769e', 9: '#5b46a0', 11: '#b45000' };
-const QUALITY_COLORS = ['#6e6e6e', '#2a2a2a', '#1b7a0b', '#0050b0', '#7a22b8', '#b85a00', '#8a6d1f', '#8a6d1f'];
+const CLASS_COLORS = { 1: '#5e3a18', 2: '#7a1446', 3: '#2a4a06', 4: '#4d3f00', 5: '#3d3d3d', 6: '#800f22', 7: '#00367f', 8: '#0b4560', 9: '#3f2a78', 11: '#663000' };
+// Darker than the in-game colours so they stay readable on the parchment and its darker table rows.
+const QUALITY_COLORS = ['#3d3d3d', '#2a2a2a', '#0b4a04', '#00367f', '#5c1a8c', '#663000', '#4f3e0c', '#4f3e0c'];
 
 // Equipment slots 0-18, in the order the character sheet shows them.
 const SLOTS = ['Head', 'Neck', 'Shoulder', 'Shirt', 'Chest', 'Waist', 'Legs', 'Feet', 'Wrist', 'Hands', 'Finger', 'Finger', 'Trinket', 'Trinket', 'Back', 'Main Hand', 'Off Hand', 'Ranged', 'Tabard'];

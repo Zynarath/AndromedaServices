@@ -1,5 +1,6 @@
 /* Additions to SPP's WotLK template CSS: the styles its pages set inline, and the new parts
    (forms, filters, armory sheet). Loaded after the original stylesheets. */
+:root { color-scheme: only light; }
 .page-bg-top { height: 88px; position: relative; width: 100%; }
 h2.parting-title { font-family: 'Times New Roman', Times, serif; color: #640909; margin: 0; }
 
@@ -72,3 +73,8 @@ html.no-spp .contentdiv { background: #f3e6c8; color: #2a1d0a; }
 html.no-spp img { max-width: 100%; }
 html.no-spp img[src*='pixel'], html.no-spp .statue { display: none; }
 .banner-top { margin-top: -55px; margin-bottom: 30px; }
+
+/* Population on the realm status table: the plain red/orange/green are hard to read on parchment. */
+td.serverStatus1 font[color='red'], td.serverStatus2 font[color='red'] { color: #800000; }
+td.serverStatus1 font[color='orange'], td.serverStatus2 font[color='orange'] { color: #6b3300; }
+td.serverStatus1 font[color='green'], td.serverStatus2 font[color='green'] { color: #0b4a04; }
