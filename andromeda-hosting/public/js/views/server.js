@@ -183,6 +183,10 @@ export async function render(root, ctx) {
           ? html`<div class="callout callout-warn">${icon('alert')}<div>The realm is announced at the IP <code>${addr}</code>. Friends can join, but <strong>you can't from this PC</strong> (routers don't loop back to their own public IP), and it breaks if your IP changes. Use a hostname like play.example.com in <em>Settings → Realm</em>, then restart.</div></div>`
           : html`<p class="muted small">On this PC, <code>${addr}</code> must point to 127.0.0.1: run <code>scripts\\use-domain-on-this-pc.ps1 -Hostname ${addr}</code> once as Administrator. Friends need nothing extra.</p>`}
       <p class="muted small">They log in with the account you create for them in the <a href="#/server/${s.id}/accounts">Accounts</a> tab. The realm list is updated with this address every time the server starts.</p>
+      ${s.wow.sitePort ? html`<h4>WotLK website</h4>
+      <p class="small">News, armory, realm status and who's online, in the classic WotLK look:
+        <a href="http://${location.hostname}:${s.wow.sitePort}/" target="_blank" rel="noopener">${location.hostname}:${s.wow.sitePort}</a>.
+        Start it from <strong>Andromeda Services</strong> (or <code>start-wow-site.bat</code>). Who can sign up there is set in <em>Settings → Website</em>.</p>` : ''}
       <p><button class="btn btn-sm" id="wow-diag">${icon('activity')}Check connection</button></p>
       <div id="wow-diag-out"></div>
       <h4>Ports to forward on your router</h4>

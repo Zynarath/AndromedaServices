@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 
-const file = path.join(config.logsDir, 'panel.log');
+// The WotLK website runs as its own process and keeps its own log file.
+const file = path.join(config.logsDir, process.env.ANDROMEDA_LOG_FILE || 'panel.log');
 let stream = null;
 try {
   // Keep the panel log from growing forever: start fresh when it passes 10 MB.

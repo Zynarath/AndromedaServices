@@ -1,0 +1,74 @@
+/* Additions to SPP's WotLK template CSS: the styles its pages set inline, and the new parts
+   (forms, filters, armory sheet). Loaded after the original stylesheets. */
+.page-bg-top { height: 88px; position: relative; width: 100%; }
+h2.parting-title { font-family: 'Times New Roman', Times, serif; color: #640909; margin: 0; }
+
+/* ranking tables (inline <style> in SPP's server pages) */
+td.serverStatus1 { font-size: 0.8em; border-style: solid; border-width: 0 1px 1px 0; border-color: #D8BF95; }
+td.serverStatus2 { font-size: 0.8em; border-style: solid; border-width: 0 1px 1px 0; border-color: #D8BF95; background-color: #C3AD89; }
+td.rankingHeader { color: #C7C7C7; font-size: 10pt; font-family: arial, helvetica, sans-serif; font-weight: bold; background-color: #2E2D2B; border-style: solid; border-width: 1px; border-color: #5D5D5D #5D5D5D #1E1D1C #1E1D1C; padding: 3px; }
+td.serverStatus1 img, td.serverStatus2 img { vertical-align: middle; }
+
+.site-msg { margin: 8px 12px; padding: 8px 12px; border: 1px solid #8a6d3b; background: #f6e7c1; color: #3a2a10; font-weight: bold; }
+.site-msg-error { border-color: #8b1a1a; background: #f3d1c8; color: #5c0b0b; }
+.site-msg-ok { border-color: #2f5d1a; background: #dcebc8; color: #22420f; }
+
+.site-form label { display: block; margin: 0 0 8px; font-weight: bold; }
+.site-form input[type='text'], .site-form input:not([type]), .site-form input[type='password'], .site-form textarea, .site-form select { display: block; margin-top: 3px; width: 280px; max-width: 100%; padding: 3px; border: 1px solid #8a6d3b; background: #fffaf0; }
+.site-form textarea { width: 95%; font-family: inherit; }
+.site-form.inline label { display: inline-block; margin-right: 6px; }
+.site-form.inline input { display: inline-block; }
+.site-form input[type='submit'], .inline-form input[type='submit'], .search-form input[type='submit'] { cursor: pointer; padding: 2px 10px; border: 1px solid #5a3d10; background: linear-gradient(#f5d46a, #b8860b); color: #2a1a00; font-weight: bold; }
+.inline-form { display: inline; margin: 0; }
+.hints { color: #4a3a20; font-size: 0.9em; }
+.hints li { margin: 2px 0; }
+code.invite { font-size: 1.1em; letter-spacing: 1px; background: #fffaf0; padding: 1px 4px; border: 1px solid #c8a96b; }
+
+.filter-tabs { margin: 6px 0; }
+.search-form { margin: 0 0 8px; }
+.pager { margin: 8px 0; text-align: center; }
+.pager a, .pager b, .pager span { margin: 0 3px; }
+
+.stat-bars td { font-size: 0.9em; }
+.stat-bar { height: 12px; background: #c3ad89; border: 1px solid #8a6d3b; min-width: 80px; display: inline-block; width: 100%; vertical-align: middle; }
+.stat-bar div { height: 100%; background: linear-gradient(#e2b84a, #9c6b11); }
+.prof { margin: 4px 0; }
+.prof .stat-bar { width: 200px; }
+
+.howto li { margin: 6px 0; }
+pre.realmlist { background: #1d1c1b; color: #f4c400; padding: 8px 12px; border: 1px solid #000; font-size: 1.1em; user-select: all; white-space: pre-wrap; }
+.cmd-help { text-align: left; white-space: pre-wrap; }
+
+.news-empty { padding: 20px; text-align: center; font-weight: bold; }
+.archive-item { border-bottom: 1px dotted #8a6d3b; margin-bottom: 10px; padding-bottom: 6px; }
+.archive-item h3 small { font-weight: normal; color: #5a4a30; }
+.blog-post img { max-width: 100%; }
+
+.item-cell { display: inline-flex; align-items: center; gap: 4px; text-align: left; }
+.item-cell b { text-shadow: 1px 1px 0 #000; }
+.item-icon { border: 1px solid #000; }
+.coin { white-space: nowrap; }
+.coin img { vertical-align: middle; margin-left: 1px; }
+
+.armory-search { text-align: center; }
+.armory-logo { max-width: 100%; }
+.char-header { display: flex; gap: 14px; align-items: flex-start; }
+.char-portrait { border: 2px solid #000; background: #000; }
+.char-title h2 { margin: 0 0 4px; text-shadow: 1px 1px 0 #000; font-size: 20px; }
+.char-facts { margin-left: auto; text-align: right; }
+.bot-tag { font-size: 10px; text-transform: uppercase; background: #2e2d2b; color: #c7c7c7; padding: 1px 4px; vertical-align: middle; text-shadow: none; }
+.slot-name { color: #4a3a20; }
+.empty-slot { color: #8a7a60; }
+.talent-trees .tree-name { font-weight: bold; }
+.talent-trees .tree-points { font-size: 22px; font-weight: bold; color: #640909; }
+.guild-info { white-space: pre-wrap; }
+
+/* When SPP's website graphics aren't installed the page still works, just plainly. */
+html.no-spp body { background: #12100e; color: #e8dcc0; font-family: Verdana, Arial, sans-serif; font-size: 12px; }
+html.no-spp #hp { width: 980px; margin: 0 auto; text-align: left; }
+html.no-spp #navwrapper { width: 180px; }
+html.no-spp #leftmenu a.menufiller { display: block; color: #f4c400; padding: 3px 8px; }
+html.no-spp .contentdiv { background: #f3e6c8; color: #2a1d0a; }
+html.no-spp img { max-width: 100%; }
+html.no-spp img[src*='pixel'], html.no-spp .statue { display: none; }
+.banner-top { margin-top: -55px; margin-bottom: 30px; }

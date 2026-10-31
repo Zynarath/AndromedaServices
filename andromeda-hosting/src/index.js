@@ -11,6 +11,7 @@ const db = require('./db');
 const auth = require('./auth');
 const manager = require('./manager/manager');
 const logger = require('./util/log');
+const wowsite = require('./wowsite/siteconfig');
 
 const log = logger('panel');
 const app = express();
@@ -157,10 +158,12 @@ manager.on('console', (id, entry) => broadcast(id, { type: 'console', entry }, '
 manager.on('job', (id, job) => broadcast(id, { type: 'job', job: { ...job, log: job.log.slice(-5) } }));
 manager.on('removed', (id) => {
   for (const ws of wss.clients) send(ws, { type: 'removed', serverId: id });
+  wowsite.write(db.data.servers);
 });
 
 // ---- start ----
 manager.init();
+wowsite.write(db.data.servers); // settings for the WotLK website, which runs as its own process
 require('./services/ddns').start();
 require('./services/discord').init(manager);
 require('./shareServer').apply();
@@ -192,5 +195,12 @@ async function shutdown(signal, exitCode = 0) {
 const updater = require('./services/updater');
 updater.init(manager, (why) => shutdown(`Restarting for ${why}`, updater.RESTART_CODE));
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(sig, () => shutdown(sig));
+// Andromeda Services runs the panel without a console window and asks it to stop by writing
+// "stop" to its input, which gets the same clean shutdown as closing start.bat.
+if (process.env.ANDROMEDA_SERVICES === '1' && !process.stdin.isTTY) {
+  require('readline').createInterface({ input: process.stdin }).on('line', (l) => {
+    if (l.trim().toLowerCase() === 'stop') shutdown('Stop requested by Andromeda Services');
+  });
+}
 process.on('uncaughtException', (err) => log.error(err));
 process.on('unhandledRejection', (err) => log.error(err instanceof Error ? err : new Error(String(err))));

@@ -37,6 +37,8 @@ rem so everything from here on sits in one block that is read before it starts, 
   )
   echo Installing any new packages...
   call npm install --omit=dev --no-audit --no-fund
+  echo Rebuilding Andromeda Services...
+  call services\build.bat
   echo.
   echo Done. If Andromeda Hosting is running, close its window and start it again with start.bat.
   echo Your servers, settings and accounts in the data folder are kept.

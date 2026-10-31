@@ -17,7 +17,7 @@ There are no monthly hosting fees; your only cost is electricity.
 | **Satisfactory** (Windows/Linux) | SteamCMD install/update. On the first start the panel claims the server (sets the admin password, shown on the server page) and starts a new game; name, join password, autosave and pause options are applied through the server's API on every start, and stops save first. **Mods from ficsit.app**: search and add them in the Mods tab — the panel picks versions that fit each other and the game build, installs SML and dependencies, and lists the ones players need too |
 | **7 Days to Die** (Windows/Linux) | SteamCMD install/update (stable or experimental), 40+ settings written to the server config (world, difficulty, zombies, blood moons, loot, land claims), saves in the server's own folder, telnet console, player list and clean shutdown. **Mods**: install from a mod's .zip, switch mods on/off, warning when a code mod needs Easy Anti-Cheat off |
 | **Valheim** (Windows/Linux) | SteamCMD install/update, world name, password, crossplay, presets and world modifiers, admin / allow / ban lists, autosave interval; stops with Ctrl+C so the world is saved |
-| **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md) |
+| **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md). Plus SPP's **WotLK website** rebuilt with the same look and its security problems fixed: news, armory, realm status, who's online, honor, auction house, and invite-only sign-up. See [docs/wow-website.md](docs/wow-website.md) |
 | **ARK: Survival Evolved** (Windows/Linux) | SteamCMD install/update, Workshop mods via `-automanagedmods`, same settings form, RCON console and player list as ASA |
 
 The panel downloads the right Java version for each Minecraft server by itself (Java 8/17/21/25 from
@@ -53,11 +53,13 @@ Eclipse Temurin). You don't need to install Java.
 
 1. Install **Node.js LTS** (20 or newer) from <https://nodejs.org>.
 2. Download or clone this folder, e.g. to `C:\Andromeda Hosting`.
-3. Double-click **`install.bat`**.
+3. Double-click **`install.bat`**. It also builds **Andromeda Services** (see below) and adds it
+   to your desktop and Start menu.
 4. Optional: open `config.json` and set `serversDir` to a big drive, e.g. `"D:/GameServers"`.
    ARK needs roughly 15–25 GB per server; modpacks need 1–5 GB.
-5. Double-click **`start.bat`**, then open <http://localhost:8080> **on this PC** and create your
-   admin account. For safety, the first account can only be created from the host PC.
+5. Open **Andromeda Services** (or double-click `start.bat`), then open <http://localhost:8080>
+   **on this PC** and create your admin account. For safety, the first account can only be
+   created from the host PC.
 6. Go to **Panel settings**:
    - Paste a **CurseForge API key**. It's free: <https://console.curseforge.com> → sign in →
      *API keys*. You need it to search and install modpacks and ARK mods.
@@ -67,6 +69,25 @@ Eclipse Temurin). You don't need to install Java.
    - Run `scripts\install-autostart.ps1` to start the panel when you log in.
 
 You can also run it on Linux with `./start.sh` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim; ARK: SA and most Call of Duty titles need Windows).
+
+### Andromeda Services
+
+**Andromeda Services** is a Windows app that runs everything without console windows:
+
+- It starts and stops **Andromeda Hosting** (the panel) and the **WotLK website**, each with its
+  own Start / Stop / Restart / Open buttons, status and live log.
+- *Start when Andromeda Services opens* is a setting for each one. *Open Andromeda Services when I
+  sign in to Windows* starts it all at login.
+- Closing the window keeps everything running in the system tray. **Stop all and exit** (in the
+  window or the tray menu) stops cleanly: game servers are saved and stopped first, as when you
+  close `start.bat`.
+- After an update installed from the panel, it restarts the panel by itself.
+
+`install.bat` builds it as `Andromeda Services.exe` in this folder, using the C# compiler that
+comes with Windows, so there is nothing extra to install. To rebuild it yourself, run
+`services\build.bat`, or `services\build.bat shortcut` to also recreate the shortcuts.
+`update.bat` rebuilds it after updating. `start.bat` and `start-wow-site.bat` still work if you
+prefer console windows. Use one way or the other, not both at once.
 
 ### Creating servers
 
@@ -205,6 +226,7 @@ Windows PC without build tools.
 ```
 src/
   index.js            web server, WebSocket, shutdown handling (checkDeps.js runs first)
+  wowsite/            the WotLK website (its own process): pages, armory, accounts, news
   auth.js             users, sessions, permissions, 2FA, "view as"
   games/              one module per game: install, launch, settings, stop, player query
                       (minecraft, ark, cod, wow, satisfactory, sdtd = 7 Days to Die, valheim)
@@ -215,6 +237,7 @@ src/
   util/               shared helpers: config file formats (ini, properties, conf), zip,
                       downloads, paths/uploads, settings forms, RCON, process stats
 public/               the web UI (plain ES modules, no build step)
+services/             Andromeda Services, the Windows app (C#, built by services\build.bat)
 test/                 unit tests (npm test)
 ```
 

@@ -108,6 +108,12 @@ says the random bots need a reset to take effect.
 - **Discord:** the server gets its own channel (e.g. `#wow-wotlk-server-1`). "Online" messages
   include the realmlist line.
 
+## The WotLK website
+
+SPP's classic WotLK website is rebuilt in Andromeda Hosting with the same look: news, armory,
+realm status, who's online, honor, auction house, and sign-up only by invite code if you want
+it. Start it from **Andromeda Services**. Setup and details: [wow-website.md](wow-website.md).
+
 ## About the WoW client
 
 Andromeda Hosting doesn't download or distribute the WoW client. Blizzard no longer sells or hosts

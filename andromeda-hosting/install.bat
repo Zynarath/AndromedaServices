@@ -17,6 +17,9 @@ if errorlevel 1 (
   exit /b 1
 )
 if not exist config.json copy config.example.json config.json >nul
+echo Building Andromeda Services, the app that starts and stops everything...
+call services\build.bat shortcut
 echo.
-echo Done! Edit config.json if you want server files on another drive, then run start.bat
+echo Done! Edit config.json if you want server files on another drive, then open
+echo Andromeda Services from the desktop or the Start menu. start.bat still works too.
 pause
