@@ -11,6 +11,7 @@ const siteconfig = require('./siteconfig');
 const data = require('./data');
 const logger = require('../util/log');
 const { buildApp } = require('./app');
+const assets = require('./assets');
 
 const log = logger('wowsite');
 let cfg = null;
@@ -56,6 +57,11 @@ function apply() {
   cfg = next;
   if (cfg) data.setRoot(cfg.root);
   listen();
+  if (cfg) {
+    const found = assets.dir(cfg, data.paths().root || cfg.root);
+    if (found) log.info(`Website graphics: ${found}`);
+    else assets.download(log);
+  }
 }
 
 apply();

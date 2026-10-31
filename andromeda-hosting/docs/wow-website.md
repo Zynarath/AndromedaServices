@@ -11,11 +11,12 @@ README) or with `start-wow-site.bat`.
 ## Set it up
 
 1. Add your WoW server to the panel first ([wow.md](wow.md)).
-2. **The original graphics:** the site uses the pictures and stylesheets from SPP's own
-   `Server\website` folder. If that folder is missing, open SPP's `Launcher.bat` once and let it
-   download the website (about 170 MB). Then close the launcher. Don't turn the website on in
-   SPP's launcher: that starts SPP's old Apache on port 80. Without the folder, the site still
-   works, but looks plain.
+2. **The original graphics** come from SPP's own website folder (`Server\website`, or any website
+   folder inside the SPP install). SPP only downloads that folder if you answered **Y** in its
+   launcher. If it isn't there, the site downloads the same pictures and stylesheets once from
+   SPP's website repository (about 100 MB, into `data\wowsite-assets`). It shows the plain look
+   until that finishes; `data\logs\wowsite.log` shows the progress. Don't turn the website on in
+   SPP's own launcher: that starts SPP's old Apache on port 80.
 3. In the panel, open **WoW server → Settings → Website** (admins only):
    - **WotLK website for this realm**: on by default. One website per panel; it shows the first
      WoW server that has it on.

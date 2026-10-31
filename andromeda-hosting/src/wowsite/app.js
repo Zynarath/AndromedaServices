@@ -1,10 +1,10 @@
 'use strict';
 // The WotLK website's web server: SPP's original graphics served read-only from the SPP install,
 // and the pages, rebuilt in Node. Nothing from the old PHP site is ever executed.
-const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const layout = require('./layout');
+const assets = require('./assets');
 const { html } = require('./html');
 const auth = require('./auth');
 const data = require('./data');
@@ -19,19 +19,11 @@ const log = logger('wowsite');
 // Only pictures and stylesheets from SPP's website folder are served (no PHP, no scripts, no SVG).
 const ASSET_EXT = /\.(css|png|jpe?g|gif|ico|bmp|webp)$/i;
 
+// SPP's website folder (found in the SPP install, or downloaded; see assets.js).
 function websiteDir(cfg) {
-  if (cfg.websiteDir) return cfg.websiteDir;
-  const p = data.paths();
-  return path.join(p.root || cfg.root || '', 'Server', 'website');
+  return assets.dir(cfg, data.paths().root || cfg.root) || assets.DOWNLOADED;
 }
-
-let assetsCheck = { at: 0, dir: null, missing: false };
-function assetsMissing(dir) {
-  if (assetsCheck.dir !== dir || Date.now() - assetsCheck.at > 30000) {
-    assetsCheck = { at: Date.now(), dir, missing: !fs.existsSync(path.join(dir, 'templates', 'WotLK', 'css', 'newhp.css')) };
-  }
-  return assetsCheck.missing;
-}
+const assetsMissing = (cfg) => !assets.dir(cfg, data.paths().root || cfg.root);
 
 function buildApp(getConfig) {
   const app = express();
@@ -86,11 +78,15 @@ function buildApp(getConfig) {
       site: { title: cfg.realmName || 'World of Warcraft', realmName: cfg.realmName || 'World of Warcraft', registration: cfg.registration || 'off', discord: cfg.discord || '' },
       account: req.account,
       csrf: req.session.csrf,
-      assetsMissing: assetsMissing(websiteDir(cfg)),
+      assetsMissing: assetsMissing(cfg),
     };
   };
 
   const render = (res, ctx, out) => {
+    if (ctx.assetsMissing && ctx.account && ctx.account.gmlevel >= 3) {
+      const st = assets.status();
+      out = { ...out, messages: [...(out.messages || []), { type: st.error ? 'error' : 'info', text: st.downloading ? "The original WotLK graphics are downloading (about 200 MB, once). Reload in a few minutes." : `The original WotLK graphics weren't found${st.error ? ` and the download failed: ${st.error}` : ''}. See data/logs/wowsite.log.` }] };
+    }
     res.status(out.status || 200).type('html').setHeader('Cache-Control', 'no-store');
     res.send(String(layout.page({ ...ctx, ...out }, out.body)));
   };
