@@ -228,6 +228,7 @@ export function artLabel(server, short = false) {
   if (server.sf) return short ? 'SF' : 'Satisfactory';
   if (server.sdtd) return short ? '7D' : '7 Days';
   if (server.vh) return short ? 'VH' : 'Valheim';
+  if (server.rust) return 'Rust';
   return 'MC';
 }
 
@@ -239,6 +240,7 @@ export function gameArt(server) {
   if (server.game === 'satisfactory' || server.sf) return 'satisfactory';
   if (server.game === 'sdtd' || server.sdtd) return 'sdtd';
   if (server.game === 'valheim' || server.vh) return 'valheim';
+  if (server.game === 'rust' || server.rust) return 'rust';
   if (server.mc && server.mc.source === 'curseforge') return 'mc-cf';
   return 'mc';
 }

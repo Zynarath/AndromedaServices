@@ -122,6 +122,14 @@ class Manager extends EventEmitter {
       return { port, telnetPort: await this.freePort(8081, 1, 'tcp', used) };
     }
     if (game === 'valheim') return { port: await this.freePort(2456, 10, 'udp', used) };
+    if (game === 'rust') {
+      // Game, RCON and query ports in a row (28015-28017), then the Rust+ port.
+      let port = 28015;
+      while ([0, 1, 2].some((i) => used.has(port + i))) port += 10;
+      port = await this.freePort(port, 10, 'udp', used);
+      [0, 1, 2].forEach((i) => used.add(port + i));
+      return { port, rconPort: port + 1, queryPort: port + 2, appPort: await this.freePort(28082, 1, 'tcp', used) };
+    }
     if (game === 'cod') {
       const t = games.cod.TITLES[codTitle] || games.cod.TITLES.iw4x;
       return { port: await this.freePort(t.port, 1, 'udp', used) };

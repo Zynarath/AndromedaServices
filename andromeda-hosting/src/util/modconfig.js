@@ -128,13 +128,63 @@ function parseJson(text) {
     if (v && typeof v === 'object' && !Array.isArray(v)) return Object.entries(v).forEach(([k, x]) => walk(x, [...p, k]));
     if (Array.isArray(v)) {
       if (v.every((x) => x === null || typeof x !== 'object')) fields.push({ id: 'J' + JSON.stringify(p), path: p, label: p[p.length - 1], section: p.slice(0, -1).join('.'), type: 'list', value: JSON.stringify(v) });
-      return; // arrays of objects: raw editor
+      // Lists of objects (kits, zones, rewards…): each entry's values, numbered from 1.
+      else if (v.every((x) => x && typeof x === 'object' && !Array.isArray(x))) v.forEach((x, i) => walk(x, [...p, i]));
+      return; // mixed arrays: raw editor
     }
     const type = typeof v === 'boolean' ? 'bool' : typeof v === 'number' ? 'number' : typeof v === 'string' ? 'text' : null;
     if (type) fields.push({ id: 'J' + JSON.stringify(p), path: p, label: p[p.length - 1], section: p.slice(0, -1).join('.'), type, value: v });
   };
   walk(data, []);
   return { data, fields };
+}
+
+// ---- Readable names ----
+// Config keys as people would write them: "MaxHomesPerPlayer", "max_homes" and "maxHomes" all become
+// "Max homes per player". Keys that are already words ("Chat prefix") keep their wording. Acronyms
+// (UI, PvP, XP) and numbers stay as they are.
+const ACRONYMS = new Map(
+  ['UI', 'GUI', 'HUD', 'XP', 'PvP', 'PvE', 'NPC', 'NPCs', 'ID', 'IDs', 'URL', 'API', 'IP', 'HP', 'AI', 'RCON', 'FPS', 'CUI', 'SteamID', 'JSON', 'UTC', 'DPS'].map((w) => [w.toLowerCase(), w])
+);
+
+function humanize(key) {
+  let s = String(key).trim();
+  // "(true/false)" and similar type notes say nothing a switch or number box doesn't already.
+  s = s.replace(/\s*\((?:true\s*\/\s*false|false\s*\/\s*true|yes\s*\/\s*no|bool|boolean|number|int|float|string)\)\s*/gi, ' ').trim();
+  if (!s) return String(key);
+  if (/\s/.test(s)) return s.charAt(0).toUpperCase() + s.slice(1);
+  const words = s
+    .replace(/[_\-.]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([A-Za-z]{2,})/g, '$1 $2')
+    .trim()
+    .split(/\s+/);
+  // Split words that are one acronym written in two parts ("Pv P", "NP Cs") back together.
+  const joined = [];
+  for (const w of words) {
+    const prev = joined[joined.length - 1];
+    if (prev && ACRONYMS.has((prev + w).toLowerCase()) && !ACRONYMS.has(w.toLowerCase())) joined[joined.length - 1] = prev + w;
+    else joined.push(w);
+  }
+  return joined
+    .map((w, i) => {
+      const acr = ACRONYMS.get(w.toLowerCase());
+      if (acr) return acr;
+      if (w.length > 1 && w === w.toUpperCase() && /[A-Z]/.test(w)) return w; // other acronyms
+      return i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase();
+    })
+    .join(' ');
+}
+
+// Readable labels and sections; the key as written in the file is kept in `key`.
+function normalizeFields(fields) {
+  const part = (x) => (typeof x === 'number' ? `#${x + 1}` : humanize(x));
+  return fields.map((f) => {
+    const parts = f.path ? f.path.slice(0, -1) : f.section ? f.section.split('.') : [];
+    return { ...f, key: String(f.label), label: part(f.label), section: parts.map(part).join(' › ') };
+  });
 }
 
 const FORMATS = { '.toml': 'toml', '.json': 'json', '.properties': 'properties', '.cfg': 'cfg' };
@@ -145,17 +195,19 @@ function formatOf(file) {
 }
 
 // { format, fields | null } — fields null when only the raw editor can handle the file.
-function describe(file, text) {
+// opts.normalize: readable labels ("Max homes per player") instead of the keys from the file.
+function describe(file, text, opts = {}) {
   const format = formatOf(file);
+  let fields = null;
   try {
-    if (format === 'toml') return { format, fields: parseToml(text) };
-    if (format === 'properties') return { format, fields: parseProperties(text) };
-    if (format === 'cfg') return { format, fields: parseCfg(text) };
-    if (format === 'json') return { format, fields: parseJson(text).fields };
+    if (format === 'toml') fields = parseToml(text);
+    else if (format === 'properties') fields = parseProperties(text);
+    else if (format === 'cfg') fields = parseCfg(text);
+    else if (format === 'json') fields = parseJson(text).fields;
   } catch {
     /* not valid for its extension (e.g. JSON with comments): raw editor */
   }
-  return { format, fields: null };
+  return { format, fields: fields && opts.normalize ? normalizeFields(fields) : fields };
 }
 
 function checkValue(f, v) {
@@ -177,8 +229,8 @@ function checkValue(f, v) {
 }
 
 // Apply { fieldId: value } to the file text; only changed values are rewritten.
-function apply(file, text, values) {
-  const { format, fields } = describe(file, text);
+function apply(file, text, values, opts = {}) {
+  const { format, fields } = describe(file, text, opts);
   if (!fields) throw new Error('This file can only be edited as raw text');
   const byId = new Map(fields.map((f) => [f.id, f]));
   const changes = [];
@@ -209,4 +261,4 @@ function apply(file, text, values) {
   return { text: lines.join(eol), changed: changes.length };
 }
 
-module.exports = { describe, apply, formatOf, parseToml, parseJson, parseCfg, parseProperties };
+module.exports = { describe, apply, formatOf, humanize, parseToml, parseJson, parseCfg, parseProperties };

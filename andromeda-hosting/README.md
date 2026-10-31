@@ -17,6 +17,7 @@ There are no monthly hosting fees; your only cost is electricity.
 | **Satisfactory** (Windows/Linux) | SteamCMD install/update. On the first start the panel claims the server (sets the admin password, shown on the server page) and starts a new game; name, join password, autosave and pause options are applied through the server's API on every start, and stops save first. **Mods from ficsit.app**: search and add them in the Mods tab — the panel picks versions that fit each other and the game build, installs SML and dependencies, and lists the ones players need too |
 | **7 Days to Die** (Windows/Linux) | SteamCMD install/update (stable or experimental), 40+ settings written to the server config (world, difficulty, zombies, blood moons, loot, land claims), saves in the server's own folder, telnet console, player list and clean shutdown. **Mods**: install from a mod's .zip, switch mods on/off, warning when a code mod needs Easy Anti-Cheat off |
 | **Valheim** (Windows/Linux) | SteamCMD install/update, world name, password, crossplay, presets and world modifiers, admin / allow / ban lists, autosave interval; stops with Ctrl+C so the world is saved |
+| **Rust** (Windows/Linux), vanilla or **modded with uMod (Oxide)** | SteamCMD install/update with uMod reinstalled after every game update, procedural or custom maps, RCON console and player list, saves on stop. Browse and install uMod plugins from the panel (update checks, on/off, upload your own .cs), and edit each plugin's settings with readable names; a running server reloads the plugin right away. See [docs/rust.md](docs/rust.md) |
 | **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md). A separate **WotLK website** (SPP's site rebuilt with the same look, its security problems fixed) runs next to it from Andromeda Services: news, armory, realm status, who's online, honor, auction house, invite-only sign-up. See [docs/wow-website.md](docs/wow-website.md) |
 | **ARK: Survival Evolved** (Windows/Linux) | SteamCMD install/update, Workshop mods via `-automanagedmods`, same settings form, RCON console and player list as ASA |
 
@@ -68,7 +69,7 @@ Eclipse Temurin). You don't need to install Java.
    - Run `scripts\open-firewall.ps1` as Administrator to open the Windows Firewall.
    - Run `scripts\install-autostart.ps1` to start the panel when you log in.
 
-You can also run it on Linux with `npm install --omit=dev` then `npm start` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim; ARK: SA and most Call of Duty titles need Windows).
+You can also run it on Linux with `npm install --omit=dev` then `npm start` (Minecraft, ARK: SE, Satisfactory, 7 Days to Die, Valheim, Rust; ARK: SA and most Call of Duty titles need Windows).
 
 ### Andromeda Services
 

@@ -484,6 +484,7 @@ ul.chips { list-style: none; padding: 0; margin: 8px 0 0; }
 .art-wow { background: radial-gradient(circle at 70% 25%, #6fc3ff 0, transparent 50%), linear-gradient(135deg, #0b1d3a, #2a4f7a 55%, #8fd0ff); }
 .art-satisfactory { background: radial-gradient(circle at 72% 25%, #f9a43a 0, transparent 52%), linear-gradient(135deg, #1d2430, #5b4426 60%, #e08a2c); }
 .art-sdtd { background: radial-gradient(circle at 70% 30%, #b8432f 0, transparent 50%), linear-gradient(135deg, #16120f, #3d2a1e 60%, #7a2c1c); }
+.art-rust { background: radial-gradient(circle at 70% 25%, #e0703a 0, transparent 50%), linear-gradient(135deg, #1c1410, #4a2a1a 55%, #9a4a22); }
 .art-valheim { background: radial-gradient(circle at 70% 25%, #8fd3c7 0, transparent 50%), linear-gradient(135deg, #0f1d22, #26414a 55%, #5f8a83); }
 .art-mono-long { font-size: 24px; letter-spacing: 0.04em; }
 .checklist { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }

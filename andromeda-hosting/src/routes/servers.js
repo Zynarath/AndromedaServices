@@ -15,6 +15,7 @@ const ddns = require('../services/ddns');
 const ficsit = require('../services/ficsit');
 const { pipeline } = require('stream/promises');
 const modinfo = require('../services/modinfo');
+const umod = require('../services/umod');
 const { HttpError, randomId } = require('../util/misc');
 const { parseCpuList, PRIORITIES, CORES } = require('../util/procstats');
 
@@ -92,6 +93,9 @@ function view(inst, user, full = false) {
     out.vh = { serverName: s.vh.serverName, worldName: s.vh.worldName, port: s.vh.port, crossplay: !!s.vh.crossplay, public: !!s.vh.public, preset: s.vh.preset || '' };
     if (perms.includes('settings') || perms.includes('admin')) out.vh.joinPassword = s.vh.password || '';
   }
+  if (s.rust) {
+    out.rust = { hostname: s.rust.hostname, level: s.rust.level, worldSize: s.rust.worldSize, seed: s.rust.seed, maxPlayers: s.rust.maxPlayers, port: s.rust.port, pve: !!s.rust.pve, oxide: !!s.rust.oxide, oxideVersion: s.rust.oxideVersion || null, appPort: s.rust.appPort };
+  }
   if (s.wow) {
     out.wow = { realmName: s.wow.realmName, address: s.wow.address || ddns.publicAddress(), manageDb: !!s.wow.manageDb };
     if (perms.includes('admin')) out.wow.root = s.wow.root;
@@ -139,7 +143,7 @@ router.get('/servers', (req, res) => {
 });
 
 router.get('/servers/suggest-ports', auth.requireAdmin, async (req, res) => {
-  const game = ['ark', 'cod', 'satisfactory', 'sdtd', 'valheim'].includes(req.query.game) ? req.query.game : 'minecraft';
+  const game = ['ark', 'cod', 'satisfactory', 'sdtd', 'valheim', 'rust'].includes(req.query.game) ? req.query.game : 'minecraft';
   res.json(await manager.suggestPorts(game, req.query.title));
 });
 
@@ -301,7 +305,16 @@ router.put('/servers/:id/mod-config/file', async (req, res) => {
   if (typeof body.raw === 'string' && !auth.can(req.user, inst.server, 'files')) throw new HttpError(403, 'Editing the raw file needs the Files permission');
   const r = await inst.game.writeModConfig(inst.server, String(body.file || ''), { values: body.values, raw: body.raw, writeAll: !!body.writeAll }, { running: !!inst.child });
   inst.appendConsole(`[mod config] ${req.user.username} changed ${r.changed} setting(s) in ${body.file}`);
-  res.json({ ok: true, ...r, restartRequired: !!inst.child });
+  // Games that can apply new settings while running (Rust's uMod reloads just that plugin).
+  let applied = false;
+  if (r.changed && inst.child && inst.game.modConfigChanged) {
+    try {
+      applied = (await inst.game.modConfigChanged(inst, String(body.file))).reloaded;
+    } catch (err) {
+      inst.appendConsole(`[mod config] Couldn't reload it now (${err.message}); it applies on the next restart.`);
+    }
+  }
+  res.json({ ok: true, ...r, applied, restartRequired: !!inst.child && !applied });
 });
 
 // Map preview for the CoD map picker (looked up on the CoD wiki once, then cached).
@@ -517,6 +530,98 @@ router.delete('/servers/:id/sdtd-mods/:folder', (req, res) => {
   inst.game.removeMod(inst.server, req.params.folder);
   inst.appendConsole(`[mods] ${req.user.username} removed ${req.params.folder}`);
   res.json({ ok: true, restartRequired: !!inst.child });
+});
+
+// ---- Rust uMod plugins (oxide/plugins) ----
+function rustInst(req) {
+  const inst = load(req, 'mods');
+  if (!inst.server.rust) throw new HttpError(400, 'Not a Rust server');
+  return inst;
+}
+
+// Installed plugins, with the newest version on uMod when it can be looked up.
+router.get('/servers/:id/rust-plugins', async (req, res) => {
+  const inst = rustInst(req);
+  const plugins = inst.game.listPlugins(inst.server);
+  const latest = await umod.latestVersions(plugins.map((p) => p.name));
+  res.json({
+    plugins: plugins.map((p) => {
+      const u = latest[p.name];
+      return { ...p, umod: u ? { version: u.version, url: u.url, logo: u.logo } : null, update: !!(u && u.version && p.version && umod.compareVersions(u.version, p.version) > 0) };
+    }),
+    oxide: inst.game.oxideStatus(inst.server),
+    running: !!inst.child,
+    canUpload: req.user.role === 'admin',
+  });
+});
+
+router.get('/servers/:id/rust-plugins/search', async (req, res) => {
+  rustInst(req);
+  res.json(await umod.search(String(req.query.q || ''), { page: req.query.page, sort: String(req.query.sort || 'downloads'), pages: 3 }));
+});
+
+// Install or update plugins from uMod by name. Oxide loads them by itself, even while running.
+router.post('/servers/:id/rust-plugins', async (req, res) => {
+  const inst = rustInst(req);
+  const names = (Array.isArray(req.body && req.body.names) ? req.body.names : [req.body && req.body.name]).map((n) => String(n || '')).filter(Boolean).slice(0, 25);
+  if (!names.length) throw new HttpError(400, 'Which plugin?');
+  if (!inst.server.rust.oxide) throw new HttpError(400, 'Turn on uMod in Settings → uMod first');
+  const installed = [];
+  const failed = [];
+  for (const name of names) {
+    try {
+      const r = inst.game.installPlugin(inst.server, name, await umod.downloadPlugin(name));
+      installed.push(r);
+      inst.appendConsole(`[mods] ${req.user.username} installed ${r.title} ${r.version} from uMod`);
+    } catch (err) {
+      failed.push({ name, error: err.message });
+    }
+  }
+  if (!installed.length) throw new HttpError(400, failed.map((f) => `${f.name}: ${f.error}`).join('; '));
+  res.json({ ok: true, installed, failed, live: !!inst.child });
+});
+
+// A .cs plugin from somewhere else. It is code that runs on this PC, so admins only.
+router.put('/servers/:id/rust-plugins/upload/:name', auth.requireAdmin, async (req, res) => {
+  const inst = rustInst(req);
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > 4 * 1024 * 1024) throw new HttpError(413, 'Plugins can be at most 4 MB');
+    chunks.push(c);
+  }
+  const r = inst.game.installPlugin(inst.server, req.params.name, Buffer.concat(chunks).toString('utf8'));
+  inst.appendConsole(`[mods] ${req.user.username} uploaded ${r.title} ${r.version}`);
+  res.json({ ok: true, ...r, live: !!inst.child });
+});
+
+router.patch('/servers/:id/rust-plugins/:name', (req, res) => {
+  const inst = rustInst(req);
+  const enabled = !!(req.body && req.body.enabled);
+  inst.game.setPluginEnabled(inst.server, req.params.name, enabled);
+  inst.appendConsole(`[mods] ${req.user.username} turned ${enabled ? 'on' : 'off'} ${req.params.name}`);
+  res.json({ ok: true, live: !!inst.child });
+});
+
+router.delete('/servers/:id/rust-plugins/:name', (req, res) => {
+  const inst = rustInst(req);
+  const purge = req.query.purge === '1';
+  inst.game.removePlugin(inst.server, req.params.name, { purge });
+  inst.appendConsole(`[mods] ${req.user.username} removed ${req.params.name}${purge ? ' with its settings and data' : ''}`);
+  res.json({ ok: true, live: !!inst.child });
+});
+
+// Install (or update) uMod itself without updating the game.
+router.post('/servers/:id/rust-plugins/oxide', (req, res) => {
+  const inst = rustInst(req);
+  if (inst.child) throw new HttpError(409, "Stop the server first: uMod replaces some of the game's files");
+  if (!inst.server.rust.oxide) throw new HttpError(400, 'Turn on uMod in Settings → uMod first');
+  inst.runJob('mods', 'Install uMod', async (log) => {
+    await inst.game.installOxide(inst.server, log);
+    db.save();
+  }).catch(() => db.save());
+  res.json({ ok: true });
 });
 
 // ---- backups ----

@@ -16,8 +16,8 @@ const TABS = [
   { id: 'settings', label: 'Settings', icon: 'settings', perm: 'settings', mod: settingsTab },
   { id: 'players', label: 'Players', icon: 'users', perm: 'settings', mod: playersTab, game: 'minecraft' },
   { id: 'accounts', label: 'Accounts', icon: 'users', perm: 'settings', mod: accountsTab, game: 'wow' },
-  { id: 'mods', label: 'Mods', icon: 'box', perm: 'mods', mod: modsTab, games: ['minecraft', 'ark', 'cod', 'satisfactory', 'sdtd'] },
-  { id: 'modconfig', label: 'Mod configuration', icon: 'edit', perm: 'settings', mod: modConfigTab, games: ['ark', 'minecraft'] },
+  { id: 'mods', label: 'Mods', icon: 'box', perm: 'mods', mod: modsTab, games: ['minecraft', 'ark', 'cod', 'satisfactory', 'sdtd', 'rust'] },
+  { id: 'modconfig', label: 'Mod configuration', icon: 'edit', perm: 'settings', mod: modConfigTab, games: ['ark', 'minecraft', 'rust'] },
   { id: 'files', label: 'Files', icon: 'folder', perm: 'files', mod: filesTab },
   { id: 'backups', label: 'Backups', icon: 'archive', perm: 'backups', mod: backupsTab },
   { id: 'schedules', label: 'Schedules', icon: 'clock', perm: 'schedules', mod: schedulesTab },
@@ -121,6 +121,7 @@ export async function render(root, ctx) {
               ${s.sf.mods ? html`<p class="muted small">This server has mods: players install the same ones with the <a href="https://ficsit.app/satisfactory-mod-manager" target="_blank" rel="noopener">Satisfactory Mod Manager</a> (see the Mods tab).</p>` : ''}` : ''}
           ${s.sdtd ? html`<p class="muted small">In 7 Days to Die: <em>Join a Game → Connect to IP</em>.${s.sdtd.eac ? '' : ' Easy Anti-Cheat is off, so players start the game without EAC.'}</p>` : ''}
           ${s.vh ? html`<p class="muted small">In Valheim: <em>Start Game → Join Game → Add server</em> with the address.${s.vh.crossplay ? ' Crossplay is on: friends join with the join code printed in the Console after the server starts.' : ''}</p>` : ''}
+          ${s.rust ? html`<p class="muted small">In Rust, press <kbd>F1</kbd> and type <code>client.connect ${esc(s.connect || (lan[0] || 'IP') + ':' + s.rust.port)}</code>. It also shows up in the server browser under <em>${s.rust.oxide ? 'Modded' : 'Community'}</em> after a few minutes.</p>` : ''}
           ${s.ark ? html`<p class="muted small">In ARK, open the console (<kbd>~</kbd>) and type <code>open ${esc(s.connect || (lan[0] || 'IP') + ':' + s.ark.port)}</code> to join directly.</p>` : ''}
           <h4>Ports to forward on your router</h4>
           <table class="table compact"><tbody>${forward.map((p) => html`<tr><td><code>${p.port}</code></td><td>${p.proto}</td><td class="muted">${p.label}</td></tr>`)}</tbody></table>
@@ -136,6 +137,7 @@ export async function render(root, ctx) {
             ${s.ark ? html`<div><dt>Mods</dt><dd>${s.ark.mods.length}</dd></div><div><dt>Max players</dt><dd>${s.ark.maxPlayers}</dd></div>` : ''}
             ${s.sf ? html`<div><dt>Mods</dt><dd>${s.sf.mods}${s.sf.modsDirty ? ' (installed on next start)' : ''}</dd></div>${rt.players && rt.players.map ? html`<div><dt>Session</dt><dd>${rt.players.map}</dd></div>` : ''}` : ''}
             ${s.sdtd ? html`<div><dt>World</dt><dd>${s.sdtd.world}</dd></div><div><dt>Anti-cheat</dt><dd>${s.sdtd.eac ? 'on' : 'off'}</dd></div>` : ''}
+            ${s.rust ? html`<div><dt>Map</dt><dd>${s.rust.level === 'custom' ? 'Custom map' : s.rust.level === 'Procedural Map' ? `Procedural ${s.rust.worldSize} · seed ${s.rust.seed}` : s.rust.level}</dd></div><div><dt>uMod</dt><dd>${s.rust.oxide ? s.rust.oxideVersion || 'not installed yet' : 'off'}</dd></div>` : ''}
             ${s.vh ? html`<div><dt>World</dt><dd>${s.vh.worldName}</dd></div><div><dt>Crossplay</dt><dd>${s.vh.crossplay ? 'on' : 'off'}</dd></div>` : ''}
             ${s.cod ? html`<div><dt>Mode</dt><dd>${s.cod.gametypeLabel}${rt.players && rt.players.map ? ' · ' + rt.players.map : ''}</dd></div><div><dt>XP</dt><dd>${s.cod.xpScale}x${s.cod.weaponXp ? ` · weapon ${s.cod.weaponXpScale}x` : ''}</dd></div><div><dt>Bots</dt><dd>${s.cod.bots.enabled ? `fill to ${s.cod.bots.fill}${rt.players && rt.players.bots != null ? ` (${rt.players.bots} in game)` : ''}` : 'off'}</dd></div>` : ''}
           </dl>
@@ -233,6 +235,8 @@ export async function render(root, ctx) {
     ? [['Status', 'status'], ['Next map', 'map_rotate'], ['Restart map', 'fast_restart'], ['Say…', 'say '], ['Kick…', 'clientkick ']]
     : s.sdtd
     ? [['List players', 'lp'], ['Save world', 'saveworld'], ['Game time', 'gettime'], ['Say…', 'say "'], ['Kick…', 'kick ']]
+    : s.rust
+    ? [['Save world', 'server.save'], ['Players', 'playerlist'], ['Plugins', 'oxide.plugins'], ['Say…', 'say "'], ['Kick…', 'kick ']]
     : s.sf || s.vh
     ? []
     : s.ark
@@ -251,11 +255,12 @@ export async function render(root, ctx) {
         </div>
         <div class="console" id="console" tabindex="0" aria-label="Server console" aria-live="off">${raw(consoleLines.map(renderLine).join(''))}</div>
         <form class="console-input" id="cmd-form">
-          <span class="prompt">${s.ark || s.cod ? 'RCON' : s.sdtd ? 'Telnet' : s.sf ? 'API' : '>'}</span>
-          <input name="command" autocomplete="off" placeholder="${s.ark ? 'ARK admin command, e.g. ServerChat Hello' : s.cod ? 'Server command, e.g. map mp_rust' : s.wow ? 'GM command without the dot, e.g. announce Hello' : s.sdtd ? 'Server command, e.g. say "Hello"' : s.sf ? 'Console command' : s.vh ? 'Valheim has no server console' : 'Server command, e.g. say Hello'}" ${['running', 'starting'].includes(s.runtime.status) && !s.vh ? '' : 'disabled'}>
+          <span class="prompt">${s.ark || s.cod || s.rust ? 'RCON' : s.sdtd ? 'Telnet' : s.sf ? 'API' : '>'}</span>
+          <input name="command" autocomplete="off" placeholder="${s.ark ? 'ARK admin command, e.g. ServerChat Hello' : s.rust ? 'Server command, e.g. say "Hello" or oxide.reload Kits' : s.cod ? 'Server command, e.g. map mp_rust' : s.wow ? 'GM command without the dot, e.g. announce Hello' : s.sdtd ? 'Server command, e.g. say "Hello"' : s.sf ? 'Console command' : s.vh ? 'Valheim has no server console' : 'Server command, e.g. say Hello'}" ${['running', 'starting'].includes(s.runtime.status) && !s.vh ? '' : 'disabled'}>
           <button class="btn btn-primary" ${['running', 'starting'].includes(s.runtime.status) && !s.vh ? '' : 'disabled'}>Send</button>
         </form>
         ${s.vh ? html`<p class="muted small">Valheim has no server console: the panel shows its log. Admins (Settings → Players) use the in-game console (F5) for kick, ban and save.</p>` : ''}
+        ${s.rust ? html`<p class="muted small">Commands go through Rust's RCON (only reachable from this PC). Make someone admin with <code>ownerid &lt;SteamID&gt;</code> then <code>server.writecfg</code>.${s.rust.oxide ? html` uMod: <code>oxide.grant user &lt;name&gt; &lt;permission&gt;</code>.` : ''}</p>` : ''}
         ${s.sdtd ? html`<p class="muted small">Commands go through the game's telnet console (only reachable from this PC). <code>help</code> lists them.</p>` : ''}
         ${s.ark ? html`<p class="muted small">ARK has no live console; the panel shows <code>ShooterGame.log</code> and sends commands over RCON once the server has finished loading.</p>` : ''}
       </div>`.s;

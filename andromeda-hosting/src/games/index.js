@@ -6,10 +6,11 @@ const wow = require('./wow');
 const satisfactory = require('./satisfactory');
 const sdtd = require('./sdtd');
 const valheim = require('./valheim');
+const rust = require('./rust');
 
-const games = { minecraft, ark, cod, wow, satisfactory, sdtd, valheim };
+const games = { minecraft, ark, cod, wow, satisfactory, sdtd, valheim, rust };
 // Which property of a server record holds its game settings.
-const CONFIG_KEY = { minecraft: 'mc', ark: 'ark', cod: 'cod', wow: 'wow', satisfactory: 'sf', sdtd: 'sdtd', valheim: 'vh' };
+const CONFIG_KEY = { minecraft: 'mc', ark: 'ark', cod: 'cod', wow: 'wow', satisfactory: 'sf', sdtd: 'sdtd', valheim: 'vh', rust: 'rust' };
 
 function gameFor(server) {
   const g = games[server.game];
@@ -38,6 +39,14 @@ const templates = [
   {
     id: 'valheim', game: 'valheim', title: 'Valheim', subtitle: 'Dedicated server · world modifiers, crossplay, saves on stop',
     platforms: ['win32', 'linux'], image: 'valheim', namePrefix: 'Valheim Server',
+  },
+  {
+    id: 'rust-umod', game: 'rust', source: 'umod', title: 'Rust — Modded (uMod / Oxide)', subtitle: 'Dedicated server · browse and install uMod plugins, edit their settings',
+    platforms: ['win32', 'linux'], image: 'rust', namePrefix: 'Rust Modded Server',
+  },
+  {
+    id: 'rust-vanilla', game: 'rust', source: 'vanilla', title: 'Rust', subtitle: 'Dedicated server · procedural or custom maps, Rust+ app',
+    platforms: ['win32', 'linux'], image: 'rust', namePrefix: 'Rust Server',
   },
   ...Object.entries(cod.TITLES).map(([key, t]) => ({
     id: `cod-${key}`, game: 'cod', codTitle: key, title: t.label, subtitle: `Multiplayer · Domination${t.botRepo ? ' · bots' : ''} · ${t.weaponXp ? '4x player & weapon XP' : '4x XP'}`,

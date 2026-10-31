@@ -19,6 +19,7 @@ export async function render(root, ctx) {
   if (server.cod) return renderCod(root, ctx);
   if (server.sf) return renderSatisfactory(root, ctx);
   if (server.sdtd) return renderSdtd(root, ctx);
+  if (server.rust) return renderRust(root, ctx);
   return renderMc(root, ctx);
 }
 
@@ -403,4 +404,136 @@ async function renderSdtd(root, { server }) {
     }
   });
   await draw();
+}
+
+// ---------- Rust (uMod plugins) ----------
+async function renderRust(root, { server, navigate }) {
+  let state = null;
+  const base = `/api/servers/${server.id}/rust-plugins`;
+  const draw = async () => {
+    state = await api.get(base);
+    const { plugins, oxide, running, canUpload } = state;
+    const updates = plugins.filter((p) => p.update);
+    root.innerHTML = html`
+      ${!oxide.enabled
+        ? html`<div class="callout">${icon('info')}<div><strong>uMod is off: this is a vanilla Rust server.</strong> To use plugins, turn on <em>Use uMod (Oxide) plugins</em> in <a href="#/server/${server.id}/settings">Settings → uMod</a>, then install uMod below.</div></div>`
+        : !oxide.installed
+        ? html`<div class="callout callout-warn">${icon('alert')}<div><strong>uMod isn't installed yet.</strong> Install it below (with the server stopped) so plugins can load.</div></div>`
+        : ''}
+      <div class="panel">
+        <div class="panel-head"><h3>uMod (Oxide)</h3>
+          <div class="btn-row"><button class="btn btn-sm" id="rust-oxide" ${!oxide.enabled || running ? 'disabled' : ''} ${running ? 'title="Stop the server first"' : ''}>${icon('download')}${oxide.installed ? 'Update uMod' : 'Install uMod'}</button>
+            <a class="btn btn-sm btn-ghost" href="https://umod.org/games/rust" target="_blank" rel="noopener">${icon('external')}umod.org</a></div></div>
+        <p class="muted small">${oxide.installed ? html`Installed${oxide.version ? html`: <strong>${oxide.version}</strong>` : ''}${oxide.installedAt ? ` (${fmtDate(oxide.installedAt)})` : ''}.` : 'Not installed.'}
+          uMod is the mod framework that loads plugins. Every Rust update replaces it, so the panel installs it again after each game update; use this button when uMod releases a fix between game updates.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Plugins <span class="count">${plugins.length}</span></h3>
+          <div class="btn-row">
+            ${updates.length ? html`<button class="btn btn-sm btn-primary" id="rust-update-all">${icon('arrowUp')}Update all (${updates.length})</button>` : ''}
+            <button class="btn btn-sm ${updates.length ? '' : 'btn-primary'}" id="rust-browse" ${oxide.enabled ? '' : 'disabled'}>${icon('search')}Browse uMod</button>
+            ${canUpload && oxide.enabled ? html`<label class="btn btn-sm btn-ghost" title="Admins only: a plugin from somewhere other than uMod">${icon('upload')}Upload .cs<input type="file" id="rust-cs" accept=".cs" hidden></label>` : ''}
+          </div></div>
+        <p class="muted small">Plugins come from <a href="https://umod.org/plugins?categories=rust" target="_blank" rel="noopener">umod.org</a>. uMod loads new, updated and switched-on plugins by itself${running ? ' while the server runs' : ' when the server starts'} — no restart needed.
+          Change their settings in the <a href="#/server/${server.id}/modconfig">Mod configuration</a> tab. Many plugins also need permissions: <code>oxide.grant group default &lt;permission&gt;</code> in the Console.</p>
+        ${plugins.length
+          ? html`<input class="filter" id="rust-filter" placeholder="Filter plugins…">
+            <ul class="mod-list unordered" id="rust-list">${plugins.map(
+              (p) => html`<li data-name="${p.name}" data-search="${`${p.title} ${p.name} ${p.author}`.toLowerCase()}">${modLogo({ logo: p.umod && p.umod.logo })}
+                <div class="mod-text"><span><strong>${p.title}</strong> ${p.update ? html`<span class="pill pill-warn" title="Newer version on uMod">${p.umod.version} available</span>` : ''}${!p.enabled ? html` <span class="pill pill-tag">off</span>` : ''}</span>
+                  ${p.description ? html`<small>${p.description}</small>` : ''}
+                  <small class="mono">${p.version ? `v${p.version}` : 'no version'}${p.author ? ` · by ${p.author}` : ''} · ${p.name}.cs${p.umod ? html` · <a href="${webUrl(p.umod.url)}" target="_blank" rel="noopener">uMod page</a>` : html` · <span class="muted">not on uMod</span>`}</small></div>
+                <div class="btn-row">
+                  ${p.update ? html`<button class="btn btn-sm" data-rust-update title="Install ${p.umod.version} from uMod">${icon('arrowUp')}Update</button>` : ''}
+                  ${p.hasConfig ? html`<a class="icon-btn" href="#/server/${server.id}/modconfig" title="Settings">${icon('edit')}</a>` : ''}
+                  <label class="switch" title="${p.enabled ? 'Turn off' : 'Turn on'}"><input type="checkbox" data-rust-toggle ${p.enabled ? 'checked' : ''} aria-label="Enabled"><span></span></label>
+                  <button class="icon-btn" data-rust-remove title="Remove">${icon('trash')}</button></div></li>`
+            )}</ul>`
+          : html`<p class="muted">${oxide.enabled ? 'No plugins yet. Browse uMod to add some — popular first picks: Gather Manager, Stack Size Controller, Rust Kits, Better Chat.' : 'Turn on uMod to add plugins.'}</p>`}
+      </div>
+      ${gameUpdatesPanel(`Updates Rust through SteamCMD${oxide.enabled ? ', then installs uMod again (game updates replace it)' : ''}. The server is stopped, backed up and started again if it was running. Rust updates on the first Thursday of every month; servers must update before players can join again.`)}`.s;
+
+    const filter = $('#rust-filter');
+    if (filter) filter.oninput = () => root.querySelectorAll('#rust-list li').forEach((li) => (li.hidden = !li.dataset.search.includes(filter.value.toLowerCase())));
+    const cs = $('#rust-cs');
+    if (cs) cs.onchange = async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const r = await api.upload(`${base}/upload/${encodeURIComponent(file.name.replace(/\.cs$/i, ''))}`, file);
+        toast(`Installed ${r.title} ${r.version}${r.live ? ' — uMod is loading it' : ''}`, 'ok', 6000);
+        draw();
+      } catch (err) {
+        toast(err.message, 'error', 8000);
+      }
+    };
+  };
+
+  const install = async (names) => {
+    try {
+      const r = await api.post(base, { names });
+      for (const p of r.installed) toast(`Installed ${p.title} ${p.version}${r.live ? ' — uMod is loading it' : ''}`, 'ok', 5000);
+      for (const f of r.failed) toast(`${f.name}: ${f.error}`, 'error', 8000);
+    } catch (err) {
+      toast(err.message, 'error', 8000);
+    }
+    draw();
+  };
+
+  on(root, 'click', '#rust-browse', async () => {
+    const picked = await pickUmod(server, new Set(state.plugins.map((p) => p.name.toLowerCase())));
+    if (picked && picked.length) await install(picked.map((p) => p.name));
+  });
+  on(root, 'click', '#rust-update-all', () => install(state.plugins.filter((p) => p.update).map((p) => p.name)));
+  on(root, 'click', '[data-rust-update]', (_e, el) => install([el.closest('[data-name]').dataset.name]));
+  on(root, 'change', '[data-rust-toggle]', async (_e, el) => {
+    const name = el.closest('[data-name]').dataset.name;
+    try {
+      await api.patch(`${base}/${encodeURIComponent(name)}`, { enabled: el.checked });
+      draw();
+    } catch (err) {
+      toast(err.message, 'error');
+      el.checked = !el.checked;
+    }
+  });
+  on(root, 'click', '[data-rust-remove]', async (_e, el) => {
+    const name = el.closest('[data-name]').dataset.name;
+    const p = state.plugins.find((x) => x.name === name);
+    if (!(await confirmBox('Remove plugin?', `Remove ${p ? p.title : name}? Its settings and data are kept, so installing it again later picks up where it left off.`, { danger: true, confirm: 'Remove' }))) return;
+    try {
+      await api.del(`${base}/${encodeURIComponent(name)}`);
+      draw();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  on(root, 'click', '#rust-oxide', async () => {
+    try {
+      await api.post(`${base}/oxide`, {});
+      toast('Installing uMod', 'ok');
+      navigate(`/server/${server.id}/overview`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  await draw();
+}
+
+function pickUmod(server, have) {
+  return pickFromSearch({
+    title: 'Add uMod plugins',
+    placeholder: 'Search uMod plugins for Rust…',
+    intro: html`<p class="muted small">Most downloaded first. Plugins run on the server only — players don't install anything.</p>`,
+    multi: true,
+    search: async (q) => (await api.get(`/api/servers/${server.id}/rust-plugins/search?q=${encodeURIComponent(q)}`)).plugins,
+    describe: (p) => ({
+      key: p.name,
+      name: p.title,
+      summary: p.summary,
+      logo: p.logo,
+      disabled: have.has(p.name.toLowerCase()),
+      meta: html`${icon('download')}${fmtNum(p.downloads)} · v${p.version}${p.author ? ` · ${p.author}` : ''}${have.has(p.name.toLowerCase()) ? ' · installed' : ''}`,
+    }),
+  });
 }

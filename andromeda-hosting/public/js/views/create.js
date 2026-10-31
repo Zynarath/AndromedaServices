@@ -2,8 +2,8 @@ import { api } from '../api.js';
 import { html, $, on, icon, toast, esc } from '../ui.js';
 import { pickCurseForge } from './cfpicker.js';
 
-const ART = { ark: 'ark', 'ark-ase': 'ark', 'mc-cf': 'mc-cf', mc: 'mc', cod: 'cod', wow: 'wow', satisfactory: 'satisfactory', sdtd: 'sdtd', valheim: 'valheim' };
-const LABEL = { ark: 'ARK', wow: 'WoW', minecraft: 'MC', satisfactory: 'Satisfactory', sdtd: '7 Days', valheim: 'Valheim' };
+const ART = { ark: 'ark', 'ark-ase': 'ark', 'mc-cf': 'mc-cf', mc: 'mc', cod: 'cod', wow: 'wow', satisfactory: 'satisfactory', sdtd: 'sdtd', valheim: 'valheim', rust: 'rust' };
+const LABEL = { ark: 'ARK', wow: 'WoW', minecraft: 'MC', satisfactory: 'Satisfactory', sdtd: '7 Days', valheim: 'Valheim', rust: 'Rust' };
 
 export async function render(root, { navigate, refreshServers }) {
   const [{ templates, curseforgeKey, platform }, { servers: existing }] = await Promise.all([api.get('/api/templates'), api.get('/api/servers')]);
@@ -46,7 +46,7 @@ export async function render(root, { navigate, refreshServers }) {
           <small class="hint">Also used for this server's Discord channel.</small></label>
         ${tpl.id === 'mc-curseforge' ? cfSection(curseforgeKey) : ''}
         ${tpl.id === 'mc-custom' ? mcCustomSection() : ''}
-        ${isMc ? mcCommon(ports) : tpl.game === 'cod' ? codSection(tpl, ports) : tpl.game === 'wow' ? wowSection() : tpl.game === 'satisfactory' ? sfSection(ports) : tpl.game === 'sdtd' ? sdtdSection(ports) : tpl.game === 'valheim' ? vhSection(ports) : arkSection(tpl, ports)}
+        ${isMc ? mcCommon(ports) : tpl.game === 'cod' ? codSection(tpl, ports) : tpl.game === 'wow' ? wowSection() : tpl.game === 'satisfactory' ? sfSection(ports) : tpl.game === 'sdtd' ? sdtdSection(ports) : tpl.game === 'valheim' ? vhSection(ports) : tpl.game === 'rust' ? rustSection(tpl, ports) : arkSection(tpl, ports)}
         <div class="form-actions span-2">
           <button class="btn btn-primary" type="submit">${icon('plus')}Create &amp; install</button>
           <span class="muted small">You can change all of this later in the server's Settings tab.</span>
@@ -79,6 +79,11 @@ export async function render(root, { navigate, refreshServers }) {
         body.sdtd = { password: d.password, maxPlayers: Number(d.maxPlayers), gameWorld: d.gameWorld, worldSize: d.gameWorld === 'RWG' ? d.worldSize : '', seed: d.seed, difficulty: d.difficulty, port: Number(d.port), telnetPort: Number(d.telnetPort) };
       } else if (tpl.game === 'valheim') {
         body.vh = { password: d.password, worldName: d.worldName, public: !!d.public, crossplay: !!d.crossplay, preset: d.preset, port: Number(d.port) };
+      } else if (tpl.game === 'rust') {
+        body.rust = {
+          oxide: !!d.oxide, level: d.level, worldSize: Number(d.worldSize), seed: Number(d.seed), maxPlayers: Number(d.maxPlayers), pve: !!d.pve,
+          port: Number(d.port), rconPort: Number(d.rconPort), queryPort: Number(d.queryPort), appPort: Number(d.appPort),
+        };
       } else if (tpl.game === 'cod') {
         body.cod = {
           gameDir: d.gameDir, port: Number(d.port), password: d.password, maxClients: Number(d.maxClients), gametype: 'dom',
@@ -293,6 +298,23 @@ export async function render(root, { navigate, refreshServers }) {
       <div class="callout span-2">${icon('info')}<div>The world saves every 10 minutes and whenever the panel stops the server. Fine-tune combat, raids, resources and portals in Settings → World modifiers.</div></div>
       <details class="span-2 adv"><summary>Port</summary><div class="form-grid">
         <label class="field"><span>Port (UDP, uses the next one too)</span><input type="number" name="port" value="${ports.port || 2456}"></label></div></details>`;
+  }
+
+  function rustSection(t, ports) {
+    return html`
+      <label class="field"><span>Map</span><select name="level"><option value="Procedural Map">Procedural map</option><option value="Barren">Barren</option><option value="HapisIsland">Hapis Island</option><option value="SavasIsland">Savas Island</option></select></label>
+      <label class="field"><span>Max players</span><input type="number" name="maxPlayers" value="50" min="1" max="500"></label>
+      <label class="field"><span>Map size</span><input type="number" name="worldSize" value="3500" min="1000" max="6000" step="250"><small class="hint">Procedural maps only. 3000–4500 suits most servers.</small></label>
+      <label class="field"><span>Map seed</span><input type="number" name="seed" min="1" max="2147483647" value="${Math.floor(Math.random() * 2147483646) + 1}"></label>
+      <label class="switch field-switch"><input type="checkbox" name="oxide" ${t.source === 'vanilla' ? '' : 'checked'}><span></span>Install uMod (Oxide) for plugins</label>
+      <label class="switch field-switch"><input type="checkbox" name="pve"><span></span>PvE (players can't hurt each other)</label>
+      <div class="callout span-2">${icon('info')}<div>The first install downloads about 10 GB through SteamCMD${t.source === 'vanilla' ? '' : ', then uMod'}. Rust uses 8–12 GB of RAM while running.
+        ${t.source === 'vanilla' ? '' : html`Browse and install uMod plugins in the server's <em>Mods</em> tab, and change their settings in <em>Mod configuration</em> — no restart needed.`}</div></div>
+      <details class="span-2 adv"><summary>Ports</summary><div class="form-grid">
+        <label class="field"><span>Game port (UDP)</span><input type="number" name="port" value="${ports.port || 28015}"></label>
+        <label class="field"><span>RCON port (TCP, this PC only)</span><input type="number" name="rconPort" value="${ports.rconPort || 28016}"></label>
+        <label class="field"><span>Query port (UDP)</span><input type="number" name="queryPort" value="${ports.queryPort || 28017}"></label>
+        <label class="field"><span>Rust+ app port (TCP, 0 = off)</span><input type="number" name="appPort" value="${ports.appPort ?? 28082}"></label></div></details>`;
   }
 
   function arkSection(t, ports) {

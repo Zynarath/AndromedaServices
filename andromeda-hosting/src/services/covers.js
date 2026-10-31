@@ -32,6 +32,7 @@ const DEFAULTS = {
   satisfactory: { steam: 526870 },
   sdtd: { steam: 251570 },
   valheim: { steam: 892970 },
+  rust: { steam: 252490 },
   wow: { wiki: 'World of Warcraft: Wrath of the Lich King' },
   minecraft: { wiki: 'Minecraft' },
 };
@@ -45,6 +46,7 @@ function defaultKey(server) {
   if (server.sf) return 'satisfactory';
   if (server.sdtd) return 'sdtd';
   if (server.vh) return 'valheim';
+  if (server.rust) return 'rust';
   return null;
 }
 

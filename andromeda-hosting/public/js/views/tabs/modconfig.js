@@ -3,10 +3,12 @@ import { html, $, $$, on, icon, toast, webUrl } from '../../ui.js';
 import { field } from './settings.js';
 
 // Mod configuration: each mod (with its Workshop/CurseForge picture and name) and its settings —
-// ARK mod INI sections pre-filled with the defaults from the mod's page, Minecraft mod config files.
+// ARK mod INI sections pre-filled with the defaults from the mod's page, Minecraft mod config files,
+// Rust uMod plugin settings (shown with readable names; the key from the file is on hover).
 export async function render(root, { server }) {
   const base = `/api/servers/${server.id}/mod-config`;
   const ark = !!server.ark;
+  const plugins = !!server.rust;
   let list;
   let current = null; // { file, data }
   let modQuery = '';
@@ -21,12 +23,12 @@ export async function render(root, { server }) {
     $('#mc-list').innerHTML = html`${mods.length
       ? mods.map(
           (m) => html`<div class="mc-card">
-            <div class="mc-card-head">${thumb(m)}<div class="mc-card-title"><strong>${m.name}</strong>
+            <div class="mc-card-head">${thumb(m)}<div class="mc-card-title"><strong>${m.name}</strong>${plugins && !m.installed ? html` <span class="pill pill-tag" title="The plugin was removed; its settings are kept">not installed</span>` : plugins && !m.enabled ? html` <span class="pill pill-tag">off</span>` : ''}
               <small class="muted">${m.modId ? html`<span class="mono">${m.modId}</span>` : ''}${m.url ? html` · <a href="${webUrl(m.url)}" target="_blank" rel="noopener">mod page</a>` : ''}</small></div></div>
             ${m.files.length
               ? m.files.map(
                   (f) => html`<button type="button" class="mc-file ${current && current.file === f.file ? 'active' : ''}" data-file="${f.file}">
-                    <span>${ark ? f.where : f.file.split('/').slice(1).join('/')}</span>
+                    <span>${f.label || (ark ? f.where : f.file.split('/').slice(1).join('/'))}</span>
                     ${f.documented ? html`<span class="pill pill-ok" title="Settings documented on the mod page">${f.documented} documented</span>` : ''}
                     ${f.client ? html`<span class="pill pill-tag" title="Client-side settings: they only matter on players' PCs">client</span>` : ''}
                     ${f.where === 'world' ? html`<span class="pill pill-tag">world</span>` : ''}</button>`
@@ -34,7 +36,7 @@ export async function render(root, { server }) {
               : html`<p class="muted small mc-none">${ark ? 'No settings found on its mod page. If it has some, add its section above.' : 'No config files.'}</p>`}
           </div>`
         )
-      : html`<p class="muted small">${list.mods.length ? 'No mod matches.' : ark ? 'No mods in the mod list yet (Mods tab).' : 'No mod config files yet. Start the server once so the mods create them.'}</p>`}`.s;
+      : html`<p class="muted small">${list.mods.length ? 'No mod matches.' : ark ? 'No mods in the mod list yet (Mods tab).' : plugins ? 'No plugin settings yet. Add plugins in the Mods tab and start the server once so they write their settings.' : 'No mod config files yet. Start the server once so the mods create them.'}</p>`}`.s;
   };
 
   // Default value shown as text, for comparing with what's in the input.
@@ -61,8 +63,8 @@ export async function render(root, { server }) {
       <form id="mc-edit" novalidate>
         <div class="mc-form-head">
           ${ark ? thumb(mod, 'mc-hero') : ''}
-          <div class="mc-form-title"><h3>${ark ? mod.name || current.file.slice(current.file.indexOf(':') + 1) : current.file.split('/').pop()}</h3>
-            <p class="muted small mono">${ark ? d.where : current.file}</p>
+          <div class="mc-form-title"><h3>${ark ? mod.name || current.file.slice(current.file.indexOf(':') + 1) : plugins ? `${mod.name || current.file.split('/').pop()} — ${d.where}` : current.file.split('/').pop()}</h3>
+            <p class="muted small mono">${ark ? d.where : plugins ? `oxide/${current.file}` : current.file}</p>
             ${fields.some((f) => f.def !== undefined) ? html`<p class="small">${changed} of ${fields.filter((f) => f.def !== undefined).length} settings changed from their defaults</p>` : ''}</div>
           <div class="btn-row">
             ${d.mod && d.mod.url ? html`<a class="btn btn-sm btn-ghost" href="${webUrl(d.mod.url)}" target="_blank" rel="noopener">Mod page</a>` : ''}
@@ -85,7 +87,7 @@ export async function render(root, { server }) {
               ${fields.length ? '' : html`<p class="muted">No settings yet. Add the ones from the mod's page below.</p>`}
               ${[...sections].map(
                 ([sec, fs]) => html`<fieldset>${sec ? html`<legend>${sec}</legend>` : ''}<div class="form-grid">${fs.map((f) =>
-                  field({ ...f, key: 'v:' + f.id, type: f.type === 'list' ? 'text' : f.type, def: undefined, hint: [f.hint, f.type === 'list' ? 'List: keep the [ ] brackets' : ''].filter(Boolean).join(' · ') || undefined }, f.value)
+                  field({ ...f, key: 'v:' + f.id, type: f.type === 'list' ? 'text' : f.type, def: undefined, tip: f.key && f.key !== f.label ? `In the file: ${f.key}` : undefined, hint: [f.hint, f.type === 'list' ? 'List: keep the [ ] brackets' : ''].filter(Boolean).join(' · ') || undefined }, f.value)
                 )}</div></fieldset>`
               )}
               ${d.canAdd
@@ -93,9 +95,9 @@ export async function render(root, { server }) {
                     <label class="field"><span>Setting name</span><input name="__newKey" placeholder="e.g. MaxWildLevel" autocomplete="off"></label>
                     <label class="field"><span>Value</span><input name="__newValue" placeholder="e.g. 300" autocomplete="off"></label></div></fieldset>`
                 : ''}`}
-        <div class="form-actions sticky"><button class="btn btn-primary" ${ark && list.running ? 'disabled' : ''}>Save</button>
+        <div class="form-actions sticky"><button class="btn btn-primary" ${ark && list.running ? 'disabled' : ''}>${plugins && list.running ? 'Save and reload plugin' : 'Save'}</button>
           ${ark && fields.some((f) => f.def !== undefined) && !showRaw ? html`<button type="button" class="btn" id="mc-write-all" ${list.running ? 'disabled' : ''} title="Also write the settings that are still at their default into the INI">Save and write all defaults</button>` : ''}
-          <span class="muted small">Changes apply on the next (re)start.</span></div>
+          <span class="muted small">${plugins ? (list.running ? 'The plugin reloads with the new settings right away.' : 'Changes apply when the server starts.') : 'Changes apply on the next (re)start.'}</span></div>
       </form>`.s;
 
     // Default / changed markers and "reset" on every setting that has a known default.
@@ -130,7 +132,7 @@ export async function render(root, { server }) {
       for (const fs of $$('fieldset', form)) {
         let any = false;
         for (const item of fs.querySelectorAll('.form-grid > *')) {
-          const show = !q || item.textContent.toLowerCase().includes(q);
+          const show = !q || item.textContent.toLowerCase().includes(q) || (item.title || '').toLowerCase().includes(q);
           item.hidden = !show;
           if (show) any = true;
         }
@@ -155,7 +157,7 @@ export async function render(root, { server }) {
       }
       try {
         const r = await api.put(`${base}/file`, body);
-        toast(r.changed ? (r.restartRequired ? 'Saved — restart the server to apply' : 'Saved') : 'Nothing changed', 'ok');
+        toast(r.changed ? (r.applied ? 'Saved — plugin reloaded' : r.restartRequired ? 'Saved — restart the server to apply' : 'Saved') : 'Nothing changed', 'ok');
         await open(current.file);
         if (ark) await load();
       } catch (err) {
