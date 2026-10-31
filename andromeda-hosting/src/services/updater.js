@@ -115,9 +115,7 @@ async function apply({ reason = 'manual' } = {}) {
       state.applying = false;
       return { restarted: false, message: 'Update installed. Restart Andromeda Hosting (close its window and run start.bat) to use it.' };
     }
-    // Remember which servers were running so they come back after the restart.
-    const running = [...manager.instances.values()].filter((i) => i.child).map((i) => i.server.id);
-    fs.writeFileSync(RESUME_FILE, JSON.stringify({ servers: running, at: Date.now() }));
+    rememberRunning();
     setTimeout(() => restartHook && restartHook(`update (${reason})`), 500);
     return { restarted: true, message: 'Update installed. Andromeda Hosting is restarting — this page will reconnect in a moment.' };
   } catch (err) {
@@ -126,6 +124,13 @@ async function apply({ reason = 'manual' } = {}) {
     log.error(`Update failed: ${err.message}`);
     throw new HttpError(500, `Update failed: ${err.message}`);
   }
+}
+
+// Remember which servers are running so they come back after the restart. Also used when
+// Andromeda Services stops the panel to install an update.
+function rememberRunning() {
+  const running = [...manager.instances.values()].filter((i) => i.child).map((i) => i.server.id);
+  fs.writeFileSync(RESUME_FILE, JSON.stringify({ servers: running, at: Date.now() }));
 }
 
 function setAuto(auto) {
@@ -163,4 +168,4 @@ function init(mgr, onRestart) {
   setInterval(tick, 60 * 60e3).unref();
 }
 
-module.exports = { init, check, status, apply, setAuto, resumeList, RESTART_CODE };
+module.exports = { init, check, status, apply, setAuto, resumeList, rememberRunning, RESTART_CODE };

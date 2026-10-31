@@ -200,7 +200,16 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(sig, (
 // "stop" to its input, which gets the same clean shutdown as closing start.bat.
 if (process.env.ANDROMEDA_SERVICES === '1' && !process.stdin.isTTY) {
   require('readline').createInterface({ input: process.stdin }).on('line', (l) => {
-    if (l.trim().toLowerCase() === 'stop') shutdown('Stop requested by Andromeda Services');
+    const cmd = l.trim().toLowerCase();
+    if (cmd === 'stop-for-update') {
+      // Andromeda Services is installing an update: bring the running game servers back afterwards.
+      try {
+        updater.rememberRunning();
+      } catch (err) {
+        log.warn(`Couldn't note the running servers: ${err.message}`);
+      }
+      shutdown('Stopping to install an update');
+    } else if (cmd === 'stop') shutdown('Stop requested by Andromeda Services');
   });
 }
 process.on('uncaughtException', (err) => log.error(err));

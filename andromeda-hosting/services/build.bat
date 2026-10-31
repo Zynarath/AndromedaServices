@@ -17,7 +17,7 @@ if not errorlevel 1 (
   echo Andromeda Services is open. Exit it first - right-click its tray icon, Stop all and exit - then run this again.
   exit /b 1
 )
-"%CSC%" /nologo /codepage:65001 /target:winexe /optimize+ /win32icon:services\andromeda.ico /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "/out:Andromeda Services.exe" services\AndromedaServices.cs
+"%CSC%" /nologo /codepage:65001 /target:winexe /optimize+ /win32icon:services\andromeda.ico /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.Core.dll "/out:Andromeda Services.exe" services\AndromedaServices.cs
 if errorlevel 1 (
   echo Building Andromeda Services failed - see the message above.
   exit /b 1

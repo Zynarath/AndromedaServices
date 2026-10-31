@@ -1,5 +1,6 @@
 // Andromeda Services: a Windows app that starts and stops Andromeda Hosting (the panel) and the
-// WotLK website, shows their logs, and sits in the system tray, so nothing needs a console window.
+// WotLK website, shows their logs, installs updates, and sits in the system tray, so nothing needs
+// a console window.
 //
 // Built by services\build.bat with the C# compiler that ships with Windows (.NET Framework 4), so
 // it is written for C# 5 (no string interpolation, no ?. operator).
@@ -7,9 +8,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
@@ -19,7 +23,7 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
 [assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the WotLK website")]
-[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
 
 namespace Andromeda
 {
@@ -28,7 +32,9 @@ namespace Andromeda
     // One Node.js process the app looks after: the panel or the website.
     class Service
     {
+        public string Key;              // "panel" / "site"
         public string Name;
+        public string Description;
         public string Script;           // relative to the andromeda-hosting folder
         public int StopWaitSeconds;     // how long a clean stop may take before it is forced
         public Func<int> Port;          // where it listens (read from its config each time)
@@ -36,35 +42,242 @@ namespace Andromeda
         public State State = State.Stopped;
         public Process Proc;
         public bool StopRequested;
+        public readonly List<string> Log = new List<string>();
         public event Action<string> Output;
         public event Action Changed;
 
-        public void Log(string line) { var h = Output; if (h != null) h(line); }
+        public void Write(string line)
+        {
+            lock (Log)
+            {
+                Log.Add(line);
+                if (Log.Count > 3000) Log.RemoveRange(0, 1000);
+            }
+            var h = Output; if (h != null) h(line);
+        }
         public void SetState(State s) { State = s; var h = Changed; if (h != null) h(); }
         public bool Alive { get { return Proc != null && !Proc.HasExited; } }
+    }
+
+    static class Theme
+    {
+        public static readonly Color Bg = Color.FromArgb(13, 15, 20);
+        public static readonly Color Card = Color.FromArgb(22, 25, 33);
+        public static readonly Color CardBorder = Color.FromArgb(38, 42, 54);
+        public static readonly Color Raised = Color.FromArgb(34, 38, 50);
+        public static readonly Color RaisedHover = Color.FromArgb(46, 51, 66);
+        public static readonly Color Text = Color.FromArgb(236, 238, 244);
+        public static readonly Color Muted = Color.FromArgb(142, 148, 166);
+        public static readonly Color Accent = Color.FromArgb(255, 106, 61);
+        public static readonly Color AccentHover = Color.FromArgb(255, 132, 94);
+        public static readonly Color Green = Color.FromArgb(72, 200, 120);
+        public static readonly Color Amber = Color.FromArgb(240, 185, 70);
+        public static readonly Color Red = Color.FromArgb(240, 90, 80);
+        public static readonly Color Blue = Color.FromArgb(110, 165, 255);
+        public static readonly Color LogBg = Color.FromArgb(9, 10, 14);
+
+        public static Font UI(float size) { return new Font("Segoe UI", size); }
+        public static Font Bold(float size) { return new Font("Segoe UI Semibold", size); }
+
+        public static GraphicsPath Round(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            int d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
+            if (d <= 1) { p.AddRectangle(r); return p; }
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        // The fill colour behind a control: its card's, or the window's.
+        public static Color Behind(Control c)
+        {
+            for (var p = c.Parent; p != null; p = p.Parent)
+            {
+                var card = p as Card;
+                if (card != null) return card.Fill;
+            }
+            return Bg;
+        }
+
+        public static Color Blend(Color a, Color b, float t)
+        {
+            return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+        }
+    }
+
+    // ---------- custom controls ----------
+
+    // Rounded card with a thin border; children sit on its colour.
+    class Card : Panel
+    {
+        public int Radius = 14;
+        public Color Fill = Theme.Card;
+        public Color Border = Theme.CardBorder;
+        public Card()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            BackColor = Theme.Bg;
+            Padding = new Padding(20, 16, 20, 16);
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(Theme.Behind(this));
+            var r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var path = Theme.Round(r, Radius))
+            using (var b = new SolidBrush(Fill))
+            using (var pen = new Pen(Border))
+            {
+                e.Graphics.FillPath(b, path);
+                e.Graphics.DrawPath(pen, path);
+            }
+        }
+    }
+
+    enum ButtonKind { Primary, Secondary, Danger, Ghost }
+
+    class ModernButton : Control
+    {
+        public ButtonKind Kind;
+        bool hover, down;
+        public ModernButton(string text, ButtonKind kind)
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            Kind = kind;
+            Font = Theme.Bold(9.5f);
+            Cursor = Cursors.Hand;
+            Height = 34;
+            Margin = new Padding(8, 0, 0, 0);
+            Text = text;
+            FitWidth();
+        }
+        void FitWidth()
+        {
+            Width = TextRenderer.MeasureText(Text ?? "", Font).Width + 32;
+        }
+        protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); FitWidth(); Invalidate(); }
+        protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            var behind = Theme.Behind(this);
+            g.Clear(behind);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fill, fg;
+            switch (Kind)
+            {
+                case ButtonKind.Primary: fill = hover ? Theme.AccentHover : Theme.Accent; fg = Color.White; break;
+                case ButtonKind.Danger: fill = hover ? Color.FromArgb(96, 40, 40) : Color.FromArgb(64, 30, 32); fg = Color.FromArgb(255, 175, 165); break;
+                case ButtonKind.Ghost: fill = hover ? Theme.Raised : behind; fg = hover ? Theme.Text : Theme.Muted; break;
+                default: fill = hover ? Theme.RaisedHover : Theme.Raised; fg = Theme.Text; break;
+            }
+            if (down) fill = ControlPaint.Dark(fill, 0.05f);
+            if (!Enabled) { fill = Theme.Blend(fill, behind, 0.55f); fg = Theme.Blend(fg, behind, 0.55f); }
+            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), 9))
+            using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        }
+    }
+
+    // A switch with a label.
+    class Toggle : Control
+    {
+        bool on;
+        public event EventHandler CheckedChanged;
+        public Toggle(string text, bool initial)
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            Font = Theme.UI(9f);
+            Text = text;
+            on = initial;
+            Cursor = Cursors.Hand;
+            Height = 24;
+            Width = TextRenderer.MeasureText(text, Font).Width + 52;
+        }
+        public bool Checked
+        {
+            get { return on; }
+            set { if (on == value) return; on = value; Invalidate(); var h = CheckedChanged; if (h != null) h(this, EventArgs.Empty); }
+        }
+        protected override void OnClick(EventArgs e) { Checked = !Checked; base.OnClick(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Theme.Behind(this));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Theme.Round(new Rectangle(0, 3, 36, 18), 9))
+            using (var b = new SolidBrush(on ? Theme.Accent : Theme.Raised)) g.FillPath(b, path);
+            using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, on ? 20 : 2, 5, 14, 14);
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(44, 0, Width - 44, Height), Theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
+        }
+    }
+
+    // Coloured pill with a dot.
+    class Pill : Control
+    {
+        Color tone = Theme.Muted;
+        public Pill()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            Font = Theme.Bold(8.75f);
+            Height = 24;
+        }
+        public void Set(string text, Color c)
+        {
+            Text = text;
+            tone = c;
+            Width = TextRenderer.MeasureText(text, Font).Width + 34;
+            Invalidate();
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            var behind = Theme.Behind(this);
+            g.Clear(behind);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), 12))
+            using (var b = new SolidBrush(Theme.Blend(behind, tone, 0.16f))) g.FillPath(b, path);
+            using (var b = new SolidBrush(tone)) g.FillEllipse(b, 11, Height / 2 - 4, 8, 8);
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(24, 0, Width - 26, Height), tone, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
+        }
     }
 
     static class Program
     {
         public static string Root;      // the andromeda-hosting folder (next to this .exe)
+        public static string[] Args;
 
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
+            Args = args;
             bool first;
             var mutex = new Mutex(true, "AndromedaServices.SingleInstance", out first);
             var show = new EventWaitHandle(false, EventResetMode.AutoReset, "AndromedaServices.Show");
-            if (!first) { show.Set(); return; } // already open: bring that window forward instead
+            if (!first)
+            {
+                // Started again by an update: wait for the old copy to exit. Otherwise show that one.
+                if (args.Contains("--after-update")) { try { first = mutex.WaitOne(60000); } catch (AbandonedMutexException) { first = true; } }
+                if (!first) { show.Set(); return; }
+            }
 
             Root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
-            if (!File.Exists(Path.Combine(Root, "src", "index.js")))
+            if (!File.Exists(Path.Combine(Root, Path.Combine("src", "index.js"))))
             {
                 var parent = Path.GetDirectoryName(Root);
-                if (parent != null && File.Exists(Path.Combine(parent, "src", "index.js"))) Root = parent;
+                if (parent != null && File.Exists(Path.Combine(parent, Path.Combine("src", "index.js")))) Root = parent;
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            if (!File.Exists(Path.Combine(Root, "src", "index.js")))
+            if (!File.Exists(Path.Combine(Root, Path.Combine("src", "index.js"))))
             {
                 MessageBox.Show("Andromeda Services must be in the andromeda-hosting folder (next to start.bat).\n\nFolder: " + Root, "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -108,35 +321,57 @@ namespace Andromeda
         }
     }
 
+    // Result of running git / npm / csc.
+    class RunResult
+    {
+        public int Code = -1;
+        public string Output = "";
+        public bool Ok { get { return Code == 0; } }
+        public string LastLine
+        {
+            get
+            {
+                var lines = Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                return lines.Length > 0 ? lines[lines.Length - 1].Trim() : "exit code " + Code;
+            }
+        }
+    }
+
     class MainForm : Form
     {
-        static readonly Color Bg = Color.FromArgb(18, 20, 26);
-        static readonly Color Card = Color.FromArgb(28, 31, 40);
-        static readonly Color Text1 = Color.FromArgb(232, 234, 240);
-        static readonly Color Muted = Color.FromArgb(150, 156, 172);
-        static readonly Color Accent = Color.FromArgb(255, 106, 61);
         const int RestartCode = 75; // the panel exits with this after installing an update
 
         readonly Service panel;
         readonly Service site;
+        readonly Service[] services;
         readonly Settings settings;
         readonly NotifyIcon tray;
-        readonly TabControl logs;
-        readonly Dictionary<Service, TextBox> logBoxes = new Dictionary<Service, TextBox>();
-        readonly Dictionary<Service, Label> statusLabels = new Dictionary<Service, Label>();
-        readonly Dictionary<Service, Label> urlLabels = new Dictionary<Service, Label>();
-        readonly Dictionary<Service, Button[]> buttons = new Dictionary<Service, Button[]>();
+        readonly TextBox logBox;
+        readonly Dictionary<Service, Pill> pills = new Dictionary<Service, Pill>();
+        readonly Dictionary<Service, LinkLabel> urlLabels = new Dictionary<Service, LinkLabel>();
+        readonly Dictionary<Service, ModernButton[]> buttons = new Dictionary<Service, ModernButton[]>();
+        readonly Dictionary<Service, ModernButton> logTabs = new Dictionary<Service, ModernButton>();
+        readonly ModernButton updateButton;
+        readonly Label versionLabel;
+        readonly Panel bannerWrap;
+        readonly Label updateTitle;
+        readonly Label updateList;
         readonly System.Windows.Forms.Timer poll;
+        Service shownLog;
         string node;
         bool exiting;
         bool trayHintShown;
+        bool updating;
+        string pendingBranch;
 
         public MainForm(EventWaitHandle show)
         {
             settings = new Settings(Path.Combine(DataDir(), "services.ini"));
             panel = new Service
             {
+                Key = "panel",
                 Name = "Andromeda Hosting",
+                Description = "The control panel for all your game servers.",
                 Script = Path.Combine("src", "index.js"),
                 StopWaitSeconds = 300, // game servers are saved and stopped first
                 Port = () => ConfigInt(PanelConfig(), "port", 8080),
@@ -144,70 +379,134 @@ namespace Andromeda
             };
             site = new Service
             {
+                Key = "site",
                 Name = "WotLK website",
-                Script = Path.Combine("src", "wowsite", "index.js"),
+                Description = "News, armory, realm status and sign-up for your realm.",
+                Script = Path.Combine("src", Path.Combine("wowsite", "index.js")),
                 StopWaitSeconds = 15,
                 Port = () => ConfigInt(SiteConfig(), "port", 8091),
                 Url = () => "http://localhost:" + ConfigInt(SiteConfig(), "port", 8091),
             };
+            services = new[] { panel, site };
 
             Text = "Andromeda Services";
-            BackColor = Bg;
-            ForeColor = Text1;
-            Font = new Font("Segoe UI", 9.5f);
-            MinimumSize = new Size(760, 560);
-            Size = new Size(900, 680);
+            BackColor = Theme.Bg;
+            ForeColor = Theme.Text;
+            Font = Theme.UI(9.5f);
+            MinimumSize = new Size(900, 660);
+            Size = new Size(1000, 780);
             StartPosition = FormStartPosition.CenterScreen;
+            DoubleBuffered = true;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-            var header = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = Bg, Padding = new Padding(18, 12, 18, 0) };
-            var title = new Label { Text = "Andromeda Services", Font = new Font("Segoe UI Semibold", 16f), AutoSize = true, Location = new Point(18, 10), ForeColor = Text1 };
-            var subtitle = new Label { Text = "Start and stop the panel and the WotLK website. Closing this window keeps them running in the tray.", AutoSize = true, Location = new Point(20, 40), ForeColor = Muted };
-            header.Controls.Add(title);
-            header.Controls.Add(subtitle);
-
-            var cards = new TableLayoutPanel { Dock = DockStyle.Top, Height = 250, ColumnCount = 1, RowCount = 2, Padding = new Padding(14, 6, 14, 6), BackColor = Bg };
-            cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            cards.Controls.Add(BuildCard(panel, "The control panel for all your game servers.", "autostart.panel"), 0, 0);
-            cards.Controls.Add(BuildCard(site, "The classic WotLK site: news, armory, realm status, sign-up.", "autostart.site"), 0, 1);
-
-            logs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(12, 4) };
-            foreach (var s in new[] { panel, site })
+            // ---- header: logo, title, version, Check for updates ----
+            var header = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = Theme.Bg };
+            var logo = new PictureBox { Size = new Size(44, 44), Location = new Point(30, 26), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Theme.Bg };
+            try
             {
-                var page = new TabPage(s.Name + " log") { BackColor = Card };
-                var box = new TextBox
-                {
-                    Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, WordWrap = true,
-                    BackColor = Color.FromArgb(12, 13, 17), ForeColor = Color.FromArgb(205, 210, 220), BorderStyle = BorderStyle.None,
-                    Font = new Font("Consolas", 9f),
-                };
-                page.Controls.Add(box);
-                logs.TabPages.Add(page);
-                logBoxes[s] = box;
-                var svc = s;
-                s.Output += line => AppendLog(svc, line);
-                s.Changed += () => RefreshCard(svc);
+                var ico = Path.Combine(Program.Root, Path.Combine("services", "andromeda.ico"));
+                logo.Image = File.Exists(ico) ? new Icon(ico, 48, 48).ToBitmap() : Icon.ToBitmap();
             }
-            var logWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 4, 14, 4), BackColor = Bg };
-            logWrap.Controls.Add(logs);
+            catch { }
+            var title = new Label { Text = "Andromeda Services", Font = Theme.Bold(17f), AutoSize = true, Location = new Point(84, 22), ForeColor = Theme.Text, BackColor = Theme.Bg };
+            versionLabel = new Label { Text = "", AutoSize = true, Location = new Point(87, 58), ForeColor = Theme.Muted, BackColor = Theme.Bg, Font = Theme.UI(9f) };
+            updateButton = new ModernButton("Check for updates", ButtonKind.Secondary);
+            updateButton.Click += (o, e) => CheckForUpdates(true);
+            header.Controls.AddRange(new Control[] { logo, title, versionLabel, updateButton });
+            header.Resize += (o, e) => updateButton.Location = new Point(header.Width - updateButton.Width - 30, 31);
 
-            var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(14, 8, 14, 6), BackColor = Bg, FlowDirection = FlowDirection.LeftToRight };
-            var startup = new CheckBox { Text = "Open Andromeda Services when I sign in to Windows", AutoSize = true, ForeColor = Text1, Checked = RunAtLogin(), Margin = new Padding(0, 6, 24, 0) };
+            // ---- update banner (hidden until an update is found) ----
+            bannerWrap = new Panel { Dock = DockStyle.Top, Height = 120, Padding = new Padding(28, 0, 28, 14), BackColor = Theme.Bg, Visible = false };
+            var banner = new Card { Dock = DockStyle.Fill, Fill = Color.FromArgb(38, 27, 24), Border = Color.FromArgb(112, 58, 40) };
+            updateTitle = new Label { AutoSize = true, Location = new Point(20, 14), Font = Theme.Bold(11f), ForeColor = Theme.Text, BackColor = banner.Fill };
+            updateList = new Label { AutoSize = false, Location = new Point(20, 40), Size = new Size(600, 56), ForeColor = Theme.Muted, BackColor = banner.Fill, Font = Theme.UI(9f) };
+            var updateNow = new ModernButton("Update now", ButtonKind.Primary);
+            var later = new ModernButton("Later", ButtonKind.Ghost);
+            updateNow.Click += (o, e) => InstallUpdate();
+            later.Click += (o, e) => bannerWrap.Visible = false;
+            banner.Controls.AddRange(new Control[] { updateTitle, updateList, updateNow, later });
+            banner.Resize += (o, e) =>
+            {
+                updateNow.Location = new Point(banner.Width - updateNow.Width - 20, 18);
+                later.Location = new Point(updateNow.Left - later.Width - 8, 18);
+                updateList.Width = Math.Max(200, later.Left - 40);
+            };
+            bannerWrap.Controls.Add(banner);
+
+            // ---- the two service cards, side by side ----
+            var cards = new TableLayoutPanel { Dock = DockStyle.Top, Height = 226, ColumnCount = 2, RowCount = 1, Padding = new Padding(22, 0, 22, 0), BackColor = Theme.Bg };
+            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            cards.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            cards.Controls.Add(BuildCard(panel), 0, 0);
+            cards.Controls.Add(BuildCard(site), 1, 0);
+
+            // ---- logs ----
+            var logCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(18, 14, 18, 18) };
+            var logHead = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Theme.Card };
+            var logTitle = new Label { Text = "Log", Font = Theme.Bold(11f), AutoSize = true, Location = new Point(2, 6), ForeColor = Theme.Text, BackColor = Theme.Card };
+            var tabs = new FlowLayoutPanel { AutoSize = true, Location = new Point(48, 0), BackColor = Theme.Card, WrapContents = false };
+            foreach (var s in services)
+            {
+                var svc = s;
+                var tab = new ModernButton(s.Name, ButtonKind.Ghost) { Height = 32 };
+                tab.Click += (o, e) => ShowLog(svc);
+                tabs.Controls.Add(tab);
+                logTabs[s] = tab;
+            }
+            var openLogs = new ModernButton("Log files", ButtonKind.Ghost) { Height = 32 };
+            openLogs.Click += (o, e) => { try { Process.Start("explorer.exe", "\"" + Path.Combine(DataDir(), "logs") + "\""); } catch { } };
+            var clear = new ModernButton("Clear", ButtonKind.Ghost) { Height = 32 };
+            clear.Click += (o, e) => { lock (shownLog.Log) shownLog.Log.Clear(); logBox.Clear(); };
+            logHead.Controls.AddRange(new Control[] { logTitle, tabs, openLogs, clear });
+            logHead.Resize += (o, e) =>
+            {
+                openLogs.Location = new Point(logHead.Width - openLogs.Width, 0);
+                clear.Location = new Point(openLogs.Left - clear.Width - 4, 0);
+            };
+            var logFrame = new Panel { Dock = DockStyle.Fill, BackColor = Theme.LogBg, Padding = new Padding(12, 10, 4, 10) };
+            logBox = new TextBox
+            {
+                Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, WordWrap = true,
+                BackColor = Theme.LogBg, ForeColor = Color.FromArgb(200, 206, 218), BorderStyle = BorderStyle.None,
+                Font = new Font("Consolas", 9.25f),
+            };
+            logFrame.Controls.Add(logBox);
+            logCard.Controls.Add(logFrame);
+            logCard.Controls.Add(logHead);
+            var logWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(28, 14, 28, 4), BackColor = Theme.Bg };
+            logWrap.Controls.Add(logCard);
+
+            // ---- footer ----
+            var footer = new Panel { Dock = DockStyle.Bottom, Height = 64, BackColor = Theme.Bg };
+            var startup = new Toggle("Open Andromeda Services when I sign in to Windows", RunAtLogin()) { Location = new Point(30, 21) };
             startup.CheckedChanged += (o, e) => SetRunAtLogin(startup.Checked);
-            var folder = MakeButton("Open folder", false);
+            var folder = new ModernButton("Open folder", ButtonKind.Secondary);
             folder.Click += (o, e) => Process.Start("explorer.exe", "\"" + Program.Root + "\"");
-            var exit = MakeButton("Stop all and exit", false);
+            var exit = new ModernButton("Stop all and exit", ButtonKind.Danger);
             exit.Click += (o, e) => ExitApp();
-            footer.Controls.Add(startup);
-            footer.Controls.Add(folder);
-            footer.Controls.Add(exit);
+            footer.Controls.AddRange(new Control[] { startup, folder, exit });
+            footer.Resize += (o, e) =>
+            {
+                exit.Location = new Point(footer.Width - exit.Width - 30, 16);
+                folder.Location = new Point(exit.Left - folder.Width - 8, 16);
+            };
 
             Controls.Add(logWrap);
             Controls.Add(footer);
             Controls.Add(cards);
+            Controls.Add(bannerWrap);
             Controls.Add(header);
 
+            foreach (var s in services)
+            {
+                var svc = s;
+                s.Output += line => { if (shownLog == svc) AppendLogLine(line); };
+                s.Changed += () => RefreshCard(svc);
+            }
+            shownLog = panel;
+
+            // ---- tray ----
             tray = new NotifyIcon { Text = "Andromeda Services", Icon = Icon ?? SystemIcons.Application, Visible = true };
             var menu = new ContextMenuStrip();
             menu.Items.Add("Open Andromeda Services", null, (o, e) => ShowWindow());
@@ -215,11 +514,13 @@ namespace Andromeda
             menu.Items.Add("Open the WotLK website", null, (o, e) => OpenUrl(site.Url()));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Start both", null, (o, e) => { Start(panel); Start(site); });
-            menu.Items.Add("Stop both", null, (o, e) => { Stop(site); Stop(panel); });
+            menu.Items.Add("Stop both", null, (o, e) => { Stop(site, false); Stop(panel, false); });
+            menu.Items.Add("Check for updates", null, (o, e) => { ShowWindow(); CheckForUpdates(true); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Stop all and exit", null, (o, e) => ExitApp());
             tray.ContextMenuStrip = menu;
             tray.DoubleClick += (o, e) => ShowWindow();
+            tray.BalloonTipClicked += (o, e) => ShowWindow();
 
             // A second copy of the app was opened: show this window instead.
             var waiter = new Thread(() => { while (true) { show.WaitOne(); try { BeginInvoke((Action)ShowWindow); } catch { return; } } });
@@ -229,132 +530,156 @@ namespace Andromeda
             poll = new System.Windows.Forms.Timer { Interval = 2000 };
             poll.Tick += (o, e) => PollPorts();
             poll.Start();
+            var updateTimer = new System.Windows.Forms.Timer { Interval = 6 * 60 * 60 * 1000 }; // and quietly every 6 hours
+            updateTimer.Tick += (o, e) => CheckForUpdates(false);
+            updateTimer.Start();
 
-            SystemEvents.SessionEnding += (o, e) => { exiting = true; StopAllAndWait(60); };
-            Load += (o, e) =>
+            SystemEvents.SessionEnding += (o, e) => { exiting = true; StopAllAndWait(60, false); };
+            HandleCreated += (o, e) => DarkTitleBar(Handle);
+            Load += (o, e) => OnLoaded();
+        }
+
+        void OnLoaded()
+        {
+            node = FindNode();
+            foreach (var s in services) RefreshCard(s);
+            ShowLog(panel);
+            RefreshVersion();
+            if (node == null)
             {
-                node = FindNode();
-                foreach (var s in new[] { panel, site }) RefreshCard(s);
-                if (node == null)
-                {
-                    AppendLog(panel, "Node.js was not found. Install the LTS version from https://nodejs.org, then reopen Andromeda Services.");
-                    return;
-                }
-                AppendLog(panel, "Using Node.js: " + node);
-                try
-                {
-                    // Updates replace the source; the app itself is only rebuilt by update.bat or build.bat.
-                    var src = Path.Combine(Program.Root, Path.Combine("services", "AndromedaServices.cs"));
-                    if (File.Exists(src) && File.GetLastWriteTimeUtc(src) > File.GetLastWriteTimeUtc(Application.ExecutablePath).AddMinutes(1))
-                        AppendLog(panel, "A newer Andromeda Services came with an update: exit this app (Stop all and exit), run services\\build.bat, and open it again.");
-                }
-                catch { }
+                panel.Write("Node.js was not found. Install the LTS version from https://nodejs.org, then reopen Andromeda Services.");
+                return;
+            }
+            panel.Write("Using Node.js: " + node);
+            // Opened again by an update: bring back what was running before it.
+            var resume = Program.Args.FirstOrDefault(a => a.StartsWith("--start="));
+            if (resume != null)
+            {
+                var keys = resume.Substring(8).Split(',');
+                panel.Write("Update installed.");
+                if (keys.Contains("panel")) Start(panel);
+                if (keys.Contains("site")) Start(site);
+            }
+            else
+            {
                 if (settings.Get("autostart.panel", true)) Start(panel);
                 if (settings.Get("autostart.site", true)) Start(site);
-            };
+            }
+            var check = new Thread(() => { Thread.Sleep(8000); try { BeginInvoke((Action)(() => CheckForUpdates(false))); } catch { } });
+            check.IsBackground = true;
+            check.Start();
         }
 
         // ---------- layout ----------
-        Control BuildCard(Service s, string description, string autoKey)
+        Control BuildCard(Service s)
         {
-            var card = new Panel { Dock = DockStyle.Fill, BackColor = Card, Margin = new Padding(0, 4, 0, 4), Padding = new Padding(16, 10, 16, 10) };
-            var name = new Label { Text = s.Name, Font = new Font("Segoe UI Semibold", 12f), AutoSize = true, Location = new Point(16, 10), ForeColor = Text1 };
-            var status = new Label { Text = "Stopped", AutoSize = true, Location = new Point(18, 38), ForeColor = Muted, Font = new Font("Segoe UI Semibold", 9.5f) };
-            var desc = new Label { Text = description, AutoSize = true, Location = new Point(18, 60), ForeColor = Muted };
-            var url = new LinkLabel { Text = "", AutoSize = true, Location = new Point(18, 80), LinkColor = Accent, ActiveLinkColor = Text1 };
+            var card = new Card { Dock = DockStyle.Fill, Margin = new Padding(6, 0, 6, 0) };
+            var name = new Label { Text = s.Name, Font = Theme.Bold(13f), AutoSize = true, Location = new Point(20, 16), ForeColor = Theme.Text, BackColor = Theme.Card };
+            var pill = new Pill { Location = new Point(20, 52) };
+            pill.Set("Stopped", Theme.Muted);
+            var desc = new Label { Text = s.Description, AutoSize = true, Location = new Point(20, 88), ForeColor = Theme.Muted, BackColor = Theme.Card };
+            var url = new LinkLabel { Text = "", AutoSize = true, Location = new Point(20, 110), LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text, BackColor = Theme.Card, LinkBehavior = LinkBehavior.HoverUnderline };
             url.LinkClicked += (o, e) => OpenUrl(s.Url());
-            var auto = new CheckBox { Text = "Start when Andromeda Services opens", AutoSize = true, ForeColor = Muted, Checked = settings.Get(autoKey, true), Margin = new Padding(6, 10, 0, 0) };
-            auto.CheckedChanged += (o, e) => settings.Set(autoKey, auto.Checked);
 
-            var start = MakeButton("Start", true);
-            var stop = MakeButton("Stop", false);
-            var restart = MakeButton("Restart", false);
-            var open = MakeButton("Open", false);
-            start.Click += (o, e) => Start(s);
-            stop.Click += (o, e) => Stop(s);
+            var main = new ModernButton("Start", ButtonKind.Primary) { Margin = new Padding(0) };
+            var restart = new ModernButton("Restart", ButtonKind.Secondary);
+            var open = new ModernButton("Open", ButtonKind.Secondary);
+            main.Click += (o, e) => { if (s.Alive) Stop(s, false); else Start(s); };
             restart.Click += (o, e) => Restart(s);
             open.Click += (o, e) => OpenUrl(s.Url());
-            var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, BackColor = Card, WrapContents = false, Margin = new Padding(0) };
-            row.Controls.AddRange(new Control[] { start, stop, restart, open });
-            // Buttons and the auto-start box stack on the right; the labels stay on the left.
-            var right = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Card };
-            right.Controls.Add(row);
-            right.Controls.Add(auto);
+            // Buttons in a row; their widths change with the text (Start/Stop), so place them on resize.
+            Action place = () =>
+            {
+                main.Location = new Point(20, 144);
+                restart.Location = new Point(main.Right + 8, 144);
+                open.Location = new Point(restart.Right + 8, 144);
+            };
+            main.SizeChanged += (o, e) => place();
+            place();
+            var auto = new Toggle("Start when Andromeda Services opens", settings.Get("autostart." + s.Key, true)) { Location = new Point(21, 190) };
+            auto.CheckedChanged += (o, e) => settings.Set("autostart." + s.Key, auto.Checked);
 
-            card.Controls.AddRange(new Control[] { right, name, status, desc, url });
-            statusLabels[s] = status;
+            card.Controls.AddRange(new Control[] { name, pill, desc, url, main, restart, open, auto });
+            pills[s] = pill;
             urlLabels[s] = url;
-            buttons[s] = new[] { start, stop, restart, open };
+            buttons[s] = new[] { main, restart, open };
             return card;
         }
 
-        static Button MakeButton(string text, bool primary)
+        void ShowLog(Service s)
         {
-            var b = new Button
+            shownLog = s;
+            foreach (var kv in logTabs)
             {
-                Text = text, AutoSize = true, FlatStyle = FlatStyle.Flat, Height = 30, Padding = new Padding(8, 0, 8, 0), Margin = new Padding(6, 0, 0, 0),
-                BackColor = primary ? Accent : Color.FromArgb(44, 48, 60), ForeColor = primary ? Color.White : Text1, Cursor = Cursors.Hand,
-            };
-            b.FlatAppearance.BorderSize = 0;
-            return b;
+                kv.Value.Kind = kv.Key == s ? ButtonKind.Secondary : ButtonKind.Ghost;
+                kv.Value.Invalidate();
+            }
+            string text;
+            lock (s.Log) text = string.Join(Environment.NewLine, s.Log.ToArray());
+            logBox.Text = text.Length > 0 ? text + Environment.NewLine : "";
+            logBox.SelectionStart = logBox.TextLength;
+            logBox.ScrollToCaret();
+        }
+
+        void AppendLogLine(string line)
+        {
+            if (line == null) return;
+            if (InvokeRequired) { try { BeginInvoke((Action)(() => AppendLogLine(line))); } catch { } return; }
+            if (logBox.TextLength > 400000) logBox.Text = logBox.Text.Substring(logBox.TextLength - 200000); // keep the window light
+            logBox.AppendText(line.TrimEnd('\r', '\n') + Environment.NewLine);
         }
 
         void RefreshCard(Service s)
         {
-            if (InvokeRequired) { BeginInvoke((Action)(() => RefreshCard(s))); return; }
-            var label = statusLabels[s];
+            if (InvokeRequired) { try { BeginInvoke((Action)(() => RefreshCard(s))); } catch { } return; }
             string text;
             Color color;
             switch (s.State)
             {
-                case State.Starting: text = "● Starting…"; color = Color.FromArgb(240, 190, 70); break;
-                case State.Running: text = "● Running"; color = Color.FromArgb(80, 200, 120); break;
-                case State.Stopping: text = "● Stopping… (saving first)"; color = Color.FromArgb(240, 190, 70); break;
-                case State.External: text = "● Running (started outside Andromeda Services)"; color = Color.FromArgb(120, 170, 240); break;
-                case State.Crashed: text = "● Stopped unexpectedly — see the log"; color = Color.FromArgb(240, 90, 80); break;
-                case State.Waiting: text = "● Waiting: no WoW server has its website turned on in the panel"; color = Color.FromArgb(240, 190, 70); break;
-                default: text = "● Stopped"; color = Muted; break;
+                case State.Starting: text = "Starting…"; color = Theme.Amber; break;
+                case State.Running: text = "Running"; color = Theme.Green; break;
+                case State.Stopping: text = s == panel ? "Stopping (saving game servers)…" : "Stopping…"; color = Theme.Amber; break;
+                case State.External: text = "Running outside Andromeda Services"; color = Theme.Blue; break;
+                case State.Crashed: text = "Stopped unexpectedly — see the log"; color = Theme.Red; break;
+                case State.Waiting: text = "Waiting: turn on the website in the panel"; color = Theme.Amber; break;
+                default: text = "Stopped"; color = Theme.Muted; break;
             }
-            label.Text = text;
-            label.ForeColor = color;
+            if (updating && !s.Alive) { text = "Updating…"; color = Theme.Blue; }
+            pills[s].Set(text, color);
             urlLabels[s].Text = s.Url();
             var b = buttons[s];
-            bool running = s.State == State.Running || s.State == State.Starting || s.State == State.Waiting;
-            b[0].Enabled = node != null && (s.State == State.Stopped || s.State == State.Crashed); // start
-            b[1].Enabled = running;                                                                 // stop
-            b[2].Enabled = node != null && s.State == State.Running;                                // restart
-            b[3].Enabled = s.State == State.Running || s.State == State.External;                   // open
-            foreach (var btn in b) btn.BackColor = btn == b[0] ? (btn.Enabled ? Accent : Color.FromArgb(92, 60, 50)) : (btn.Enabled ? Color.FromArgb(44, 48, 60) : Color.FromArgb(34, 37, 46));
-            int up = 0;
-            if (panel.State == State.Running || panel.State == State.External) up++;
-            if (site.State == State.Running || site.State == State.External) up++;
+            bool alive = s.Alive;
+            b[0].Text = alive ? "Stop" : "Start";
+            b[0].Kind = alive ? ButtonKind.Secondary : ButtonKind.Primary;
+            b[0].Enabled = !updating && node != null && s.State != State.Stopping && s.State != State.External;
+            b[1].Enabled = !updating && node != null && s.State == State.Running;
+            b[2].Enabled = s.State == State.Running || s.State == State.External;
+            foreach (var x in b) x.Invalidate();
+            int up = services.Count(x => x.State == State.Running || x.State == State.External);
             if (tray != null) tray.Text = "Andromeda Services — " + up + " of 2 running";
-        }
-
-        void AppendLog(Service s, string line)
-        {
-            if (line == null) return;
-            if (InvokeRequired) { BeginInvoke((Action)(() => AppendLog(s, line))); return; }
-            var box = logBoxes[s];
-            if (box.TextLength > 400000) box.Text = box.Text.Substring(box.TextLength - 200000); // keep the window light
-            box.AppendText(line.TrimEnd('\r', '\n') + Environment.NewLine);
         }
 
         // ---------- processes ----------
         void Start(Service s)
         {
-            if (node == null || s.Alive) return;
+            if (node == null || s.Alive || updating) return;
             if (PortInUse(s.Port()))
             {
                 s.SetState(State.External);
-                AppendLog(s, "Port " + s.Port() + " is already in use, so " + s.Name + " seems to be running already (for example from start.bat). Close that one first to manage it here.");
+                s.Write("Port " + s.Port() + " is already in use, so " + s.Name + " seems to be running already (for example from start.bat). Close that one first to manage it here.");
                 return;
             }
             if (!Directory.Exists(Path.Combine(Program.Root, "node_modules")))
             {
                 s.SetState(State.Starting);
-                AppendLog(s, "First start: installing packages (needs internet, one time)...");
-                RunNpmInstall(s, () => BeginInvoke((Action)(() => Launch(s))));
+                s.Write("First start: installing packages (needs internet, one time)...");
+                var t = new Thread(() =>
+                {
+                    var r = RunNpmInstall(s);
+                    try { BeginInvoke((Action)(() => { if (r.Ok) Launch(s); else { s.Write("npm install failed. Run install.bat once, then try again."); s.SetState(State.Crashed); } })); } catch { }
+                });
+                t.IsBackground = true;
+                t.Start();
                 return;
             }
             Launch(s);
@@ -385,7 +710,7 @@ namespace Andromeda
             }
             catch (Exception ex)
             {
-                AppendLog(s, "Could not start: " + ex.Message);
+                s.Write("Could not start: " + ex.Message);
                 s.SetState(State.Crashed);
                 return;
             }
@@ -394,13 +719,13 @@ namespace Andromeda
             s.Proc = p;
             s.StopRequested = false;
             s.SetState(State.Starting);
-            AppendLog(s, "---- starting " + s.Name + " ----");
+            s.Write("──── starting " + s.Name + " ────");
         }
 
         void OnOutput(Service s, string line)
         {
             if (line == null) return;
-            AppendLog(s, line);
+            s.Write(line);
             if ((s.State == State.Starting || s.State == State.Waiting) && line.Contains(" is running at ")) s.SetState(State.Running);
             else if (s.State == State.Starting && line.Contains("No WoW server has its website turned on")) s.SetState(State.Waiting);
         }
@@ -413,27 +738,28 @@ namespace Andromeda
             s.Proc = null;
             if (!s.StopRequested && s == panel && code == RestartCode)
             {
-                AppendLog(s, "Restarting after an update...");
-                BeginInvoke((Action)(() => Launch(s)));
+                s.Write("Restarting after an update...");
+                try { BeginInvoke((Action)(() => Launch(s))); } catch { }
                 return;
             }
-            AppendLog(s, "---- " + s.Name + " stopped (exit code " + code + ") ----");
+            s.Write("──── " + s.Name + " stopped (exit code " + code + ") ────");
             s.SetState(s.StopRequested || code == 0 ? State.Stopped : State.Crashed);
         }
 
-        void Stop(Service s)
+        // forUpdate: the panel notes its running game servers and starts them again afterwards.
+        void Stop(Service s, bool forUpdate)
         {
-            if (!s.Alive) { if (s.State == State.External) AppendLog(s, "It was started outside Andromeda Services; stop it where it was started."); return; }
+            if (!s.Alive) { if (s.State == State.External) s.Write("It was started outside Andromeda Services; stop it where it was started."); return; }
             s.StopRequested = true;
             s.SetState(State.Stopping);
-            AppendLog(s, "Stopping " + s.Name + (s == panel ? " (running game servers are saved and stopped first)..." : "..."));
-            try { s.Proc.StandardInput.WriteLine("stop"); s.Proc.StandardInput.Flush(); } catch { }
+            s.Write("Stopping " + s.Name + (s == panel ? " (running game servers are saved and stopped first)..." : "..."));
+            try { s.Proc.StandardInput.WriteLine(forUpdate && s == panel ? "stop-for-update" : "stop"); s.Proc.StandardInput.Flush(); } catch { }
             var proc = s.Proc;
             var watch = new Thread(() =>
             {
                 if (!proc.WaitForExit(s.StopWaitSeconds * 1000))
                 {
-                    AppendLog(s, "Didn't stop in time; forcing it.");
+                    s.Write("Didn't stop in time; forcing it.");
                     KillTree(proc);
                 }
             });
@@ -445,16 +771,17 @@ namespace Andromeda
         {
             if (!s.Alive) { Start(s); return; }
             var proc = s.Proc;
-            Stop(s);
+            Stop(s, false);
             var t = new Thread(() => { proc.WaitForExit(); Thread.Sleep(500); try { BeginInvoke((Action)(() => Start(s))); } catch { } });
             t.IsBackground = true;
             t.Start();
         }
 
-        void StopAllAndWait(int seconds)
+        // May run on any thread.
+        void StopAllAndWait(int seconds, bool forUpdate)
         {
-            Stop(site);
-            Stop(panel);
+            Action stop = () => { Stop(site, forUpdate); Stop(panel, forUpdate); };
+            if (InvokeRequired) Invoke(stop); else stop();
             var until = DateTime.Now.AddSeconds(seconds);
             foreach (var s in new[] { site, panel })
             {
@@ -475,33 +802,264 @@ namespace Andromeda
             catch { }
         }
 
-        void RunNpmInstall(Service s, Action done)
+        // Runs a program to the end, copying its output to a service's log. Call from a background thread.
+        static RunResult Run(string file, string args, Service log, int timeoutMs)
+        {
+            var r = new RunResult();
+            var sb = new StringBuilder();
+            try
+            {
+                var psi = new ProcessStartInfo(file, args)
+                {
+                    WorkingDirectory = Program.Root, UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
+                };
+                psi.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0"; // never wait for a password prompt
+                using (var p = new Process { StartInfo = psi })
+                {
+                    DataReceivedEventHandler h = (o, e) =>
+                    {
+                        if (e.Data == null) return;
+                        lock (sb) sb.AppendLine(e.Data);
+                        if (log != null) log.Write("  " + e.Data);
+                    };
+                    p.OutputDataReceived += h;
+                    p.ErrorDataReceived += h;
+                    p.Start();
+                    p.BeginOutputReadLine();
+                    p.BeginErrorReadLine();
+                    if (!p.WaitForExit(timeoutMs)) { KillTree(p); r.Output = "timed out"; return r; }
+                    p.WaitForExit();
+                    r.Code = p.ExitCode;
+                }
+            }
+            catch (Exception ex) { lock (sb) sb.AppendLine(ex.Message); }
+            lock (sb) r.Output = sb.ToString();
+            return r;
+        }
+
+        RunResult RunNpmInstall(Service s)
         {
             var npm = Path.Combine(Path.GetDirectoryName(node), "npm.cmd");
-            var psi = new ProcessStartInfo("cmd.exe", "/c \"\"" + (File.Exists(npm) ? npm : "npm") + "\" install --omit=dev --no-audit --no-fund\"")
+            return Run("cmd.exe", "/d /s /c \"\"" + (File.Exists(npm) ? npm : "npm") + "\" install --omit=dev --no-audit --no-fund\"", s, 600000);
+        }
+
+        // ---------- updates (replaces update.bat) ----------
+        static string FindGit()
+        {
+            foreach (var p in OnPath("git.exe")) return p;
+            foreach (var p in new[] {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"Git\cmd\git.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Git\cmd\git.exe"),
+            })
             {
-                WorkingDirectory = Program.Root, UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true,
-            };
-            var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
-            p.OutputDataReceived += (o, e) => AppendLog(s, e.Data);
-            p.ErrorDataReceived += (o, e) => AppendLog(s, e.Data);
-            p.Exited += (o, e) =>
+                if (File.Exists(p)) return p;
+            }
+            return null;
+        }
+
+        void RefreshVersion()
+        {
+            var t = new Thread(() =>
             {
-                if (p.ExitCode == 0) done();
-                else { AppendLog(s, "npm install failed. Run install.bat once, then try again."); s.SetState(State.Crashed); }
-            };
-            try { p.Start(); p.BeginOutputReadLine(); p.BeginErrorReadLine(); }
-            catch (Exception ex) { AppendLog(s, "Could not run npm: " + ex.Message); s.SetState(State.Crashed); }
+                var git = FindGit();
+                string text = "Version " + Assembly.GetExecutingAssembly().GetName().Version.ToString(2);
+                if (git != null)
+                {
+                    var branch = Run(git, "rev-parse --abbrev-ref HEAD", null, 15000);
+                    var commit = Run(git, "log -1 --format=\"%h · updated %cr\"", null, 15000);
+                    if (branch.Ok && commit.Ok) text = "Branch " + branch.LastLine + " · " + commit.LastLine;
+                }
+                try { BeginInvoke((Action)(() => versionLabel.Text = text)); } catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        void CheckForUpdates(bool userAsked)
+        {
+            if (updating || !updateButton.Enabled) return;
+            var git = FindGit();
+            if (git == null)
+            {
+                if (userAsked) MessageBox.Show(this, "Updates need Git for Windows. Install it from https://git-scm.com/download/win (the default options are fine), then try again.", "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            updateButton.Enabled = false;
+            updateButton.Text = "Checking…";
+            var t = new Thread(() =>
+            {
+                string error = null, branch = null;
+                int behind = 0;
+                var changes = new List<string>();
+                var inside = Run(git, "rev-parse --is-inside-work-tree", null, 15000);
+                if (!inside.Ok || inside.LastLine != "true") error = "This folder isn't a Git copy of Andromeda Hosting, so it can't update itself. See \"Updating\" in README.md.";
+                else
+                {
+                    var b = Run(git, "rev-parse --abbrev-ref HEAD", null, 15000);
+                    branch = b.LastLine;
+                    if (!b.Ok || branch == "HEAD") error = "This folder isn't on a branch, so there's nothing to update from.";
+                    else
+                    {
+                        var fetch = Run(git, "fetch --quiet origin \"" + branch + "\"", null, 180000);
+                        if (!fetch.Ok) error = "Couldn't reach GitHub: " + fetch.LastLine;
+                        else
+                        {
+                            int.TryParse(Run(git, "rev-list --count HEAD..FETCH_HEAD", null, 15000).LastLine, out behind);
+                            if (behind > 0)
+                            {
+                                var log = Run(git, "log --format=\"%s\" -n 8 HEAD..FETCH_HEAD", null, 15000);
+                                changes.AddRange(log.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+                            }
+                        }
+                    }
+                }
+                try
+                {
+                    BeginInvoke((Action)(() =>
+                    {
+                        updateButton.Enabled = true;
+                        updateButton.Text = "Check for updates";
+                        if (error != null)
+                        {
+                            panel.Write("Update check: " + error);
+                            if (userAsked) MessageBox.Show(this, error, "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        pendingBranch = branch;
+                        if (behind == 0)
+                        {
+                            bannerWrap.Visible = false;
+                            if (userAsked) MessageBox.Show(this, "You're up to date (branch " + branch + ").", "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
+                        updateTitle.Text = "Update available: " + behind + (behind == 1 ? " change" : " changes");
+                        updateList.Text = string.Join("\n", changes.Take(3).Select(c => "•  " + (c.Length > 110 ? c.Substring(0, 110) + "…" : c)).ToArray()) + (behind > 3 ? "\n…and " + (behind - 3) + " more" : "");
+                        bannerWrap.Visible = true;
+                        if (!userAsked && !Visible) tray.ShowBalloonTip(5000, "Update available", "Open Andromeda Services to install it.", ToolTipIcon.Info);
+                    }));
+                }
+                catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        void InstallUpdate()
+        {
+            if (updating || pendingBranch == null) return;
+            if (panel.State == State.External || site.State == State.External)
+            {
+                MessageBox.Show(this, "Something was started outside Andromeda Services (for example with start.bat). Close it first, then update.", "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            bool wasPanel = panel.Alive;
+            bool wasSite = site.Alive;
+            if (wasPanel && MessageBox.Show(this, "Installing the update stops Andromeda Hosting and the WotLK website for a minute. Running game servers are saved, stopped, and started again afterwards.\n\nUpdate now?", "Andromeda Services", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+            updating = true;
+            bannerWrap.Visible = false;
+            updateButton.Enabled = false;
+            updateButton.Text = "Updating…";
+            ShowLog(panel);
+            foreach (var s in services) RefreshCard(s);
+            var git = FindGit();
+            var branch = pendingBranch;
+            var t = new Thread(() =>
+            {
+                string failure = null;
+                bool relaunch = false;
+                try
+                {
+                    panel.Write("──── installing the update from GitHub (" + branch + ") ────");
+                    StopAllAndWait(330, true);
+                    var before = Run(git, "rev-parse HEAD", null, 15000).LastLine;
+                    var fetch = Run(git, "fetch origin \"" + branch + "\"", panel, 300000);
+                    if (!fetch.Ok) throw new Exception("download failed: " + fetch.LastLine);
+                    // Match GitHub exactly. config.json and the data folder aren't tracked, so they're kept.
+                    var reset = Run(git, "reset --hard FETCH_HEAD", panel, 120000);
+                    if (!reset.Ok) throw new Exception("couldn't apply it: " + reset.LastLine);
+                    panel.Write("Installing any new packages...");
+                    if (node != null && !RunNpmInstall(panel).Ok) panel.Write("npm install reported a problem (see above). Starting anyway.");
+                    var appChanged = !Run(git, "diff --quiet " + before + " HEAD -- services", null, 15000).Ok;
+                    if (appChanged)
+                    {
+                        panel.Write("Rebuilding Andromeda Services...");
+                        var problem = BuildNewExe();
+                        if (problem == null) relaunch = true;
+                        else panel.Write("Couldn't rebuild Andromeda Services (" + problem + "). The rest of the update is installed; run services\\build.bat later.");
+                    }
+                    panel.Write("Update installed.");
+                }
+                catch (Exception ex) { failure = ex.Message; }
+                try
+                {
+                    BeginInvoke((Action)(() =>
+                    {
+                        if (relaunch) { SwapAndRestart(wasPanel, wasSite); return; }
+                        updating = false;
+                        updateButton.Enabled = true;
+                        updateButton.Text = "Check for updates";
+                        RefreshVersion();
+                        if (failure != null)
+                        {
+                            panel.Write("Update failed: " + failure);
+                            MessageBox.Show(this, "The update failed: " + failure, "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        if (wasPanel) Start(panel);
+                        if (wasSite) Start(site);
+                        foreach (var s in services) RefreshCard(s);
+                    }));
+                }
+                catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        static string NewExePath { get { return Path.Combine(Program.Root, "Andromeda Services.new.exe"); } }
+
+        // Compiles the updated source next to the running app. Returns null when it worked.
+        string BuildNewExe()
+        {
+            var csc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"Microsoft.NET\Framework64\v4.0.30319\csc.exe");
+            if (!File.Exists(csc)) csc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"Microsoft.NET\Framework\v4.0.30319\csc.exe");
+            if (!File.Exists(csc)) return "the .NET Framework C# compiler wasn't found";
+            try { File.Delete(NewExePath); } catch { }
+            var r = Run(csc, "/nologo /codepage:65001 /target:winexe /optimize+ /win32icon:services\\andromeda.ico /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.Core.dll \"/out:" + NewExePath + "\" services\\AndromedaServices.cs", panel, 120000);
+            return r.Ok && File.Exists(NewExePath) ? null : r.LastLine;
+        }
+
+        // A tiny script waits for this app to exit, puts the new .exe in place and opens it again.
+        void SwapAndRestart(bool wasPanel, bool wasSite)
+        {
+            var exe = Application.ExecutablePath;
+            var pid = Process.GetCurrentProcess().Id.ToString();
+            var script = Path.Combine(Path.GetTempPath(), "andromeda-services-update.cmd");
+            var start = new List<string>();
+            if (wasPanel) start.Add("panel");
+            if (wasSite) start.Add("site");
+            File.WriteAllText(script,
+                "@echo off\r\n" +
+                ":wait\r\n" +
+                "tasklist /FI \"PID eq " + pid + "\" 2>nul | find \"" + pid + "\" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n" +
+                "move /y \"" + NewExePath + "\" \"" + exe + "\" >nul\r\n" +
+                "start \"\" \"" + exe + "\" --after-update --start=" + (start.Count > 0 ? string.Join(",", start.ToArray()) : "none") + "\r\n" +
+                "del \"%~f0\"\r\n");
+            Process.Start(new ProcessStartInfo("cmd.exe", "/c \"" + script + "\"") { CreateNoWindow = true, UseShellExecute = false, WorkingDirectory = Program.Root });
+            exiting = true;
+            tray.Visible = false;
+            Close();
+            Application.Exit();
         }
 
         // Catches services started elsewhere, and ones whose "running" line was missed.
         void PollPorts()
         {
-            foreach (var s in new[] { panel, site })
+            foreach (var s in services)
             {
                 if (s.Alive && (s.State == State.Starting || s.State == State.Waiting) && PortInUse(s.Port())) s.SetState(State.Running);
-                else if (!s.Alive && (s.State == State.Stopped || s.State == State.External)) s.SetState(PortInUse(s.Port()) ? State.External : State.Stopped);
+                else if (!s.Alive && !updating && (s.State == State.Stopped || s.State == State.External)) s.SetState(PortInUse(s.Port()) ? State.External : State.Stopped);
                 else RefreshCard(s);
             }
         }
@@ -513,14 +1071,28 @@ namespace Andromeda
                 using (var c = new TcpClient())
                 {
                     var r = c.BeginConnect("127.0.0.1", port, null, null);
-                    bool ok = r.AsyncWaitHandle.WaitOne(300) && c.Connected;
-                    return ok;
+                    return r.AsyncWaitHandle.WaitOne(300) && c.Connected;
                 }
             }
             catch { return false; }
         }
 
         // ---------- window, tray, exit ----------
+        [DllImport("dwmapi.dll")]
+        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        static void DarkTitleBar(IntPtr hwnd)
+        {
+            try
+            {
+                int on = 1;
+                if (DwmSetWindowAttribute(hwnd, 20, ref on, 4) != 0) DwmSetWindowAttribute(hwnd, 19, ref on, 4); // dark title bar (newer / older Windows 10)
+                int round = 2;
+                DwmSetWindowAttribute(hwnd, 33, ref round, 4); // rounded corners on Windows 11
+            }
+            catch { } // not Windows 10/11
+        }
+
         void ShowWindow()
         {
             Show();
@@ -547,6 +1119,7 @@ namespace Andromeda
 
         void ExitApp()
         {
+            if (updating) return;
             if (panel.Alive || site.Alive)
             {
                 var answer = MessageBox.Show(this, "Stop Andromeda Hosting (and the game servers it runs) and the WotLK website, then exit?", "Andromeda Services", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
@@ -558,7 +1131,7 @@ namespace Andromeda
             Text = "Andromeda Services — stopping…";
             var t = new Thread(() =>
             {
-                StopAllAndWait(330);
+                StopAllAndWait(330, false);
                 try { BeginInvoke((Action)(() => { tray.Visible = false; Close(); Application.Exit(); })); } catch { }
             });
             t.IsBackground = true;
@@ -571,23 +1144,25 @@ namespace Andromeda
         }
 
         // ---------- config ----------
+        static IEnumerable<string> OnPath(string exe)
+        {
+            foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
+            {
+                string p = null;
+                try { p = Path.Combine(dir.Trim().Trim('"'), exe); } catch { }
+                if (p != null && File.Exists(p)) yield return p;
+            }
+        }
+
         static string FindNode()
         {
             var custom = Environment.GetEnvironmentVariable("ANDROMEDA_NODE"); // a Node.js somewhere unusual
             if (!string.IsNullOrEmpty(custom) && File.Exists(custom)) return custom;
-            foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
-            {
-                try
-                {
-                    var p = Path.Combine(dir.Trim().Trim('"'), "node.exe");
-                    if (File.Exists(p)) return p;
-                }
-                catch { }
-            }
+            foreach (var p in OnPath("node.exe")) return p;
             foreach (var p in new[] {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs", "node.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "nodejs", "node.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"nodejs\node.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"nodejs\node.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\nodejs\node.exe"),
             })
             {
                 if (File.Exists(p)) return p;
@@ -630,15 +1205,20 @@ namespace Andromeda
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         static bool RunAtLogin()
         {
-            using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue("Andromeda Services") != null;
+            try { using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue("Andromeda Services") != null; }
+            catch { return false; }
         }
         static void SetRunAtLogin(bool on)
         {
-            using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
+            try
             {
-                if (on) k.SetValue("Andromeda Services", "\"" + Application.ExecutablePath + "\"");
-                else k.DeleteValue("Andromeda Services", false);
+                using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
+                {
+                    if (on) k.SetValue("Andromeda Services", "\"" + Application.ExecutablePath + "\"");
+                    else k.DeleteValue("Andromeda Services", false);
+                }
             }
+            catch { }
         }
     }
 }
