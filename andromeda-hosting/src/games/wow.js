@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const ddns = require('../services/ddns');
 const { Conf, parseDbInfo, describeConf, looksBoolean } = require('../util/conf');
 const { findFiles } = require('../util/paths');
@@ -192,6 +192,43 @@ async function stopDb(instance) {
     instance.appendConsole('[panel] MySQL did not stop in time — forcing it.');
     instance.killAux('mysql');
   }
+}
+
+// After "Halting process..." (characters and bots are saved by then) mangosd on Windows waits for
+// its console thread, which sits reading stdin. It wakes it by typing into the console window, but
+// the panel gives it a pipe instead of a console, so that never arrives and mangosd hangs there.
+// Sending empty lines and closing stdin lets the thread finish; if it still hasn't exited after a
+// minute, only mangosd is ended (MySQL is then shut down cleanly as usual).
+function unblockConsoleOnHalt(instance, child) {
+  let timers = [];
+  const onLine = ({ line }) => {
+    if (!/Halting process/i.test(line) || timers.length) return;
+    const poke = () => {
+      try {
+        if (child.stdin.writable) child.stdin.write('\n');
+      } catch {}
+    };
+    timers = [
+      setTimeout(poke, 500),
+      setTimeout(poke, 2000),
+      setTimeout(() => {
+        try {
+          child.stdin.end();
+        } catch {}
+      }, 4000),
+      setTimeout(() => {
+        if (instance.child !== child) return;
+        instance.appendConsole('[panel] The world server saved and halted but did not exit — ending it.');
+        if (process.platform === 'win32' && child.pid) execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+        else child.kill('SIGKILL');
+      }, 60000),
+    ];
+  };
+  instance.on('console', onLine);
+  child.once('exit', () => {
+    instance.off('console', onLine);
+    timers.forEach(clearTimeout);
+  });
 }
 
 function botPrefix(server) {
@@ -428,7 +465,9 @@ const wow = {
   async stop(instance) {
     instance.writeStdin('saveall');
     await sleep(3000);
-    if (instance.child) instance.writeStdin('server shutdown 0');
+    if (!instance.child) return;
+    unblockConsoleOnHalt(instance, instance.child);
+    instance.writeStdin('server shutdown 0');
   },
 
   async postStop(instance) {
