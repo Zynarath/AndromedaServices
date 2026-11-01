@@ -1,0 +1,24 @@
+{
+  "name": "andromeda-hosting",
+  "version": "2.0.0",
+  "description": "Self-hosted game server control panel (ARK, modded Minecraft / CurseForge) for your home PC",
+  "main": "src/index.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "create-admin": "node src/cli.js create-admin",
+    "reset-password": "node src/cli.js reset-password",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "archiver": "7.0.1",
+    "express": "5.2.1",
+    "mysql2": "3.24.5",
+    "ws": "8.22.0",
+    "yauzl": "3.4.0"
+  }
+}

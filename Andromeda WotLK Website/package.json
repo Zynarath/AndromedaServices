@@ -1,0 +1,20 @@
+{
+  "name": "andromeda-wotlk-website",
+  "version": "1.0.0",
+  "description": "World of Warcraft: Wrath of the Lich King website for an SPP Classics / cMaNGOS realm: news, armory, realm status, who's online, honor, auction house and sign-up",
+  "main": "src/index.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "mysql2": "3.24.5",
+    "yauzl": "3.4.0"
+  }
+}
