@@ -30,6 +30,24 @@ function newsItem(topic, i) {
 </div>`;
 }
 
+// Shown on the front page until the realm has news of its own.
+function welcome(ctx) {
+  const title = ctx.site.title;
+  return {
+    topic_id: 'welcome',
+    topic_name: `Welcome to ${title}`,
+    topic_poster: 'Andromeda Services',
+    topic_posted: Math.floor(Date.now() / 1000),
+    message: html`<p>Welcome to <b>${title}</b>, a World of Warcraft: Wrath of the Lich King realm run with Andromeda Services.</p>
+<ul>
+  <li><a href="/connect">How to play</a>: set your realmlist and log in with your game account.</li>
+  <li><a href="/server/realmstatus">Realm status</a> and <a href="/server/online">who's online</a>, players and bots alike.</li>
+  <li>The <a href="/armory">armory</a>: look up characters, their gear and talents, and guilds.</li>
+</ul>
+<p>News from the realm's GMs will show here.</p>`.toString(),
+  };
+}
+
 async function rightColumn(ctx) {
   const r = await realm.info();
   const quick = [
@@ -77,7 +95,7 @@ async function front(req, ctx) {
   <img class="banner-top" src="/templates/wotlk/images/banner_top.png" alt="" width="470"><br>
 </div>
 <div class="module-container">
-  ${items.length ? items.map(newsItem) : html`<div class="news-empty">No news yet.${ctx.account && ctx.account.gmlevel >= 3 ? html` <a href="/admin">Post the first one</a>.` : ''}</div>`}
+  ${items.length ? items.map(newsItem) : html`${newsItem(welcome(ctx), 0)}${ctx.account && ctx.account.gmlevel >= 3 ? html`<div class="news-empty"><a href="/admin">Post your first news</a> to replace this welcome.</div>` : ''}`}
 </div>
 <div class="news-archive-link"><div class="news-archive-button"><a href="/news"><span>News Archives</span></a></div></div>
 </div>`;

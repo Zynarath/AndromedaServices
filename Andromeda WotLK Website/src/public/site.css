@@ -65,13 +65,13 @@ pre.realmlist { background: #1d1c1b; color: #f4c400; padding: 8px 12px; border: 
 .guild-info { white-space: pre-wrap; }
 
 /* When SPP's website graphics aren't installed the page still works, just plainly. */
-html.no-spp body { background: #12100e; color: #e8dcc0; font-family: Verdana, Arial, sans-serif; font-size: 12px; }
-html.no-spp #hp { width: 980px; margin: 0 auto; text-align: left; }
-html.no-spp #navwrapper { width: 180px; }
-html.no-spp #leftmenu a.menufiller { display: block; color: #f4c400; padding: 3px 8px; }
-html.no-spp .contentdiv { background: #f3e6c8; color: #2a1d0a; }
-html.no-spp img { max-width: 100%; }
-html.no-spp img[src*='pixel'], html.no-spp .statue { display: none; }
+html.no-assets body { background: #12100e; color: #e8dcc0; font-family: Verdana, Arial, sans-serif; font-size: 12px; }
+html.no-assets #hp { width: 980px; margin: 0 auto; text-align: left; }
+html.no-assets #navwrapper { width: 180px; }
+html.no-assets #leftmenu a.menufiller { display: block; color: #f4c400; padding: 3px 8px; }
+html.no-assets .contentdiv { background: #f3e6c8; color: #2a1d0a; }
+html.no-assets img { max-width: 100%; }
+html.no-assets img[src*='pixel'], html.no-assets .statue { display: none; }
 .banner-top { margin-top: -55px; margin-bottom: 30px; }
 
 /* Population on the realm status table: the plain red/orange/green are hard to read on parchment. */

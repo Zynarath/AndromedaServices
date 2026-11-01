@@ -1,10 +1,12 @@
 'use strict';
 // News lives where SPP's site kept it: topics in the news forum (f_topics, forum_id 1) with the text
-// in the topic's first post (f_posts), in the login database. Existing SPP news keeps showing.
+// in the topic's first post (f_posts), in the login database. Posts by your own accounts show;
+// the changelog posts SPP ships with (posted as "SPP Team") are hidden, not deleted.
 const data = require('./data');
 const { textToHtml } = require('./html');
 
 const NEWS_FORUM = 1;
+const NOT_SPP = "t.topic_poster NOT LIKE 'SPP%'";
 
 async function ensureTables() {
   await data.q('login', `CREATE TABLE IF NOT EXISTS f_topics (
@@ -45,8 +47,8 @@ async function list(offset = 0, limit = 10) {
   try {
     const rows = await data.q('login', `SELECT t.topic_id, t.topic_name, t.topic_poster, t.topic_posted,
       (SELECT p.message FROM f_posts p WHERE p.topic_id = t.topic_id ORDER BY p.posted, p.post_id LIMIT 1) AS message
-      FROM f_topics t WHERE t.forum_id = ? ORDER BY t.topic_posted DESC, t.topic_id DESC LIMIT ?, ?`, [NEWS_FORUM, offset, limit]);
-    const total = Number((await data.q('login', 'SELECT COUNT(*) AS n FROM f_topics WHERE forum_id = ?', [NEWS_FORUM]))[0].n);
+      FROM f_topics t WHERE t.forum_id = ? AND ${NOT_SPP} ORDER BY t.topic_posted DESC, t.topic_id DESC LIMIT ?, ?`, [NEWS_FORUM, offset, limit]);
+    const total = Number((await data.q('login', `SELECT COUNT(*) AS n FROM f_topics t WHERE t.forum_id = ? AND ${NOT_SPP}`, [NEWS_FORUM]))[0].n);
     return { rows, total };
   } catch (err) {
     if (missingTable(err)) return { rows: [], total: 0 };

@@ -88,7 +88,7 @@ function menu(ctx) {
       ['Armory', '/armory'],
     ]],
     ['7', 'menucommunity', [site.discord && ['Discord', site.discord]]],
-    ['8', 'menusupport', [['In-game commands', '/server/commands'], ['Bug tracker', 'https://github.com/celguar/spp-classics-cmangos/issues']]],
+    ['8', 'menusupport', [['In-game commands', '/server/commands'], ['Bug tracker', 'https://github.com/Zynarath/AndromedaServices/issues']]],
   ];
   return sections
     .map(([n, id, links]) => [n, id, links.filter(Boolean)])
@@ -129,7 +129,7 @@ const CSS = ['newhp.css', 'newhp_basic.css', 'newhp_icons.css', 'newhp_layout.cs
 function page(ctx, body) {
   const title = ctx.title ? `${ctx.site.title} - ${ctx.title}` : ctx.site.title;
   return html`<!DOCTYPE html>
-<html lang="en"${ctx.assetsMissing ? raw(' class="no-spp"') : ''}>
+<html lang="en"${ctx.assetsMissing ? raw(' class="no-assets"') : ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1040">
@@ -185,6 +185,7 @@ ${(ctx.extraCss || []).map((f) => html`<link rel="stylesheet" href="${f}">`)}
       <div id="blizzlogo-bot"><img alt="Blizzard" border="0" src="${TPL}/images/bot-blizzlogo.gif"></div>
       <span class="textlinks"><small>
         ${ctx.site.title}<br>
+        Powered by <a href="https://github.com/Zynarath/AndromedaServices" rel="noopener noreferrer" target="_blank">Andromeda Services</a><br>
         <b>World of Warcraft images and logos are copyright Blizzard Entertainment.</b>
       </small></span><br><br><br>
     </div></center>

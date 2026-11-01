@@ -80,12 +80,12 @@ line with that address, taken from the realm's own settings.
 
 | Menu | Page |
 |---|---|
-| News | Front page news (SPP's existing news shows too), news archive |
+| News | Front page news and archive. SPP's own changelog posts ("SPP Team") are hidden; until you post news, a welcome post from Andromeda Services shows |
 | Account | Log in, new account (if sign-up is on), my account (your characters, change password), Admin panel (GM level 3+) |
 | Game guide | How to play: the realmlist line, with your realm's real address |
 | Workshop | Realm status, honor ranking, players online, characters, statistics (factions, races, classes, levels), auction house, armory |
 | Community | Your Discord link |
-| Support | In-game commands (GM commands only for GM accounts), bug tracker (SPP's GitHub) |
+| Support | In-game commands (GM commands only for GM accounts), bug tracker (Andromeda Services on GitHub) |
 
 Most lists can show **everyone**, **players only** or **bots only**, since thousands of
 Mangosbot bots also live on the realm.

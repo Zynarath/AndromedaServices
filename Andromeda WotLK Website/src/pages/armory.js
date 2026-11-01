@@ -109,7 +109,7 @@ async function character(req, ctx) {
   const body = html`${box(null, html`<div class="char-header">
   <img class="char-portrait" src="${portrait(c)}" width="64" height="64" alt="">
   <div class="char-title">
-    <h2 style="color:${color}">${c.name}${bot ? html` <small class="bot-tag" title="A Mangosbot random bot">bot</small>` : ''}</h2>
+    <h2 style="color:${color}">${c.name}${bot ? html` <small class="bot-tag" title="A random bot">bot</small>` : ''}</h2>
     <div>Level ${c.level} ${gd.RACES[c.race] || ''} <span style="color:${color}">${gd.CLASSES[c.class] || ''}</span> · ${gd.faction(c.race)}</div>
     ${guild ? html`<div>&lt;<a href="/armory/guild/${guild.guildid}">${guild.name}</a>&gt;${guild.rname ? ` · ${guild.rname}` : ''}</div>` : ''}
     <div>${c.online ? html`<b style="color: rgb(35, 67, 3);">Online</b> in ${gd.zoneName(c.zone)}` : html`Last seen in ${gd.zoneName(c.zone)}`}</div>
