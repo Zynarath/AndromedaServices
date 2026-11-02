@@ -303,21 +303,31 @@ const FIELDS = [
   { file: 'mangosd.conf', key: 'MapUpdate.Threads', label: 'Map update threads', type: 'number', group: 'Performance', hint: 'At most your CPU threads minus one' },
   { file: 'mangosd.conf', key: 'PlayerSave.Interval', label: 'Save players every (ms)', type: 'number', group: 'Performance' },
   { file: 'mangosd.conf', key: 'Visibility.Distance.Continents', label: 'View distance on continents (yards)', type: 'number', group: 'Performance' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.Enabled', label: 'Bots enabled', type: BOOL, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotAutologin', label: 'Random bots log in automatically', type: BOOL, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.Enabled', label: 'Bots enabled', type: BOOL, def: false, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotAutologin', label: 'Random bots log in automatically', type: BOOL, def: true, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MinRandomBots', label: 'Minimum random bots', type: 'number', group: 'Bots', hint: 'SPP default 1000. Lower it if the server lags. Changing the count later needs a random bot reset.' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MaxRandomBots', label: 'Maximum random bots', type: 'number', group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMinLevel', label: 'Bot minimum level', type: 'number', group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMaxLevel', label: 'Bot maximum level', type: 'number', group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinBG', label: 'Bots join battlegrounds', type: BOOL, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AllowGuildBots', label: 'Bot guilds', type: BOOL, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.SyncQuestWithPlayer', label: 'Grouped bots complete quests with you', type: BOOL, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AutoLearnTrainerSpells', label: 'Bots learn trainer spells on level-up', type: BOOL, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AutoLearnQuestSpells', label: 'Bots learn quest spells', type: BOOL, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, def: true, group: 'Bots', hint: "Bots only queue for dungeons a real player is queued for: queue yourself and bots of that dungeon's level (15+) fill the other spots within a minute or two. Bots never start a dungeon group on their own." },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinBG', label: 'Bots join battlegrounds', type: BOOL, def: true, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AllowGuildBots', label: 'Bot guilds', type: BOOL, def: true, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.SyncQuestWithPlayer', label: 'Grouped bots complete quests with you', type: BOOL, def: false, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AutoLearnTrainerSpells', label: 'Bots learn trainer spells on level-up', type: BOOL, def: false, group: 'Bots' },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AutoLearnQuestSpells', label: 'Bots learn quest spells', type: BOOL, def: false, group: 'Bots' },
   { file: 'mangosd.conf', key: 'WorldServerPort', label: 'World port (TCP)', type: 'number', group: 'Network' },
   { file: 'realmd.conf', key: 'RealmServerPort', label: 'Login port (TCP)', type: 'number', group: 'Network' },
 ];
+
+// A switch with no "Key = value" line in the file (missing, or only a commented-out "# Key = 1") runs
+// with its default: the commented-out value if there is one, else the server's own default (def).
+// The form must show that, or saving it would write "= 0" and turn the option off without anyone
+// touching it (this is how bots stopped using the dungeon finder).
+function boolDefault(conf, f) {
+  const re = new RegExp(`^#\\s*${f.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=\\s*"?([01])\\b`, 'i');
+  const line = conf.lines.find((l) => re.test(l));
+  return line ? re.exec(line)[1] === '1' : !!f.def;
+}
 
 // Every other option in the server's own .conf files, as "All options" sections (admin only).
 // Left out: database logins, folders, the remote admin/SOAP interfaces, the console the panel talks
@@ -649,7 +659,7 @@ const wow = {
     for (const f of FIELDS) {
       cache[f.file] = cache[f.file] || readConf(p.confDir, f.file);
       const v = cache[f.file].get(f.key);
-      out[`conf.${f.file}.${f.key}`] = f.type === BOOL ? v === '1' : v ?? '';
+      out[`conf.${f.file}.${f.key}`] = f.type === BOOL ? (v === undefined ? boolDefault(cache[f.file], f) : v === '1') : v ?? '';
     }
     for (const e of confOptions(server)) out[`conf.${e.file}.${e.key}`] = e.value ?? '';
     return out;
@@ -676,7 +686,9 @@ const wow = {
         v = Number(v);
       } else if (f.type === 'select' && !f.options.some((o) => o.value === String(v))) continue;
       files[f.file] = files[f.file] || readConf(p.confDir, f.file);
-      if (sameConfValue(files[f.file].get(f.key), v)) continue; // leave untouched lines exactly as they are
+      const current = files[f.file].get(f.key);
+      if (sameConfValue(current, v)) continue; // leave untouched lines exactly as they are
+      if (f.type === BOOL && current === undefined && !!v === boolDefault(files[f.file], f)) continue; // already the default
       files[f.file].set(f.key, v);
     }
     // "All options": only keys that are really in the file (set or commented out), admins only.

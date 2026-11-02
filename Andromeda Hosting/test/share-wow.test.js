@@ -125,6 +125,27 @@ test('WoW: install enables the console; settings write to the .conf files safely
   assert.equal(wow.connectAddress(server, 'play.example.com'), 'set realmlist play.example.com');
 });
 
+test('WoW: saving the form leaves bot switches that are missing from the file at their defaults', () => {
+  const root = fakeSpp();
+  const confDir = wow.detect(root).confDir;
+  const botsConf = path.join(confDir, 'aiplayerbot.conf');
+  // No RandomBotJoinLfg line (the bots default to on), RandomBotJoinBG only as a commented-out default.
+  fs.writeFileSync(botsConf, 'AiPlayerbot.Enabled = 1\n# AiPlayerbot.RandomBotJoinBG = 1\n# AiPlayerbot.SyncQuestWithPlayer = 0\n');
+  const server = { id: 'w4', name: 'WoW', game: 'wow', wow: wow.defaults({ name: 'WoW', wow: { root } }) };
+  const v = wow.readSettings(server);
+  assert.equal(v['conf.aiplayerbot.conf.AiPlayerbot.RandomBotJoinLfg'], true, 'shown as on, like the bots run it');
+  assert.equal(v['conf.aiplayerbot.conf.AiPlayerbot.RandomBotJoinBG'], true);
+  assert.equal(v['conf.aiplayerbot.conf.AiPlayerbot.SyncQuestWithPlayer'], false);
+  // The settings form sends every field back, changed or not.
+  const before = fs.readFileSync(botsConf, 'utf8');
+  wow.writeSettings(server, v);
+  assert.equal(fs.readFileSync(botsConf, 'utf8'), before, 'nothing written when nothing changed');
+  // Turning one off does write it.
+  wow.writeSettings(server, { ...v, 'conf.aiplayerbot.conf.AiPlayerbot.RandomBotJoinLfg': false });
+  assert.match(fs.readFileSync(botsConf, 'utf8'), /\nAiPlayerbot\.RandomBotJoinLfg = 0\n?$/);
+  assert.equal(wow.readSettings(server)['conf.aiplayerbot.conf.AiPlayerbot.RandomBotJoinLfg'], false);
+});
+
 test('WoW: "All options" lists every key from the .conf files with their own descriptions (admins only)', () => {
   const { describeConf, looksBoolean } = require('../src/util/conf');
   // Shaped like cMaNGOS's mangosd.conf.dist and aiplayerbot.conf.dist.
