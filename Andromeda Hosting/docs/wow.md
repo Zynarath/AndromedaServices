@@ -84,7 +84,7 @@ SPP folder.
 
 | Section | What you can change |
 |---|---|
-| Realm | Realm name, the address announced to players, whether the panel starts the bundled MySQL |
+| Realm | Realm name, the address announced to players, whether the panel starts the bundled MySQL, and the server program: SPP original or the Andromeda server (dungeon finder matchmaking with bots) |
 | Rates | XP (kill, quest, explore, rested), gold and item drop rates, reputation, honor |
 | World | Realm type (PvP/PvE/RP), max and starting level, starting money, player limit, cinematics, cross-faction play |
 | Bots | Bots on/off, auto-login, min/max random bots (SPP default 1000; lower it if the server lags), bot level range, bots in the dungeon finder and battlegrounds, bot guilds, quest sharing, auto-learning spells |
@@ -95,30 +95,45 @@ says the random bots need a reset to take effect.
 
 ### Dungeons with bots
 
-**Queueing alone never pops on this server.** The dungeon finder in cMaNGOS WotLK (the server SPP
-runs) has no matchmaking: it only starts a dungeon for a queue entry that already holds a full
-group of 5. Everyone who queues alone, you and each bot, waits in their own entry forever, so the
-queue stays stuck after you join. SPP's author confirms it only works with a full group. This is in
-the server program itself (`LFGQueue.cpp`), so no setting in the panel or the config files fixes it.
+SPP's own server program can't put you in a dungeon group with bots: the dungeon finder in
+cMaNGOS WotLK has no matchmaking, and only starts a dungeon for a group of 5 that queued together.
+Queueing alone stays stuck forever. The **Andromeda server** fixes that.
 
-What works: **make the group first, then queue.**
+**With the Andromeda server** (Settings → Realm → **Server program** → *Andromeda server*):
+
+1. Restart the server. The first start downloads it from
+   [github.com/Zynarath/mangos-wotlk](https://github.com/Zynarath/mangos-wotlk/releases) (the
+   Console shows `Using the Andromeda server 1.1.0`).
+2. Open the dungeon finder (`I`), pick your role and a dungeon (or *Random Dungeon*) and queue,
+   alone or with friends.
+3. Within about a minute, bots of your faction and level queue for the same dungeon, and the server
+   puts everyone together as 1 tank, 1 healer and 3 damage. Accept the *dungeon ready* window and
+   you're teleported in with your new group.
+
+The Andromeda server is SPP's own server program with our changes, and it uses SPP's settings,
+maps and characters, so you can switch back to *SPP original* any time (restart to apply). It
+updates itself: each start checks for a newer version and installs it next to SPP's programs, in
+`Server\Binaries\wotlk\Andromeda\<version>`. Offline, the installed one is used.
+
+A group always has a real player in it: bots never go into a dungeon by themselves. Alliance and
+Horde aren't mixed unless *Cross-faction groups* (Settings → World) is on.
+
+**With SPP original**, make the group first, then queue:
 
 1. Invite 4 bots near your level: `/invite BotName`, or right-click a bot and choose *Invite*. Use
    `/who` with a level range and class to find them (e.g. `/who 20-24 priest`). Free random bots
    accept invites from players, but they can say no if your level or gear score is far below
    theirs.
-2. Aim for **1 tank, 1 healer and 3 damage** (the dungeon finder checks this): a warrior, paladin
-   or druid to tank, a priest, paladin, shaman or druid to heal.
-3. Open the dungeon finder (`I`), pick your role and the dungeon (or *Random Dungeon*) and queue.
-   The bots answer the role check and accept the dungeon, and everyone is teleported in.
+2. Aim for **1 tank, 1 healer and 3 damage**: a warrior, paladin or druid to tank, a priest,
+   paladin, shaman or druid to heal.
+3. Queue as the group. The bots answer the role check and accept the dungeon.
 
-Or skip the dungeon finder: with the group made, walk or fly to the instance portal (or have a GM
-bring the group to them with `.groupgo YourName`).
+Or skip the dungeon finder: walk or fly to the instance portal with your group (or have a GM bring
+the group to them with `.groupgo YourName`).
 
-**Bots use the dungeon finder** (Settings → Bots) makes random bots queue for dungeons that
-players are queued for (the console shows `queues LFG, Dungeon as ...`), but because of the missing
-matchmaking those queues don't pop either. Older panel versions could turn this switch off when you
-saved the settings form and SPP's `aiplayerbot.conf` had no `AiPlayerbot.RandomBotJoinLfg` line.
+**Bots use the dungeon finder** (Settings → Bots) must be on for bots to queue with you. Older
+panel versions could turn this switch off when you saved the settings form and SPP's
+`aiplayerbot.conf` had no `AiPlayerbot.RandomBotJoinLfg` line.
 
 ## Console, stop, backups
 

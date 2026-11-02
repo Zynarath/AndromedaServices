@@ -1,6 +1,6 @@
 # Andromeda Hosting
 
-Version 2.1.1 · part of [Andromeda Services](../README.md)
+Version 2.2.0 · part of [Andromeda Services](../README.md)
 
 A self-hosted game server control panel, like G-Portal or Nitrado, that runs on **your own PC**.
 You and your friends sign in from a browser, start and stop servers, change settings, install and
@@ -21,7 +21,7 @@ There are no monthly hosting fees; your only cost is electricity.
 | **7 Days to Die** (Windows/Linux) | SteamCMD install/update (stable or experimental), 40+ settings written to the server config (world, difficulty, zombies, blood moons, loot, land claims), saves in the server's own folder, telnet console, player list and clean shutdown. **Mods**: install from a mod's .zip, switch mods on/off, warning when a code mod needs Easy Anti-Cheat off |
 | **Valheim** (Windows/Linux) | SteamCMD install/update, world name, password, crossplay, presets and world modifiers, admin / allow / ban lists, autosave interval; stops with Ctrl+C so the world is saved |
 | **Rust** (Windows/Linux), vanilla or **modded with uMod (Oxide)** | SteamCMD install/update with uMod reinstalled after every game update, procedural or custom maps, RCON console and player list, saves on stop. Browse and install uMod plugins from the panel (update checks, on/off, upload your own .cs), and edit each plugin's settings with readable names; a running server reloads the plugin right away. See [docs/rust.md](docs/rust.md) |
-| **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md). A separate **WotLK website** (SPP's site rebuilt with the same look, its security problems fixed) runs next to it from Andromeda Services: news, armory, realm status, who's online, honor, auction house, invite-only sign-up. See [its README](../Andromeda%20WotLK%20Website/README.md) |
+| **World of Warcraft: WotLK 3.3.5a with bots** (Windows; cMaNGOS builds on Linux) | Runs SPP Classics (cMaNGOS + Mangosbot playerbots): starts MySQL → login → world in order, edits rates/bots/realm settings, optionally runs the **Andromeda server** (SPP's server with dungeon finder matchmaking, so bots fill your group), live console, friends-only game accounts, SQL backups. See [docs/wow.md](docs/wow.md). A separate **WotLK website** (SPP's site rebuilt with the same look, its security problems fixed) runs next to it from Andromeda Services: news, armory, realm status, who's online, honor, auction house, invite-only sign-up. See [its README](../Andromeda%20WotLK%20Website/README.md) |
 | **ARK: Survival Evolved** (Windows/Linux) | SteamCMD install/update, Workshop mods via `-automanagedmods`, same settings form, RCON console and player list as ASA |
 
 The panel downloads the right Java version for each Minecraft server by itself (Java 8/17/21/25 from

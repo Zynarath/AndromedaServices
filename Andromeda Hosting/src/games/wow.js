@@ -10,6 +10,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execFile } = require('child_process');
 const ddns = require('../services/ddns');
+const wowbuild = require('../services/wowbuild');
 const { Conf, parseDbInfo, describeConf, looksBoolean } = require('../util/conf');
 const { findFiles } = require('../util/paths');
 const { HttpError, sleep } = require('../util/misc');
@@ -80,6 +81,16 @@ function paths(server) {
   const d = detect(server.wow.root);
   if (!d.layout) throw new HttpError(400, d.problems.join(' '));
   return d;
+}
+
+// Where mangosd and realmd run from: SPP's own programs, or the Andromeda server build (SPP layout
+// only) when Settings → Realm → Server program says so. Both use SPP's configs, maps and databases.
+const usesAndromedaBuild = (server, p) => p.layout === 'spp' && server.wow.build === 'andromeda';
+function programDir(server, p) {
+  if (!usesAndromedaBuild(server, p)) return p.bin;
+  const build = wowbuild.current(p.bin);
+  if (!build) throw new HttpError(400, 'The Andromeda server is not installed yet. Start the server once while online to download it.');
+  return build.dir;
 }
 
 function readConf(dir, file) {
@@ -309,7 +320,7 @@ const FIELDS = [
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MaxRandomBots', label: 'Maximum random bots', type: 'number', group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMinLevel', label: 'Bot minimum level', type: 'number', group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMaxLevel', label: 'Bot maximum level', type: 'number', group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, def: true, group: 'Bots', hint: "cMaNGOS WotLK's dungeon finder has no matchmaking: it only starts a dungeon for a full group of 5 that queued together, so queueing alone (or with bots queueing on their own) never pops. Invite 4 bots near your level first (1 tank, 1 healer, 3 damage), then queue as a group. See docs/wow.md." },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, def: true, group: 'Bots', hint: "Bots queue for the dungeons players queue for. With Settings → Realm → Server program → Andromeda server, they're put in a group with you (1 tank, 1 healer, 3 damage). SPP's original server only starts a dungeon for a full group of 5 that queued together: invite 4 bots first, then queue as a group. See docs/wow.md." },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinBG', label: 'Bots join battlegrounds', type: BOOL, def: true, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AllowGuildBots', label: 'Bot guilds', type: BOOL, def: true, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.SyncQuestWithPlayer', label: 'Grouped bots complete quests with you', type: BOOL, def: false, group: 'Bots' },
@@ -394,7 +405,7 @@ const wow = {
   defaults(input) {
     const w = input.wow || {};
     const d = detect(w.root);
-    return { root: d.root, realmName: String(w.realmName || input.name).slice(0, 32), address: '', manageDb: true };
+    return { root: d.root, realmName: String(w.realmName || input.name).slice(0, 32), address: '', manageDb: true, build: 'spp' };
   },
 
   resolveDir(server) {
@@ -459,12 +470,17 @@ const wow = {
     if (lastErr) throw new HttpError(500, `Couldn't reach the login database: ${lastErr.message}`);
     await repairAuctions(instance);
     if (p.layout === 'spp') fs.writeFileSync(path.join(p.confDir, 'name.txt'), server.wow.realmName || server.name);
-    if (!instance.auxRunning('realmd')) instance.spawnAux('realmd', path.join(p.bin, 'realmd' + EXE), [], { cwd: p.confDir });
+    if (usesAndromedaBuild(server, p)) {
+      const say = (m) => instance.appendConsole(`[panel] ${m}`);
+      const build = await wowbuild.ensure(p.bin, { info: say, warn: say });
+      say(`Using the Andromeda server ${build.version} (Settings → Realm → Server program).`);
+    }
+    if (!instance.auxRunning('realmd')) instance.spawnAux('realmd', path.join(programDir(server, p), 'realmd' + EXE), [], { cwd: p.confDir });
   },
 
   async buildLaunch(server) {
     const p = paths(server);
-    return { command: path.join(p.bin, 'mangosd' + EXE), args: [], cwd: p.confDir };
+    return { command: path.join(programDir(server, p), 'mangosd' + EXE), args: [], cwd: p.confDir };
   },
 
   async probeReady(server) {
@@ -627,6 +643,19 @@ const wow = {
       { key: 'wow.address', label: 'Address players connect to', type: 'text', hint: `Blank = the panel's public address (${ddns.publicAddress() || 'not set — 127.0.0.1'}). Use a hostname like play.example.com.` }
     );
     if (p.dbDir) groups.get('Realm').push({ key: 'wow.manageDb', label: 'Start/stop the bundled MySQL with the server', type: 'bool' });
+    if (p.layout === 'spp') {
+      const have = wowbuild.current(p.bin);
+      groups.get('Realm').push({
+        key: 'wow.build',
+        label: 'Server program',
+        type: 'select',
+        options: [
+          { value: 'spp', label: "SPP original" },
+          { value: 'andromeda', label: 'Andromeda server (dungeon finder matchmaking)' },
+        ],
+        hint: `The Andromeda server is SPP's WotLK server with our changes; the dungeon finder puts you in groups with bots. It downloads from github.com/${wowbuild.REPO} when the server starts and updates itself on later starts. Both use the same settings, maps and characters, so you can switch back any time. Applies on the next restart.${have ? ` Installed: ${have.version}.` : ''}`,
+      });
+    }
     for (const f of FIELDS) {
       if (f.file === 'aiplayerbot.conf' && !fs.existsSync(path.join(p.confDir, 'aiplayerbot.conf'))) continue;
       if (!groups.has(f.group)) groups.set(f.group, []);
@@ -654,7 +683,7 @@ const wow = {
 
   readSettings(server) {
     const p = paths(server);
-    const out = { 'wow.realmName': server.wow.realmName || server.name, 'wow.address': server.wow.address || '', 'wow.manageDb': !!server.wow.manageDb };
+    const out = { 'wow.realmName': server.wow.realmName || server.name, 'wow.address': server.wow.address || '', 'wow.manageDb': !!server.wow.manageDb, 'wow.build': server.wow.build === 'andromeda' ? 'andromeda' : 'spp' };
     const cache = {};
     for (const f of FIELDS) {
       cache[f.file] = cache[f.file] || readConf(p.confDir, f.file);
@@ -674,6 +703,7 @@ const wow = {
       server.wow.address = a;
     }
     if ('wow.manageDb' in values) server.wow.manageDb = !!values['wow.manageDb'];
+    if (['spp', 'andromeda'].includes(values['wow.build'])) server.wow.build = values['wow.build'];
     const files = {};
     for (const f of FIELDS) {
       const k = `conf.${f.file}.${f.key}`;
