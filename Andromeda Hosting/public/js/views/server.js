@@ -139,7 +139,7 @@ export async function render(root, ctx) {
             ${s.sdtd ? html`<div><dt>World</dt><dd>${s.sdtd.world}</dd></div><div><dt>Anti-cheat</dt><dd>${s.sdtd.eac ? 'on' : 'off'}</dd></div>` : ''}
             ${s.rust ? html`<div><dt>Map</dt><dd>${s.rust.level === 'custom' ? 'Custom map' : s.rust.level === 'Procedural Map' ? `Procedural ${s.rust.worldSize} · seed ${s.rust.seed}` : s.rust.level}</dd></div><div><dt>uMod</dt><dd>${s.rust.oxide ? s.rust.oxideVersion || 'not installed yet' : 'off'}</dd></div>` : ''}
             ${s.vh ? html`<div><dt>World</dt><dd>${s.vh.worldName}</dd></div><div><dt>Crossplay</dt><dd>${s.vh.crossplay ? 'on' : 'off'}</dd></div>` : ''}
-            ${s.cod ? html`<div><dt>Mode</dt><dd>${s.cod.gametypeLabel}${rt.players && rt.players.map ? ' · ' + rt.players.map : ''}</dd></div><div><dt>XP</dt><dd>${s.cod.xpScale}x${s.cod.weaponXp ? ` · weapon ${s.cod.weaponXpScale}x` : ''}</dd></div><div><dt>Bots</dt><dd>${s.cod.bots.enabled ? `fill to ${s.cod.bots.fill}${rt.players && rt.players.bots != null ? ` (${rt.players.bots} in game)` : ''}` : 'off'}</dd></div>` : ''}
+            ${s.cod ? html`<div><dt>Mode</dt><dd>${s.cod.gametypeLabel}${rt.players && rt.players.map ? ' · ' + rt.players.map : ''}</dd></div><div><dt>XP</dt><dd>${s.cod.xpScale}x${s.cod.weaponXp ? ` · weapon ${s.cod.weaponXpScale}x` : ''}</dd></div><div><dt>Bots</dt><dd>${s.cod.bots.enabled ? `${s.cod.nativeBots ? `${s.cod.bots.fill} bots` : `fill to ${s.cod.bots.fill}`}${rt.players && rt.players.bots != null ? ` (${rt.players.bots} in game)` : ''}` : 'off'}</dd></div>` : ''}
           </dl>
           <div id="player-list" class="chips">${(rt.players?.players || []).map((p) => html`<span class="chip">${p}</span>`)}</div>
           ${can('settings')

@@ -75,7 +75,8 @@ function view(inst, user, full = false) {
     out.cod = {
       title: s.cod.title, label: t.label, short: t.short, gametype: s.cod.gametype, gametypeLabel: (t.gametypes.find((g) => g[0] === s.cod.gametype) || [])[1] || s.cod.gametype,
       maps: s.cod.maps.length, port: s.cod.port, bots: s.cod.bots, botsVersion: s.cod.botsVersion, xpScale: s.cod.xpScale, weaponXp: t.weaponXp, weaponXpScale: s.cod.weaponXpScale,
-      pluto: !!t.pluto, hasPassword: !!s.cod.password, hasKey: !!s.cod.plutoKey, botsAvailable: !!t.botRepo, engine: t.exes ? t.short : null,
+      pluto: !!t.pluto, hasPassword: !!s.cod.password, hasKey: !!s.cod.plutoKey, botsAvailable: !!t.botRepo, nativeBots: !!t.nativeBots, engine: t.exes ? t.short : t.t7x ? 'T7x' : null,
+      t7x: !!t.t7x,
     };
     if (perms.includes('settings') || perms.includes('admin')) out.cod.joinPassword = s.cod.password || '';
   }

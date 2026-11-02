@@ -57,6 +57,7 @@ function server(title, extra = {}) {
 
 test('every title defaults to Domination, all base maps shuffled, 4x XP, and bots where Bot Warfare exists', () => {
   for (const [key, t] of Object.entries(cod.TITLES)) {
+    if (t.t7x) continue; // BO3 has its own config layout (tested below)
     const s = server(key);
     const cfg = cod.buildConfig(s);
     assert.match(cfg, /set g_gametype "dom"/, key);
@@ -381,4 +382,87 @@ test('CoD4x install takes the server binary from a release, never the plugins zi
   assert.equal(await tools.installCod4x(dir, { info() {}, warn() {} }), '21.3');
   assert.equal(fs.readFileSync(path.join(dir, binName), 'utf8'), 'server-binary');
   assert.equal(tools.findCod4xExe(dir), path.join(dir, binName));
+});
+
+test('BO3 (T7x): config laid out like the T7x server configs, with the game\'s own bots', () => {
+  const s = server('t7');
+  assert.equal(s.cod.port, 27017);
+  assert.equal(s.cod.bots.enabled, true, 'BO3 has bots without Bot Warfare');
+  assert.equal(s.cod.bots.skill, '1');
+  const cfg = cod.buildConfig(s);
+  assert.match(cfg, /set live_steam_server_name "BO3 Server 1"\r\n/);
+  assert.match(cfg, /set g_password "rex-1234"\r\n/);
+  assert.match(cfg, /set com_maxclients "18"\r\n/);
+  assert.match(cfg, /set sv_lobby_mode "mp"\r\nset sv_skip_lobby "1"\r\n/);
+  assert.match(cfg, /set scr_xpscale "4"\r\n/);
+  assert.match(cfg, /exec "gamedata\/gamesettings\/mp\/gamesettings_dom\.cfg"\r\n/);
+  // 12 bots in a team mode: 6 a side, none free.
+  assert.match(cfg, /set bot_maxAllies "6"\r\nset bot_maxAxis "6"\r\nset bot_maxFree "0"\r\nset bot_difficulty "1"\r\n/);
+  assert.doesNotMatch(cfg, /bots_|sv_hostname|g_gametype/, 'no Bot Warfare or older-game dvars');
+  const rot = /set sv_maprotation "([^"]+)"/.exec(cfg)[1];
+  assert.match(rot, /^gametype dom map /);
+  const maps = [...rot.matchAll(/map (mp_\w+)/g)].map((m) => m[1]);
+  assert.equal(maps.length, 12, 'the 12 base maps');
+  assert.ok(!maps.includes('mp_nuketown_x') && !maps.includes('mp_crucible'), 'bonus and DLC maps stay out of the default rotation');
+  assert.equal(cod.TITLES.t7.maps.length, 31);
+
+  // Free-for-all modes put every bot in bot_maxFree; an odd count gives the extra bot to axis.
+  cod.writeSettings(s, { 'cod.gametype': 'dm', 'cod.bots.fill': 7, 'cod.bots.skill': '3' });
+  assert.deepEqual(cod.t7Bots(s.cod), { allies: 0, axis: 0, free: 7 });
+  assert.match(cod.buildConfig(s), /set bot_difficulty "3"/);
+  cod.writeSettings(s, { 'cod.gametype': 'tdm' });
+  assert.deepEqual(cod.t7Bots(s.cod), { allies: 3, axis: 4, free: 0 });
+  cod.writeSettings(s, { 'cod.bots.skill': '7' }); // not on BO3's 0-3 scale
+  assert.equal(s.cod.bots.skill, '3');
+  cod.writeSettings(s, { 'cod.bots.enabled': false });
+  assert.match(cod.buildConfig(s), /set bot_maxAllies "0"\r\nset bot_maxAxis "0"\r\nset bot_maxFree "0"/);
+
+  // Names can't break out of their quotes.
+  cod.writeSettings(s, { 'cod.hostname': 'Evil"; quit; "' });
+  assert.match(cod.buildConfig(s), /set live_steam_server_name "Evil quit"\r\n/);
+
+  // Its own bot settings, no Bot Warfare ones, and no match rules it can't take.
+  const keys = cod.settingsSchema(s).sections.flatMap((x) => x.fields.map((f) => f.key));
+  assert.ok(keys.includes('cod.bots.fill') && keys.includes('cod.bots.skill'));
+  assert.ok(!keys.some((k) => k.startsWith('cod.bots.') && !['cod.bots.enabled', 'cod.bots.fill', 'cod.bots.skill'].includes(k)));
+  assert.ok(!keys.some((k) => k.startsWith('cod.match.')));
+});
+
+test('BO3 (T7x) launches t7x.exe from the Unranked Server folder with the config in zone', async () => {
+  const s = server('t7');
+  fs.mkdirSync(path.join(s.cod.gameDir, 'zone'), { recursive: true });
+  await assert.rejects(cod.buildLaunch(s), /t7x\.exe/, 'explains that T7x is missing');
+  fs.writeFileSync(path.join(s.cod.gameDir, 't7x.exe'), 'MZ');
+  const l = await cod.buildLaunch(s);
+  assert.equal(l.command, path.join(s.cod.gameDir, 't7x.exe'));
+  assert.equal(l.cwd, s.cod.gameDir);
+  assert.deepEqual(l.args, ['-dedicated', '+set', 'net_port', '27017', '+set', 'logfile', '2', '+exec', 'hp_abc123.cfg']);
+  assert.ok(fs.existsSync(path.join(s.cod.gameDir, 'zone', 'hp_abc123.cfg')));
+  assert.ok(Array.isArray(l.logFile));
+  const other = server('t7', { gameDir: path.join(tmp, 'not-bo3') });
+  fs.mkdirSync(other.cod.gameDir, { recursive: true });
+  await assert.rejects(cod.buildLaunch(other), /doesn't look like a Black Ops III/);
+});
+
+test('T7x download keeps a Windows program only, and keeps the old one if the download fails', async () => {
+  const http = require('http');
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/good') res.end(Buffer.from('MZfake-exe'));
+    else res.end('<html>not found</html>');
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const dir = path.join(tmp, 't7x-dl');
+  fs.mkdirSync(dir, { recursive: true });
+  const log = { info() {}, warn() {} };
+  try {
+    await assert.rejects(tools.installT7x(dir, log, `${base}/bad`), /not a Windows program/);
+    assert.ok(!fs.existsSync(path.join(dir, 't7x.exe')));
+    await tools.installT7x(dir, log, `${base}/good`);
+    assert.equal(fs.readFileSync(path.join(dir, 't7x.exe'), 'latin1'), 'MZfake-exe');
+    await tools.installT7x(dir, log, `${base}/bad`); // warns, doesn't throw
+    assert.equal(fs.readFileSync(path.join(dir, 't7x.exe'), 'latin1'), 'MZfake-exe');
+  } finally {
+    srv.close();
+  }
 });

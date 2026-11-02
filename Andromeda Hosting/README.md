@@ -1,6 +1,6 @@
 # Andromeda Hosting
 
-Version 2.0.1 · part of [Andromeda Services](../README.md)
+Version 2.1.0 · part of [Andromeda Services](../README.md)
 
 A self-hosted game server control panel, like G-Portal or Nitrado, that runs on **your own PC**.
 You and your friends sign in from a browser, start and stop servers, change settings, install and
@@ -15,6 +15,7 @@ There are no monthly hosting fees; your only cost is electricity.
 | **Minecraft — CurseForge modpack** | Search CurseForge, pick a version, one-click install. Uses the pack's official server files when available, otherwise builds the server from the manifest. One-click **update / downgrade** with automatic backup that keeps worlds, `server.properties`, ops and whitelist |
 | **Minecraft — Vanilla / Fabric / Forge / NeoForge** | Any version + loader, add individual CurseForge mods, enable/disable mods, change versions later |
 | **Call of Duty: CoD4x, IW4x (MW2), Plutonium BO2 / BO1 / MW3** (Windows; CoD4x also Linux) | Multiplayer with bots (Bot Warfare), Domination with every base map shuffled, 4x player and weapon XP by default, RCON console, live player/bot counts. Uses your own game install. See [docs/call-of-duty.md](docs/call-of-duty.md) |
+| **Call of Duty: Black Ops III (T7x)** (Windows) | Runs Activision's free BO3 Unranked Server with AlterWare's T7x client (downloaded for you). Domination with a shuffled rotation, BO3's own bots split over both teams (Easy to Veteran), 4x XP setting, RCON console. No Cryptokeys or Black Market: those only come from Activision's ranked matches. See [docs/call-of-duty.md](docs/call-of-duty.md#black-ops-iii-t7x) |
 | **Call of Duty: S1x (Advanced Warfare), IW6x (Ghosts)** (Windows) | AlterWare clients run from your own game folder (install them with the AlterWare launcher first). Domination with a shuffled rotation, 4x XP, match rules, RCON console. No Bot Warfare exists for these, so no bots |
 | **Satisfactory** (Windows/Linux) | SteamCMD install/update. On the first start the panel claims the server (sets the admin password, shown on the server page) and starts a new game; name, join password, autosave and pause options are applied through the server's API on every start, and stops save first. **Mods from ficsit.app**: search and add them in the Mods tab — the panel picks versions that fit each other and the game build, installs SML and dependencies, and lists the ones players need too |
 | **7 Days to Die** (Windows/Linux) | SteamCMD install/update (stable or experimental), 40+ settings written to the server config (world, difficulty, zombies, blood moons, loot, land claims), saves in the server's own folder, telnet console, player list and clean shutdown. **Mods**: install from a mod's .zip, switch mods on/off, warning when a code mod needs Easy Anti-Cheat off |

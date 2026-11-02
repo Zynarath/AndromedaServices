@@ -29,6 +29,7 @@ const DEFAULTS = {
   'cod-iw5': { steam: 115300 },
   'cod-s1x': { steam: 209650 },
   'cod-iw6x': { steam: 209160 },
+  'cod-t7': { steam: 311210 },
   satisfactory: { steam: 526870 },
   sdtd: { steam: 251570 },
   valheim: { steam: 892970 },

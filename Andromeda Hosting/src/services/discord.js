@@ -270,7 +270,7 @@ function onStatus(id, status) {
       const t = games.cod.TITLES[server.cod.title];
       fields.push({ name: 'Mode', value: (t.gametypes.find((g) => g[0] === server.cod.gametype) || [])[1] || server.cod.gametype });
       fields.push({ name: 'XP', value: `${server.cod.xpScale}x${t.weaponXp ? ` · weapon ${server.cod.weaponXpScale}x` : ''}` });
-      if (server.cod.bots.enabled) fields.push({ name: 'Bots', value: `fill to ${server.cod.bots.fill}` });
+      if (server.cod.bots.enabled) fields.push({ name: 'Bots', value: t.nativeBots ? `${server.cod.bots.fill} bots` : `fill to ${server.cod.bots.fill}` });
       if (server.cod.password) fields.push({ name: 'Password', value: s().includePassword ? `||${server.cod.password}||` : 'Required (ask in the group)' });
     }
     if (server.wow) {
