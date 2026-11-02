@@ -1,6 +1,6 @@
 # Andromeda Services Website
 
-Version 1.0.0 · part of [Andromeda Services](../README.md)
+Version 1.0.1 · part of [Andromeda Services](../README.md)
 
 The public website for Andromeda game server hosting. For now it runs on your own PC only, until
 the hosting hardware is ready. It has:
@@ -18,8 +18,12 @@ works on phones too.
 
 ## Run it
 
-You need Node.js 20 or newer (the same one Andromeda Services uses). The site has no packages, so
-there's nothing to install.
+**From Andromeda Services** (easiest): the *Andromeda Services Website* card has Start, Stop,
+Restart and Open buttons, its log, and a **Waitlist** button. Turn on *Start when Andromeda
+Services opens* to have it run whenever the app does. From the app it always uses port 8092 and
+only this PC can open it.
+
+**By hand**: you need Node.js 20 or newer. The site has no packages, so there's nothing to install.
 
 ```powershell
 cd "C:\Andromeda Services\Andromeda Services Website"

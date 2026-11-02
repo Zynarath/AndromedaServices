@@ -1,6 +1,6 @@
-// Andromeda Services: a Windows app that starts and stops Andromeda Hosting (the panel) and the
-// WotLK website, shows their logs, installs updates, and sits in the system tray, so nothing needs
-// a console window.
+// Andromeda Services: a Windows app that starts and stops Andromeda Hosting (the panel), the
+// WotLK website and the Andromeda Services website, shows their logs, installs updates, and sits in
+// the system tray, so nothing needs a console window.
 //
 // Built by services\build.bat with the C# compiler that ships with Windows (.NET Framework 4), so
 // it is written for C# 5 (no string interpolation, no ?. operator). install.exe (Installer.cs) is
@@ -24,21 +24,22 @@ using Microsoft.Win32;
 #if !INSTALLER
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
-[assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the WotLK website")]
-[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the websites")]
+[assembly: AssemblyVersion("1.1.0.0")]
 #endif
 
 namespace Andromeda
 {
     enum State { Stopped, Starting, Running, Stopping, External, Crashed, Waiting }
 
-    // One Node.js process the app looks after: the panel or the website.
+    // One Node.js process the app looks after: the panel or one of the websites.
     class Service
     {
-        public string Key;              // "panel" / "site"
+        public string Key;              // "panel" / "site" (WotLK website) / "web" (Andromeda Services website)
         public string Name;
         public string Description;
-        public string Dir;              // its folder: "Andromeda Hosting" or "Andromeda WotLK Website"
+        public string Dir;              // its folder, e.g. "Andromeda Hosting"
+        public bool AutoStartDefault = true; // "Start when Andromeda Services opens" until it's changed
         public string Script;           // relative to Dir
         public int StopWaitSeconds;     // how long a clean stop may take before it is forced
         public Func<int> Port;          // where it listens (read from its config each time)
@@ -472,8 +473,10 @@ namespace Andromeda
         public static string[] Args;
         public const string PanelFolder = "Andromeda Hosting";
         public const string SiteFolder = "Andromeda WotLK Website";
+        public const string WebFolder = "Andromeda Services Website";
         public static string PanelDir { get { return Path.Combine(Root, PanelFolder); } }
         public static string SiteDir { get { return Path.Combine(Root, SiteFolder); } }
+        public static string WebDir { get { return Path.Combine(Root, WebFolder); } }
 
         // The folder that holds "Andromeda Hosting" (this .exe's folder, or its parent when started
         // from the services folder). Null when there is none.
@@ -568,6 +571,7 @@ namespace Andromeda
 
         readonly Service panel;
         readonly Service site;
+        readonly Service web;
         readonly Service[] services;
         readonly Settings settings;
         readonly NotifyIcon tray;
@@ -618,14 +622,27 @@ namespace Andromeda
                 Port = () => ConfigInt(SiteConfig(), "port", 8091),
                 Url = () => "http://localhost:" + ConfigInt(SiteConfig(), "port", 8091),
             };
-            services = new[] { panel, site };
+            web = new Service
+            {
+                Key = "web",
+                Name = "Andromeda Services Website",
+                Description = "Your hosting service's public site and waitlist.",
+                Dir = Program.WebDir,
+                Script = Path.Combine("src", "index.js"),
+                StopWaitSeconds = 15,
+                AutoStartDefault = false, // new in 1.1.0: off until it's turned on
+                Port = () => 8092, // the site always uses 8092 when started from here
+                Url = () => "http://localhost:8092",
+            };
+            // The website folder is missing in copies that haven't updated to it yet.
+            services = Directory.Exists(web.Dir) ? new[] { panel, site, web } : new[] { panel, site };
 
             Text = "Andromeda Services";
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = Theme.UI(9.5f);
-            MinimumSize = new Size(900, 800);
-            Size = new Size(1000, 900);
+            MinimumSize = new Size(services.Length > 2 ? 1140 : 900, 800);
+            Size = new Size(services.Length > 2 ? 1200 : 1000, 900);
             StartPosition = FormStartPosition.CenterScreen;
             DoubleBuffered = true;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
@@ -658,13 +675,14 @@ namespace Andromeda
             };
             bannerWrap.Controls.Add(banner);
 
-            // ---- the two service cards, side by side ----
-            var cards = new TableLayoutPanel { Dock = DockStyle.Top, Height = 226, ColumnCount = 2, RowCount = 1, Padding = new Padding(22, 0, 22, 0), BackColor = Theme.Bg };
-            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            // ---- a card per service, side by side ----
+            var cards = new TableLayoutPanel { Dock = DockStyle.Top, Height = 226, ColumnCount = services.Length, RowCount = 1, Padding = new Padding(22, 0, 22, 0), BackColor = Theme.Bg };
+            for (int i = 0; i < services.Length; i++)
+            {
+                cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / services.Length));
+                cards.Controls.Add(BuildCard(services[i]), i, 0);
+            }
             cards.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            cards.Controls.Add(BuildCard(panel), 0, 0);
-            cards.Controls.Add(BuildCard(site), 1, 0);
 
             // ---- whole-PC CPU and memory graphs ----
             var graphs = new TableLayoutPanel { Dock = DockStyle.Top, Height = 168, ColumnCount = 2, RowCount = 1, Padding = new Padding(22, 14, 22, 0), BackColor = Theme.Bg };
@@ -759,9 +777,10 @@ namespace Andromeda
             menu.Items.Add("Open Andromeda Services", null, (o, e) => ShowWindow());
             menu.Items.Add("Open the panel", null, (o, e) => OpenUrl(panel.Url()));
             menu.Items.Add("Open the WotLK website", null, (o, e) => OpenUrl(site.Url()));
+            if (services.Contains(web)) menu.Items.Add("Open the Andromeda Services website", null, (o, e) => OpenUrl(web.Url()));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Start both", null, (o, e) => { Start(panel); Start(site); });
-            menu.Items.Add("Stop both", null, (o, e) => { Stop(site, false); Stop(panel, false); });
+            menu.Items.Add("Start all", null, (o, e) => { foreach (var s in services) Start(s); });
+            menu.Items.Add("Stop all", null, (o, e) => { foreach (var s in services.Reverse()) Stop(s, false); });
             menu.Items.Add("Check for updates", null, (o, e) => { ShowWindow(); CheckForUpdates(true); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Stop all and exit", null, (o, e) => ExitApp());
@@ -820,13 +839,11 @@ namespace Andromeda
             {
                 var keys = resume.Substring(8).Split(',');
                 panel.Write("Update installed.");
-                if (keys.Contains("panel")) Start(panel);
-                if (keys.Contains("site")) Start(site);
+                foreach (var s in services) if (keys.Contains(s.Key)) Start(s);
             }
             else
             {
-                if (settings.Get("autostart.panel", true)) Start(panel);
-                if (settings.Get("autostart.site", true)) Start(site);
+                foreach (var s in services) if (settings.Get("autostart." + s.Key, s.AutoStartDefault)) Start(s);
             }
             var check = new Thread(() => { Thread.Sleep(8000); try { BeginInvoke((Action)(() => CheckForUpdates(false))); } catch { } });
             check.IsBackground = true;
@@ -860,6 +877,11 @@ namespace Andromeda
                 settingsButton = new ModernButton("Settings", ButtonKind.Ghost);
                 settingsButton.Click += (o, e) => EditSiteSettings();
             }
+            else if (s == web)
+            {
+                settingsButton = new ModernButton("Waitlist", ButtonKind.Ghost); // its sign-ups, this PC only
+                settingsButton.Click += (o, e) => OpenUrl(web.Url() + "/admin");
+            }
             Action place = () =>
             {
                 main.Location = new Point(20, 144);
@@ -869,7 +891,7 @@ namespace Andromeda
             };
             main.SizeChanged += (o, e) => place();
             place();
-            var auto = new Toggle("Start when Andromeda Services opens", settings.Get("autostart." + s.Key, true)) { Location = new Point(21, 190) };
+            var auto = new Toggle("Start when Andromeda Services opens", settings.Get("autostart." + s.Key, s.AutoStartDefault)) { Location = new Point(21, 190) };
             auto.CheckedChanged += (o, e) => settings.Set("autostart." + s.Key, auto.Checked);
 
             card.Controls.AddRange(new Control[] { name, version, pill, desc, url, main, restart, open, auto });
@@ -930,7 +952,7 @@ namespace Andromeda
             b[2].Enabled = s.State == State.Running || s.State == State.External;
             foreach (var x in b) x.Invalidate();
             int up = services.Count(x => x.State == State.Running || x.State == State.External);
-            if (tray != null) tray.Text = "Andromeda Services — " + up + " of 2 running";
+            if (tray != null) tray.Text = "Andromeda Services — " + up + " of " + services.Length + " running";
         }
 
         // ---------- processes ----------
@@ -943,7 +965,7 @@ namespace Andromeda
                 s.Write("Port " + s.Port() + " is already in use, so " + s.Name + " seems to be running already (for example from a console window). Close that one first to manage it here.");
                 return;
             }
-            if (!Directory.Exists(Path.Combine(s.Dir, "node_modules")))
+            if (NeedsPackages(s.Dir) && !Directory.Exists(Path.Combine(s.Dir, "node_modules")))
             {
                 s.SetState(State.Starting);
                 s.Write("First start: installing packages (needs internet, one time)...");
@@ -1063,10 +1085,11 @@ namespace Andromeda
         // May run on any thread.
         void StopAllAndWait(int seconds, bool forUpdate)
         {
-            Action stop = () => { Stop(site, forUpdate); Stop(panel, forUpdate); };
+            var order = services.Reverse().ToArray(); // the websites first, the panel (game servers) last
+            Action stop = () => { foreach (var s in order) Stop(s, forUpdate); };
             if (InvokeRequired) Invoke(stop); else stop();
             var until = DateTime.Now.AddSeconds(seconds);
-            foreach (var s in new[] { site, panel })
+            foreach (var s in order)
             {
                 var p = s.Proc;
                 if (p == null) continue;
@@ -1126,6 +1149,18 @@ namespace Andromeda
         {
             var npm = Path.Combine(Path.GetDirectoryName(node), "npm.cmd");
             return Run("cmd.exe", "/d /s /c \"\"" + (File.Exists(npm) ? npm : "npm") + "\" install --omit=dev --no-audit --no-fund\"", s, 600000, dir);
+        }
+
+        // A program with no "dependencies" in its package.json needs no npm install (the Andromeda
+        // Services website); running it anyway would only leave a package-lock.json behind.
+        static bool NeedsPackages(string dir)
+        {
+            var pkg = ReadJson(Path.Combine(dir, "package.json"));
+            if (pkg.Count == 0) return true; // couldn't read it: install, as before
+            object deps;
+            if (!pkg.TryGetValue("dependencies", out deps) || deps == null) return false;
+            var d = deps as Dictionary<string, object>;
+            return d == null || d.Count > 0;
         }
 
         // "v2.0.0" from the app's package.json.
@@ -1240,14 +1275,14 @@ namespace Andromeda
         void InstallUpdate()
         {
             if (updating || pendingBranch == null) return;
-            if (panel.State == State.External || site.State == State.External)
+            if (services.Any(s => s.State == State.External))
             {
                 MessageBox.Show(this, "Something was started outside Andromeda Services (for example in a console window). Close it first, then update.", "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             bool wasPanel = panel.Alive;
-            bool wasSite = site.Alive;
-            if (wasPanel && MessageBox.Show(this, "Installing the update stops Andromeda Hosting and the WotLK website for a minute. Running game servers are saved, stopped, and started again afterwards.\n\nUpdate now?", "Andromeda Services", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+            var wasRunning = services.Where(s => s.Alive).ToList();
+            if (wasPanel && MessageBox.Show(this, "Installing the update stops Andromeda Hosting and the websites for a minute. Running game servers are saved, stopped, and started again afterwards.\n\nUpdate now?", "Andromeda Services", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
             updating = true;
             bannerWrap.Visible = false;
             updateButton.Enabled = false;
@@ -1271,8 +1306,8 @@ namespace Andromeda
                     var reset = Run(git, "reset --hard FETCH_HEAD", panel, 120000);
                     if (!reset.Ok) throw new Exception("couldn't apply it: " + reset.LastLine);
                     panel.Write("Installing any new packages...");
-                    foreach (var dir in new[] { Program.PanelDir, Program.SiteDir })
-                        if (node != null && Directory.Exists(dir) && !RunNpmInstall(panel, dir).Ok) panel.Write("npm install in \"" + Path.GetFileName(dir) + "\" reported a problem (see above). Starting anyway.");
+                    foreach (var dir in new[] { Program.PanelDir, Program.SiteDir, Program.WebDir })
+                        if (node != null && Directory.Exists(dir) && NeedsPackages(dir) && !RunNpmInstall(panel, dir).Ok) panel.Write("npm install in \"" + Path.GetFileName(dir) + "\" reported a problem (see above). Starting anyway.");
                     var appChanged = !Run(git, "diff --quiet " + before + " HEAD -- services", null, 15000).Ok;
                     if (appChanged)
                     {
@@ -1288,7 +1323,7 @@ namespace Andromeda
                 {
                     BeginInvoke((Action)(() =>
                     {
-                        if (relaunch) { SwapAndRestart(wasPanel, wasSite); return; }
+                        if (relaunch) { SwapAndRestart(wasRunning); return; }
                         updating = false;
                         updateButton.Enabled = true;
                         updateButton.Text = "Check for updates";
@@ -1298,8 +1333,7 @@ namespace Andromeda
                             panel.Write("Update failed: " + failure);
                             MessageBox.Show(this, "The update failed: " + failure, "Andromeda Services", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
-                        if (wasPanel) Start(panel);
-                        if (wasSite) Start(site);
+                        foreach (var s in wasRunning) Start(s);
                         foreach (var s in services) RefreshCard(s);
                     }));
                 }
@@ -1323,14 +1357,12 @@ namespace Andromeda
         }
 
         // A tiny script waits for this app to exit, puts the new .exe in place and opens it again.
-        void SwapAndRestart(bool wasPanel, bool wasSite)
+        void SwapAndRestart(List<Service> wasRunning)
         {
             var exe = Application.ExecutablePath;
             var pid = Process.GetCurrentProcess().Id.ToString();
             var script = Path.Combine(Path.GetTempPath(), "andromeda-services-update.cmd");
-            var start = new List<string>();
-            if (wasPanel) start.Add("panel");
-            if (wasSite) start.Add("site");
+            var start = wasRunning.Select(s => s.Key).ToList();
             File.WriteAllText(script,
                 "@echo off\r\n" +
                 ":wait\r\n" +
@@ -1430,9 +1462,9 @@ namespace Andromeda
         void ExitApp()
         {
             if (updating) return;
-            if (panel.Alive || site.Alive)
+            if (services.Any(s => s.Alive))
             {
-                var answer = MessageBox.Show(this, "Stop Andromeda Hosting (and the game servers it runs) and the WotLK website, then exit?", "Andromeda Services", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+                var answer = MessageBox.Show(this, "Stop Andromeda Hosting (and the game servers it runs) and the websites, then exit?", "Andromeda Services", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
                 if (answer != DialogResult.OK) return;
             }
             exiting = true;

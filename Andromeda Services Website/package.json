@@ -1,6 +1,6 @@
 {
   "name": "andromeda-services-website",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Marketing website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist",
   "main": "src/index.js",
   "private": true,

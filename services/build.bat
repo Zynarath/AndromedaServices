@@ -27,7 +27,7 @@ if errorlevel 1 (
 )
 echo Built "Andromeda Services.exe".
 if /i not "%~1"=="shortcut" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$w = New-Object -ComObject WScript.Shell; foreach ($d in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) { $l = $w.CreateShortcut((Join-Path $d 'Andromeda Services.lnk')); $l.TargetPath = Join-Path (Get-Location) 'Andromeda Services.exe'; $l.WorkingDirectory = (Get-Location).Path; $l.Description = 'Start and stop Andromeda Hosting and the WotLK website'; $l.Save() }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$w = New-Object -ComObject WScript.Shell; foreach ($d in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) { $l = $w.CreateShortcut((Join-Path $d 'Andromeda Services.lnk')); $l.TargetPath = Join-Path (Get-Location) 'Andromeda Services.exe'; $l.WorkingDirectory = (Get-Location).Path; $l.Description = 'Start and stop Andromeda Hosting and the websites'; $l.Save() }"
 if errorlevel 1 (
   echo Couldn't create the shortcuts; open "Andromeda Services.exe" in this folder instead.
   exit /b 0

@@ -1,14 +1,15 @@
 # Andromeda Services
 
-Self-hosted game servers and a World of Warcraft website, run from your own PC. The repository has
+Self-hosted game servers, a World of Warcraft website and the website for Andromeda game server
+hosting, run from your own PC. The repository has
 three programs and the Windows app that runs them:
 
 | Folder | Version | What it is |
 |---|---|---|
 | [`Andromeda Hosting/`](Andromeda%20Hosting/) | 2.0.1 | The game server control panel: ARK, Minecraft (CurseForge modpacks), Call of Duty, Satisfactory, 7 Days to Die, Valheim, Rust with uMod, and World of Warcraft: WotLK with bots. See its [README](Andromeda%20Hosting/README.md). |
 | [`Andromeda WotLK Website/`](Andromeda%20WotLK%20Website/) | 1.0.0 | The WotLK website for your realm: news, armory, realm status, who's online, honor, auction house and invite-only sign-up. See its [README](Andromeda%20WotLK%20Website/README.md). |
-| [`Andromeda Services Website/`](Andromeda%20Services%20Website/) | 1.0.0 | The public website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist. Runs on this PC for now (`npm start`, then <http://localhost:8092>). See its [README](Andromeda%20Services%20Website/README.md). |
-| [`services/`](services/) | 1.0.1 | **Andromeda Services**, the Windows app that starts, stops and updates both, and `install.exe`'s source. |
+| [`Andromeda Services Website/`](Andromeda%20Services%20Website/) | 1.0.1 | The public website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist. Runs on this PC for now, at <http://localhost:8092>. See its [README](Andromeda%20Services%20Website/README.md). |
+| [`services/`](services/) | 1.1.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |
 
 ## Install (Windows)
 
@@ -29,10 +30,12 @@ three programs and the Windows app that runs them:
 
 A Windows app that runs everything without console windows:
 
-- It starts and stops **Andromeda Hosting** and the **Andromeda WotLK Website**, each with its own
-  Start / Stop / Restart / Open buttons, version, status and live log. The website's **Settings**
-  (SPP folder, name, port, sign-up, Discord link) are set here.
-- *Start when Andromeda Services opens* is a setting for each one. *Open Andromeda Services when I
+- It starts and stops **Andromeda Hosting**, the **Andromeda WotLK Website** and the **Andromeda
+  Services Website**, each with its own Start / Stop / Restart / Open buttons, version, status and
+  live log. The WotLK website's **Settings** (SPP folder, name, port, sign-up, Discord link) are
+  set here, and the Andromeda Services Website's **Waitlist** button shows who signed up.
+- *Start when Andromeda Services opens* is a setting for each one (off at first for the Andromeda
+  Services Website). *Open Andromeda Services when I
   sign in to Windows* starts it all at login, quietly in the system tray.
 - Closing the window keeps everything running in the system tray. **Stop all and exit** (in the
   window or the tray menu) stops cleanly: game servers are saved and stopped first.
@@ -56,13 +59,13 @@ Updates come from GitHub, so the folder must be a Git copy of this repository:
 3. Run `install.exe` in that folder once.
 
 **Check for updates** in Andromeda Services shows what changed (it also checks when it opens).
-**Update now** saves and stops the running game servers and the website, downloads the update,
-installs any new packages for both programs, rebuilds Andromeda Services if it changed, and starts
+**Update now** saves and stops the running game servers and the websites, downloads the update,
+installs any new packages, rebuilds Andromeda Services if it changed, and starts
 everything that was running again. The panel can also update itself: **Panel settings → Updates**.
 
 Your settings and data are never touched by an update: `Andromeda Hosting\config.json`, its
-`data` folder (or wherever `dataDir` points), and the website's `Andromeda WotLK Website\data`
-folder aren't part of the repository. Don't edit the programs' own files, or Git will refuse to
+`data` folder (or wherever `dataDir` points), and the websites' `data` folders (WotLK settings,
+waitlist sign-ups) aren't part of the repository. Don't edit the programs' own files, or Git will refuse to
 update over your edits.
 
 ### Coming from the old AndromedaHosting repository
