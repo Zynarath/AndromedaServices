@@ -1,6 +1,6 @@
 # Andromeda Hosting
 
-Version 2.0.0 · part of [Andromeda Services](../README.md)
+Version 2.0.1 · part of [Andromeda Services](../README.md)
 
 A self-hosted game server control panel, like G-Portal or Nitrado, that runs on **your own PC**.
 You and your friends sign in from a browser, start and stop servers, change settings, install and
