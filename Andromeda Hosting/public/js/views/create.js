@@ -88,7 +88,7 @@ export async function render(root, { navigate, refreshServers }) {
         body.cod = {
           gameDir: d.gameDir, port: Number(d.port), password: d.password, maxClients: Number(d.maxClients), gametype: 'dom',
           xpScale: Number(d.xpScale), weaponXpScale: Number(d.weaponXpScale || d.xpScale), plutoKey: d.plutoKey,
-          bots: { enabled: !!d.bots, fill: Number(d.botFill), skill: Number(d.botSkill), kick: true },
+          bots: { enabled: !!d.bots, fill: Number(d.botFill), skill: String(d.botSkill), kick: true },
         };
       } else if (isMc) {
         body.mc = { memoryMb: Number(d.memoryMb), port: Number(d.port), maxPlayers: Number(d.maxPlayers), whitelist: !!d.whitelist, whitelistNames: d.whitelistNames };
@@ -241,19 +241,19 @@ export async function render(root, { navigate, refreshServers }) {
   function codSection(t, ports) {
     return html`
       <label class="field span-2"><span>Game folder</span><input name="gameDir" required placeholder="${t.gameHint}" autocomplete="off">
-        <small class="hint">Your own install of the game. ${t.codTitle === 'iw4x' ? 'IW4x must already be installed in it (iw4x.exe).' : t.alterware ? html`The AlterWare client must already be installed in it — get it with the launcher from <a href="https://alterware.dev" target="_blank" rel="noopener">alterware.dev</a>.` : t.codTitle === 'cod4x' ? 'Andromeda Hosting downloads the CoD4x server files itself.' : 'Andromeda Hosting downloads and updates Plutonium itself.'}</small></label>
+        <small class="hint">${t.t7x ? html`The free <strong>Call of Duty: Black Ops III – Unranked Server</strong> from your Steam library (<em>Library → Tools</em>). Andromeda Hosting downloads AlterWare's T7x client (<code>t7x.exe</code>) into it; your friends need T7x in their own Black Ops III folder to join.` : html`Your own install of the game. ${t.codTitle === 'iw4x' ? 'IW4x must already be installed in it (iw4x.exe).' : t.alterware ? html`The AlterWare client must already be installed in it — get it with the launcher from <a href="https://alterware.dev" target="_blank" rel="noopener">alterware.dev</a>.` : t.codTitle === 'cod4x' ? 'Andromeda Hosting downloads the CoD4x server files itself.' : 'Andromeda Hosting downloads and updates Plutonium itself.'}`}</small></label>
       ${t.pluto
         ? html`<label class="field span-2"><span>Plutonium server key</span><input name="plutoKey" required autocomplete="off" placeholder="Paste key">
             <small class="hint">Free: sign in at <a href="https://platform.plutonium.pw/serverkeys" target="_blank" rel="noopener">platform.plutonium.pw/serverkeys</a> and create a key.</small></label>`
         : ''}
-      <div class="callout span-2">${icon('info')}<div><strong>Domination</strong> with every base map in a shuffled rotation, <strong>4x XP</strong>${t.weaponXp ? ' and <strong>4x weapon XP</strong>' : ''}${t.bots ? ', and bots filling empty slots' : ''}. All of it can be changed later in Settings.</div></div>
+      <div class="callout span-2">${icon('info')}<div><strong>Domination</strong> with every base map in a shuffled rotation, <strong>4x XP</strong>${t.weaponXp ? ' and <strong>4x weapon XP</strong>' : ''}${t.bots ? (t.nativeBots ? ', and bots in every match' : ', and bots filling empty slots') : ''}. All of it can be changed later in Settings.${t.t7x ? ' Whether XP counts on a T7x server isn\'t confirmed yet, and there are no Cryptokeys or Black Market on private servers.' : ''}</div></div>
       <label class="field"><span>Player XP multiplier</span><input type="number" name="xpScale" value="4" min="1" max="100"></label>
       ${t.weaponXp ? html`<label class="field"><span>Weapon XP multiplier</span><input type="number" name="weaponXpScale" value="4" min="1" max="100"></label>` : html`<div></div>`}
       ${t.bots
-        ? html`<label class="switch field-switch span-2"><input type="checkbox" name="bots" checked><span></span>Bots (Bot Warfare)
-        <small class="hint">Bots fill the match and step aside as your friends join.</small></label>
-      <label class="field"><span>Keep this many players in a match</span><input type="number" name="botFill" value="12" min="0" max="18"><small class="hint">Bots + people. 12 = 6v6.</small></label>
-      <label class="field"><span>Bot difficulty</span><select name="botSkill"><option value="0">Mixed</option><option value="1">1 – Recruit</option><option value="3">3 – Regular</option><option value="5">5 – Hardened</option><option value="7">7 – Veteran</option></select></label>`
+        ? html`<label class="switch field-switch span-2"><input type="checkbox" name="bots" checked><span></span>${t.nativeBots ? 'Bots (the game\'s own)' : 'Bots (Bot Warfare)'}
+        <small class="hint">${t.nativeBots ? 'Bots play every match, split over the two teams.' : 'Bots fill the match and step aside as your friends join.'}</small></label>
+      <label class="field"><span>${t.nativeBots ? 'Bots in a match' : 'Keep this many players in a match'}</span><input type="number" name="botFill" value="${t.nativeBots ? 10 : 12}" min="0" max="18"><small class="hint">${t.nativeBots ? '10 = 5 per team. Keep Max players above bots + people.' : 'Bots + people. 12 = 6v6.'}</small></label>
+      <label class="field"><span>Bot difficulty</span><select name="botSkill">${(t.botSkills || []).map(([value, label]) => html`<option value="${value}" ${value === t.botSkill ? 'selected' : ''}>${label}</option>`)}</select></label>`
         : ''}
       <label class="field"><span>Join password</span><input name="password" autocomplete="off" value="${friendlyPassword()}"><small class="hint">Your friends need it to join. Clear it to make the server public.</small></label>
       <label class="field"><span>Max players</span><input type="number" name="maxClients" value="18" min="2" max="64"></label>

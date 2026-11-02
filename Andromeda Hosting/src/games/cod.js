@@ -1,6 +1,7 @@
 'use strict';
 // Community Call of Duty dedicated servers: CoD4x, IW4x (MW2), Plutonium T6 (BO2), T5 (BO1), IW5 (MW3),
-// and AlterWare's S1x (Advanced Warfare) and IW6x (Ghosts).
+// AlterWare's S1x (Advanced Warfare) and IW6x (Ghosts), and Black Ops III's Unranked Server run with
+// AlterWare's T7x client.
 // They all run on your own game install; Andromeda Hosting writes the server config (game mode, shuffled
 // map rotation, XP rates, bots) right before every start.
 const fs = require('fs');
@@ -79,6 +80,8 @@ const SKILLS = {
   default: { def: '0', options: [['0', 'Mixed (random per bot)'], ['1', 'Easiest'], ['3', 'Easy'], ['4', 'Medium'], ['5', 'Hard'], ['7', 'Hardest'], ['9', 'Fully random']] },
   t6: { def: '1', options: [['0', 'Easy'], ['1', 'Normal'], ['2', 'Hard'], ['3', 'Hardest']] },
   t5: { def: 'normal', options: [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard'], ['fu', 'Hardest']] },
+  // BO3's own bots: bot_difficulty 0-3 (from the T7x server configs).
+  t7: { def: '1', options: [['0', 'Easy'], ['1', 'Normal'], ['2', 'Hard'], ['3', 'Veteran']] },
 };
 const skillsFor = (key) => SKILLS[key] || SKILLS.default;
 
@@ -148,6 +151,40 @@ const TITLES = {
     playlists: {
       nukejacked: { label: 'NukeJacked: Nuketown 2025 + Hijacked', maps: ['mp_nuketown_2020', 'mp_hijacked'] },
     },
+  },
+  // Black Ops III: Activision's free Unranked Server (Steam → Library → Tools), run with AlterWare's T7x
+  // client (t7x.exe), which the panel downloads into that folder. BO3 has bots of its own
+  // (bot_maxAllies / bot_maxAxis / bot_maxFree), so there's no Bot Warfare. The config layout, dvars and
+  // launch line follow the T7x server configs (github.com/Dss0/t7-server-config).
+  t7: {
+    wikiGame: 'Black Ops III',
+    label: 'Black Ops III (T7x)',
+    short: 'BO3',
+    namePrefix: 'BO3 Server',
+    port: 27017,
+    platforms: ['win32'],
+    t7x: true,
+    nativeBots: true,
+    botRepo: null,
+    weaponXp: false,
+    gameHint: 'Your Black Ops III Unranked Server folder (Steam → Library → Tools; contains the zone folder)',
+    marker: 'zone',
+    gametypes: [
+      ['dom', 'Domination'], ['tdm', 'Team Deathmatch'], ['dm', 'Free-for-all'], ['conf', 'Kill Confirmed'], ['koth', 'Hardpoint'], ['sd', 'Search & Destroy'],
+      ['ctf', 'Capture the Flag'], ['dem', 'Demolition'], ['escort', 'Safeguard'], ['ball', 'Uplink'], ['gun', 'Gun Game'],
+    ],
+    // Modes without teams: every bot goes in bot_maxFree.
+    ffa: ['dm', 'gun'],
+    maps: [
+      ['mp_biodome', 'Aquarium'], ['mp_spire', 'Breach'], ['mp_sector', 'Combine'], ['mp_apartments', 'Evac'], ['mp_chinatown', 'Exodus'], ['mp_veiled', 'Fringe'],
+      ['mp_havoc', 'Havoc'], ['mp_ethiopia', 'Hunted'], ['mp_infection', 'Infection'], ['mp_metro', 'Metro'], ['mp_redwood', 'Redwood'], ['mp_stronghold', 'Stronghold'],
+      // Not in the base game: never part of a default rotation, since players without them can't join.
+      ['mp_nuketown_x', 'Nuk3town', 'bonus map'], ['mp_veiled_heyday', 'Fringe Night', 'bonus map'], ['mp_redwood_ice', 'Redwood Snow', 'bonus map'],
+      ['mp_crucible', 'Gauntlet', 'DLC'], ['mp_rise', 'Rise', 'DLC'], ['mp_skyjacked', 'Skyjacked', 'DLC'], ['mp_waterpark', 'Splash', 'DLC'],
+      ['mp_kung_fu', 'Knockout', 'DLC'], ['mp_conduit', 'Rift', 'DLC'], ['mp_aerospace', 'Spire', 'DLC'], ['mp_banzai', 'Verge', 'DLC'],
+      ['mp_shrine', 'Berserk', 'DLC'], ['mp_cryogen', 'Cryogen', 'DLC'], ['mp_rome', 'Empire', 'DLC'], ['mp_arena', 'Rumble', 'DLC'],
+      ['mp_ruins', 'Citadel', 'DLC'], ['mp_miniature', 'Micro', 'DLC'], ['mp_western', 'Outlaw', 'DLC'], ['mp_city', 'Rupture', 'DLC'],
+    ],
   },
   t5: {
     wikiGame: 'Call of Duty: Black Ops',
@@ -297,6 +334,7 @@ const BOT_FIELDS = [
   { key: 'waitForHost', dvar: 'bots_main_waitForHostTime', label: 'Wait before adding bots (seconds)', type: 'number', def: 10, min: 0, max: 600 },
 ];
 const botFieldsFor = (title) => {
+  if (!TITLES[title] || !TITLES[title].botRepo) return [];
   const ok = new Set([...BOT_DVARS.common, ...(BOT_DVARS[title] || [])]);
   return BOT_FIELDS.filter((f) => ok.has(f.dvar));
 };
@@ -305,6 +343,7 @@ const gtsCfgName = (server, gametype) => `hp_${server.id}_${gametype}.cfg`;
 const gtsDir = () => path.join(tools.plutoStorage('t6'), 'gamesettings');
 
 const title = (server) => TITLES[server.cod.title];
+const hasBots = (t) => !!(t.botRepo || t.nativeBots);
 const baseMaps = (t) => t.maps.filter((m) => !m[2]).map((m) => m[0]);
 const playlist = (server) => (title(server).playlists || {})[server.cod.playlist];
 const cfgName = (server) => `hp_${server.id}.cfg`;
@@ -344,17 +383,70 @@ function botsInstalled(server) {
 function configDirs(server) {
   if (server.cod.title === 'cod4x') return [path.join(server.dir, 'main')];
   if (server.cod.title === 'iw5') return [path.join(server.cod.gameDir, 'admin'), path.join(server.cod.gameDir, 'main')];
+  // T7x execs server configs from the zone folder, like its own zone/server.cfg.
+  if (title(server).t7x) return [path.join(server.cod.gameDir, 'zone')];
   return [path.join(server.cod.gameDir, 'main')];
 }
 
-function buildConfig(server) {
+// The maps for this start: the playlist's, or the ticked ones, shuffled unless that's turned off.
+function rotationMaps(server) {
   const c = server.cod;
   const t = title(server);
   const validMaps = new Set(t.maps.map((m) => m[0]));
   const list = playlist(server);
   let maps = (list ? list.maps : c.maps && c.maps.length ? c.maps : baseMaps(t)).filter((m) => validMaps.has(m));
   if (!maps.length) maps = baseMaps(t);
-  if (c.shuffle !== false) maps = shuffle(maps);
+  return c.shuffle !== false ? shuffle(maps) : maps;
+}
+
+// BO3 bots per team: the bot count split over the two teams, or all in bot_maxFree without teams.
+function t7Bots(c) {
+  const t = TITLES[c.title];
+  const n = c.bots && c.bots.enabled ? Math.max(0, Math.min(64, Number(c.bots.fill) || 0)) : 0;
+  if (t.ffa.includes(c.gametype || 'dom')) return { allies: 0, axis: 0, free: n };
+  return { allies: Math.floor(n / 2), axis: Math.ceil(n / 2), free: 0 };
+}
+
+// Black Ops III (T7x): laid out like the T7x server configs' zone/server.cfg.
+function buildT7Config(server) {
+  const c = server.cod;
+  const gametype = clean(c.gametype || 'dom');
+  const bots = t7Bots(c);
+  const skill = skillsFor('t7').options.some((o) => o[0] === String(c.bots && c.bots.skill)) ? String(c.bots.skill) : skillsFor('t7').def;
+  const lines = [
+    `// Generated by Andromeda Hosting for "${clean(server.name)}". Rewritten on every start —`,
+    `// add your own settings in the panel under Settings → Extra config lines.`,
+    `set live_steam_server_name "${clean(c.hostname || server.name)}"`,
+    `set live_steam_server_description "Hosted with Andromeda Hosting"`,
+    `set com_maxclients "${Math.max(2, Math.min(64, Number(c.maxClients) || 18))}"`,
+    `set g_password "${clean(c.password)}"`,
+    `set rcon_password "${clean(c.rconPassword)}"`,
+    `set sv_lobby_mode "mp"`,
+    `set sv_skip_lobby "1"`,
+    `set sv_lanonly "0"`,
+    `set logfile "2"`,
+    `set g_log "logs/hp_${server.id}_games_mp.log"`,
+    `set scr_xpscale "${Number(c.xpScale) || 1}"`,
+    `// Game mode (${gametype}): the game's own settings for it`,
+    `exec "gamedata/gamesettings/mp/gamesettings_${gametype}.cfg"`,
+    `set scr_teambalance "1"`,
+    `// Bots (Black Ops III's own)`,
+    `set bot_maxAllies "${bots.allies}"`,
+    `set bot_maxAxis "${bots.axis}"`,
+    `set bot_maxFree "${bots.free}"`,
+    `set bot_difficulty "${skill}"`,
+  ];
+  if (c.extraConfig) lines.push('// Extra config lines from the panel', ...String(c.extraConfig).split(/\r?\n/));
+  lines.push(`// Map rotation (selected maps${c.shuffle !== false ? ', shuffled' : ''})`, `set sv_maprotation "${rotationString(TITLES.t7, gametype, rotationMaps(server))}"`);
+  return lines.join('\r\n') + '\r\n';
+}
+
+function buildConfig(server) {
+  const c = server.cod;
+  const t = title(server);
+  if (t.t7x) return buildT7Config(server);
+  const list = playlist(server);
+  const maps = rotationMaps(server);
   const lines = [
     `// Generated by Andromeda Hosting for "${clean(server.name)}". Rewritten on every start —`,
     `// add your own settings in the panel under Settings → Extra config lines.`,
@@ -539,7 +631,7 @@ const cod = {
       xpScale: Number(c.xpScale) || 4,
       weaponXpScale: Number(c.weaponXpScale) || 4,
       bots: {
-        enabled: !!t.botRepo && b.enabled !== false,
+        enabled: hasBots(t) && b.enabled !== false,
         fill: Number(b.fill ?? 12) || 0,
         skill: skillsFor(key).options.some((o) => o[0] === String(b.skill)) ? String(b.skill) : skillsFor(key).def,
         kick: b.kick !== false,
@@ -573,6 +665,8 @@ const cod = {
     if (server.cod.title === 'cod4x') {
       await tools.installCod4x(server.dir, log);
       tools.linkGameFiles(server.cod.gameDir, server.dir, log);
+    } else if (t.t7x) {
+      await tools.installT7x(server.cod.gameDir, log);
     } else if (t.pluto) {
       await tools.updatePlutonium(log);
     } else {
@@ -596,6 +690,23 @@ const cod = {
     checkGameDir(server);
     writeConfig(server);
     const port = String(c.port);
+    if (t.t7x) {
+      const exe = path.join(c.gameDir, 't7x.exe');
+      if (!fs.existsSync(exe)) throw new HttpError(400, `T7x (t7x.exe) isn't in ${c.gameDir} yet. Use "Update T7x" in the Mods tab, or put t7x.exe from alterware.dev in that folder.`);
+      // The T7x server launcher's own line (T7x_MP_Server.bat), with the panel's config. T7x prints to
+      // its own console window, so the console log (logfile 2) is followed.
+      return {
+        command: exe,
+        args: ['-dedicated', '+set', 'net_port', port, '+set', 'logfile', '2', '+exec', cfgName(server)],
+        cwd: c.gameDir,
+        logFile: [
+          path.join(c.gameDir, 'identities', 'dedicatedpc', 'console_mp.log'),
+          path.join(c.gameDir, 't7x', 'console_mp.log'),
+          path.join(c.gameDir, 'logs', 'console_mp.log'),
+          path.join(c.gameDir, 'console_mp.log'),
+        ],
+      };
+    }
     const fsGame = !t.pluto && c.bots.enabled && botsInstalled(server) ? ['+set', 'fs_game', 'mods/mp_bots'] : [];
     if (server.cod.title === 'cod4x') {
       const exe = tools.findCod4xExe(server.dir);
@@ -709,10 +820,23 @@ const cod = {
       {
         title: 'XP',
         fields: [
-          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1 },
+          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : {}) },
           ...(t.weaponXp ? [{ key: 'cod.weaponXpScale', label: 'Weapon XP multiplier', type: 'number', step: 1 }] : []),
         ],
       },
+      ...(t.nativeBots ? [{
+        title: 'Bots',
+        fields: [
+          { key: 'cod.bots.enabled', label: 'Add bots to the match', type: 'bool' },
+          {
+            key: 'cod.bots.fill',
+            label: 'Bots in the match',
+            type: 'number',
+            hint: `Black Ops III's own bots, split evenly over the two teams (all of them in ${t.ffa.map((g) => (t.gametypes.find((x) => x[0] === g) || [])[1]).join(' and ')}). Keep Max players above bots + people.`,
+          },
+          { key: 'cod.bots.skill', label: 'Bot difficulty', type: 'select', options: skillsFor(server.cod.title).options.map(([value, label]) => ({ value, label })) },
+        ],
+      }] : []),
       ...(t.botRepo ? [{
         title: 'Bots',
         fields: [
@@ -778,7 +902,7 @@ const cod = {
     }
     if ('cod.xpScale' in v) c.xpScale = num(v['cod.xpScale'], 1, 100, 1);
     if ('cod.weaponXpScale' in v) c.weaponXpScale = num(v['cod.weaponXpScale'], 1, 100, 1);
-    if ('cod.bots.enabled' in v) c.bots.enabled = !!t.botRepo && !!v['cod.bots.enabled'];
+    if ('cod.bots.enabled' in v) c.bots.enabled = hasBots(t) && !!v['cod.bots.enabled'];
     if ('cod.bots.fill' in v) c.bots.fill = num(v['cod.bots.fill'], 0, 64, 12);
     if ('cod.bots.skill' in v && skillsFor(c.title).options.some((o) => o[0] === String(v['cod.bots.skill']))) c.bots.skill = String(v['cod.bots.skill']);
     if ('cod.bots.kick' in v) c.bots.kick = !!v['cod.bots.kick'];
@@ -825,6 +949,7 @@ const cod = {
 module.exports = cod;
 module.exports.buildConfig = buildConfig;
 module.exports.rotationString = rotationString;
+module.exports.t7Bots = t7Bots;
 module.exports.buildGtsConfig = buildGtsConfig;
 module.exports.SKILLS = SKILLS;
 module.exports.q3 = q3;

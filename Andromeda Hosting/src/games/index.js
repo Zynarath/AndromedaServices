@@ -49,9 +49,10 @@ const templates = [
     platforms: ['win32', 'linux'], image: 'rust', namePrefix: 'Rust Server',
   },
   ...Object.entries(cod.TITLES).map(([key, t]) => ({
-    id: `cod-${key}`, game: 'cod', codTitle: key, title: t.label, subtitle: `Multiplayer · Domination${t.botRepo ? ' · bots' : ''} · ${t.weaponXp ? '4x player & weapon XP' : '4x XP'}`,
+    id: `cod-${key}`, game: 'cod', codTitle: key, title: t.label, subtitle: `Multiplayer · Domination${t.botRepo || t.nativeBots ? ' · bots' : ''} · ${t.weaponXp ? '4x player & weapon XP' : '4x XP'}`,
     platforms: t.platforms, image: 'cod', namePrefix: t.namePrefix, port: t.port, gameHint: t.gameHint, pluto: !!t.pluto, weaponXp: t.weaponXp,
-    bots: !!t.botRepo, alterware: !!t.exes,
+    bots: !!(t.botRepo || t.nativeBots), nativeBots: !!t.nativeBots, t7x: !!t.t7x, alterware: !!t.exes,
+    botSkills: (cod.SKILLS[key] || cod.SKILLS.default).options, botSkill: (cod.SKILLS[key] || cod.SKILLS.default).def,
   })),
 ];
 

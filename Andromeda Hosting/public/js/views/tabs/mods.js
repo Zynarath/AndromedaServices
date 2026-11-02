@@ -237,7 +237,9 @@ async function renderCod(root, { server }) {
     </div>`}
     <div class="panel">
       <h3>${engine}</h3>
-      <p class="muted small">${c.title === 'iw4x' || c.engine ? `${engine} is updated by its own launcher on your PC; this re-checks the game folder and rewrites the config.` : `Downloads the latest ${engine} and rewrites the config. The server is stopped first and started again if it was running.`}</p>
+      ${c.t7x ? html`<p class="muted small">Downloads the latest T7x (<code>t7x.exe</code>) from AlterWare into the Unranked Server folder and rewrites the config. The server is stopped first and started again if it was running. Your friends need T7x in their own Black Ops III folder to join.</p>
+      <p class="muted small">Bots are Black Ops III's own (no mod needed): ${c.bots.enabled ? `${c.bots.fill} in each match` : 'off'}. Change them in Settings → Bots.</p>`
+      : html`<p class="muted small">${c.title === 'iw4x' || c.engine ? `${engine} is updated by its own launcher on your PC; this re-checks the game folder and rewrites the config.` : `Downloads the latest ${engine} and rewrites the config. The server is stopped first and started again if it was running.`}</p>`}
       <button class="btn btn-primary" data-game-update="cod">${icon('refresh')}Update ${engine}</button>
     </div>`.s;
 }

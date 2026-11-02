@@ -55,6 +55,36 @@ function copyDir(src, dest) {
   fs.cpSync(src, dest, { recursive: true, force: true });
 }
 
+// ---- T7x (Black Ops III) ----
+// AlterWare's T7x client, from the address its install guide gives (forum.alterware.dev/t/1418).
+// It's a single exe that goes in the Unranked Server folder, next to the zone folder.
+const T7X_URL = 'https://master.bo3.eu/t7x/t7x.exe';
+
+async function installT7x(gameDir, log, url = T7X_URL) {
+  const dest = path.join(gameDir, 't7x.exe');
+  const tmp = path.join(config.cacheDir, `t7x-${Date.now()}.exe`);
+  log.info(`Downloading T7x from ${url}...`);
+  try {
+    await downloadFile(url, tmp);
+    const head = Buffer.alloc(2);
+    const fd = fs.openSync(tmp, 'r');
+    fs.readSync(fd, head, 0, 2, 0);
+    fs.closeSync(fd);
+    // Windows programs start with "MZ"; anything else is an error page, not T7x.
+    if (head.toString('latin1') !== 'MZ') throw new Error('the download is not a Windows program');
+    fs.copyFileSync(tmp, dest);
+    log.info(`T7x installed: ${dest}`);
+  } catch (err) {
+    if (fs.existsSync(dest)) {
+      log.warn(`Couldn't update T7x (${err.message}). Keeping the t7x.exe already in ${gameDir}.`);
+      return;
+    }
+    throw new Error(`Couldn't download T7x (${err.message}). Download t7x.exe yourself (see alterware.dev) and put it in ${gameDir}, then press Reinstall.`);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 // ---- CoD4x ----
 // Each release has the server as a bare binary (cod4x18_dedrun.exe / cod4x18_dedrun) next to
 // plugins_windows.zip / plugins_linux.zip, which hold only optional plugins. Older releases
@@ -200,4 +230,4 @@ function linkGameFiles(gameDir, serverDir, log) {
   if (linked || copied) log.info(`Game files: ${linked} linked, ${copied} copied into the server folder.`);
 }
 
-module.exports = { installCod4x, pickCod4xAsset, findCod4xExe, updatePlutonium, plutoStorage, installBotWarfare, packBotWarfare, linkGameFiles, latestRelease, plutoRoot, plutoBootstrapper };
+module.exports = { installT7x, T7X_URL, installCod4x, pickCod4xAsset, findCod4xExe, updatePlutonium, plutoStorage, installBotWarfare, packBotWarfare, linkGameFiles, latestRelease, plutoRoot, plutoBootstrapper };

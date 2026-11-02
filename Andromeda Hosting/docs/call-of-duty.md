@@ -1,4 +1,4 @@
-# Call of Duty servers (CoD4x, IW4x, Plutonium BO2 / BO1 / MW3)
+# Call of Duty servers (CoD4x, IW4x, Plutonium BO2 / BO1 / MW3, T7x BO3)
 
 Andromeda Hosting runs multiplayer servers for these community clients:
 
@@ -9,6 +9,7 @@ Andromeda Hosting runs multiplayer servers for these community clients:
 | Black Ops II (Plutonium T6) | BO2 | [Plutonium](https://plutonium.pw) | 4976 |
 | Black Ops (Plutonium T5) | BO1 | Plutonium | 28960 |
 | Modern Warfare 3 (Plutonium IW5) | MW3 | Plutonium | 27016 |
+| Black Ops III (T7x) | BO3 | Activision's Unranked Server + [T7x](https://alterware.dev) | 27017 |
 
 If you run two servers that share a default port (e.g. CoD4x and IW4x), the panel picks the next
 free port for the second one.
@@ -20,7 +21,8 @@ Every new server starts as:
   every start**
 - **4x player XP**, plus **4x weapon XP** on the games that have weapon levels (MW3, BO1, BO2)
 - **Bots** ([Bot Warfare](https://github.com/ineedbots) by INeedBots) keeping the match at 12
-  players (6v6). A bot leaves whenever a friend joins.
+  players (6v6). A bot leaves whenever a friend joins. BO3 uses its own bots instead: see
+  [Black Ops III](#black-ops-iii-t7x).
 - A generated **join password**, since the servers are for your friend group
 
 All of it can be changed per server under **Settings** (game mode, map checklist, shuffle, XP,
@@ -63,6 +65,54 @@ pick (Team Deathmatch is the usual choice). Nuketown 2025 and the DLC maps are a
 map checklist, marked as bonus map/DLC. They're never in a default rotation, because everyone
 who joins needs those map files.
 
+## Black Ops III (T7x)
+
+BO3 runs on Activision's free **Call of Duty: Black Ops III – Unranked Server** with AlterWare's
+**T7x** client on top. The Unranked Server on its own gives no XP and has no bots, so T7x is needed.
+
+**Set up:**
+
+1. In Steam, open *Library → Tools* and install **Call of Duty: Black Ops III – Unranked Server**.
+2. In the panel, **New server → Black Ops III (T7x)**, and set the game folder to that install
+   (the folder with `zone` in it).
+3. **Create & install** downloads `t7x.exe` from AlterWare (the address in its
+   [install guide](https://forum.alterware.dev/t/how-to-install-the-t7x-client/1418)) into that folder.
+   *Mods → Update T7x* gets the latest one later.
+4. Forward **UDP 27017** (or whatever port the server shows).
+
+**Your friends** need their own copy of Black Ops III on Steam with T7x installed: put `t7x.exe` in
+their Black Ops III folder and start the game with it. Then join from the console:
+`password <join password>; connect <address>:27017`.
+
+**What the panel writes:** `zone\hp_<id>.cfg` in the Unranked Server folder, laid out like the
+T7x server configs ([Dss0/t7-server-config](https://github.com/Dss0/t7-server-config)):
+`live_steam_server_name`, `g_password`, `rcon_password`, `com_maxclients`, `sv_lobby_mode mp`,
+`sv_skip_lobby 1`, the game mode's own `gamedata/gamesettings/mp/gamesettings_<mode>.cfg`, the bots,
+and `sv_maprotation "gametype <mode> map … map …"`. It starts
+`t7x.exe -dedicated +set net_port <port> +set logfile 2 +exec hp_<id>.cfg`, the same line as
+T7x's own `T7x_MP_Server.bat`.
+
+**Maps:** the 12 base maps are the default rotation. Nuk3town, Fringe Night, Redwood Snow and
+the 16 DLC maps can be ticked in Settings, but everyone who joins needs them.
+
+**Bots:** BO3 has bots of its own, so there's no Bot Warfare. *Bots in the match* is split evenly
+over the two teams (`bot_maxAllies` / `bot_maxAxis`); in Free-for-all and Gun Game they all go in
+`bot_maxFree`. Difficulty is `bot_difficulty`: Easy, Normal, Hard or Veteran. Keep *Max players*
+above bots + people, because it isn't confirmed that BO3's bots make room when a friend joins.
+
+### XP, Cryptokeys and the Black Market
+
+- **XP:** T7x lets you level up against bots offline (Combat Training), and the panel writes
+  `scr_xpscale` (4x by default). No source confirms that XP counts on a T7x **dedicated** server,
+  so check your rank after a match. If it doesn't count, Combat Training with T7x is the way to
+  level up with bots.
+- **Cryptokeys and the Black Market** come only from Activision's own servers (Demonware), for
+  ranked public matches. A private server can't give them, and none of the community clients
+  (T7x, BOIII) has its own Black Market. BOIII only has "unlock all". Adding keys to your Activision
+  account any other way means editing official stats, which can get the account banned, so the
+  panel doesn't do it. T7x connects to Activision's official servers, so Cryptokeys from official
+  public matches still work as normal.
+
 ## What you need
 
 **You must own each game.** None of the clients include game files. Andromeda Hosting runs the server
@@ -72,6 +122,7 @@ from your existing install, so set the **game folder** when you create the serve
 |---|---|---|
 | CoD4x | Your CoD4 folder (has `main` and `zone`) | Nothing. Andromeda Hosting downloads the CoD4x server and links the game files into the server folder (hard links: no extra disk space on the same drive) |
 | IW4x | Your MW2 folder **with IW4x installed** (has `iw4x.exe`) | Install IW4x first with the AlterWare launcher |
+| BO3 | The **Black Ops III Unranked Server** folder (Steam → Library → Tools; has `zone`) | Nothing. Andromeda Hosting downloads T7x (`t7x.exe`) into it. Players need T7x too |
 | BO2 / BO1 / MW3 | Your game folder (has `zone`) | A free **Plutonium server key**: sign in at [platform.plutonium.pw/serverkeys](https://platform.plutonium.pw/serverkeys) and create one. If Plutonium is already installed (`%LOCALAPPDATA%\Plutonium`), Andromeda Hosting uses that install; otherwise it downloads its own copy |
 
 Forward each server's **UDP** port on your router (see the server's Overview), or have your
@@ -144,5 +195,12 @@ what the console says:
   for MW3) inside the game folder.
 - **Plutonium console**: Plutonium shows its console in its own window, so the panel's console tab
   follows `console_mp.log` and uses RCON for commands.
+- **Black Ops III (T7x)**: the launch line, config dvars and bot dvars come from the T7x server
+  configs, but none of it has been run against a real server yet. Unknowns: whether T7x answers
+  the panel's RCON and `getstatus` (if it doesn't, the server stays on *Starting* and the console
+  can't send commands), where T7x writes `console_mp.log` (the panel watches
+  `identities\dedicatedpc`, `t7x`, `logs` and the folder itself), whether `scr_xpscale` changes
+  BO3's XP, and whether `-dedicated` is right. One installer uses `-headless`; if the server
+  doesn't start, tell me what its window says.
 - **Plutonium download**: the panel runs Plutonium's updater with `-install-dir … -update-only`,
   but only when you don't already have Plutonium installed.
