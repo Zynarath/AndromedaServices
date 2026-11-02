@@ -18,7 +18,6 @@ const GAMES = {
   sdtd: '7 Days to Die',
   valheim: 'Valheim',
   rust: 'Rust',
-  wow: 'WoW: Wrath of the Lich King',
 };
 
 const TYPES = {

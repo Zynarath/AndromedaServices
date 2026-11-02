@@ -1,13 +1,14 @@
 # Andromeda Services Website
 
-Version 1.0.1 · part of [Andromeda Services](../README.md)
+Version 1.0.2 · part of [Andromeda Services](../README.md)
 
 The public website for Andromeda game server hosting. For now it runs on your own PC only, until
 the hosting hardware is ready. It has:
 
 - **The pitch**: what Andromeda is, with an illustration of the control panel
 - **Supported games**: ARK (Ascended and Evolved), Minecraft, Rust, Valheim, Satisfactory, 7 Days
-  to Die, Call of Duty and WoW: Wrath of the Lich King, each with what the panel does for it
+  to Die and Call of Duty, each with what the panel does for it. World of Warcraft isn't on the
+  site: the WoW server is for private use only and won't be offered
 - **The control panel**: console, mods, files, backups, schedules, accounts, Discord, privacy
 - **How it works** and an **FAQ**
 - **A launch waitlist**: email, name, group size, games and a note. Sign-ups are saved on this
@@ -64,9 +65,8 @@ When the hardware is ready and the site goes online:
    only if the tunnel isn't on this PC.
 2. Add a privacy notice for the waitlist (you're collecting email addresses), and pricing once
    it's decided. The FAQ says pricing comes at launch.
-3. Check the game list. Hosting some of them commercially, especially the WoW private server and the
-   community Call of Duty clients, may conflict with those games' terms. Take those off the page
-   if you won't offer them.
+3. Check the game list. Hosting the community Call of Duty clients commercially may conflict with
+   those games' terms. Take them off the page if you won't offer them.
 
 ## Tests
 

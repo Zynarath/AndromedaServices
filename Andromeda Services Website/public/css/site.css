@@ -141,7 +141,7 @@ code { font-family: var(--mono); font-size: 0.9em; background: var(--surface-3);
 .note { text-align: center; color: var(--muted); margin: 32px 0 0; }
 
 /* games */
-.games { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.games { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .game { --h: 200; position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); padding: 96px 22px 22px; background:
   radial-gradient(120% 90% at 100% 0%, hsla(var(--h), 70%, 45%, 0.32), transparent 60%),
   linear-gradient(180deg, hsla(var(--h), 40%, 12%, 0.55), rgba(0, 0, 0, 0.6) 70%);
