@@ -6,7 +6,7 @@ three programs and the Windows app that runs them:
 
 | Folder | Version | What it is |
 |---|---|---|
-| [`Andromeda Hosting/`](Andromeda%20Hosting/) | 2.1.0 | The game server control panel: ARK, Minecraft (CurseForge modpacks), Call of Duty (including Black Ops III with bots), Satisfactory, 7 Days to Die, Valheim, Rust with uMod, and World of Warcraft: WotLK with bots. See its [README](Andromeda%20Hosting/README.md). |
+| [`Andromeda Hosting/`](Andromeda%20Hosting/) | 2.1.1 | The game server control panel: ARK, Minecraft (CurseForge modpacks), Call of Duty (including Black Ops III with bots), Satisfactory, 7 Days to Die, Valheim, Rust with uMod, and World of Warcraft: WotLK with bots. See its [README](Andromeda%20Hosting/README.md). |
 | [`Andromeda WotLK Website/`](Andromeda%20WotLK%20Website/) | 1.0.0 | The WotLK website for your realm: news, armory, realm status, who's online, honor, auction house and invite-only sign-up. See its [README](Andromeda%20WotLK%20Website/README.md). |
 | [`Andromeda Services Website/`](Andromeda%20Services%20Website/) | 1.0.1 | The public website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist. Runs on this PC for now, at <http://localhost:8092>. See its [README](Andromeda%20Services%20Website/README.md). |
 | [`services/`](services/) | 1.1.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |

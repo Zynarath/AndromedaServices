@@ -309,7 +309,7 @@ const FIELDS = [
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MaxRandomBots', label: 'Maximum random bots', type: 'number', group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMinLevel', label: 'Bot minimum level', type: 'number', group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMaxLevel', label: 'Bot maximum level', type: 'number', group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, def: true, group: 'Bots', hint: "Bots only queue for dungeons a real player is queued for: queue yourself and bots of that dungeon's level (15+) fill the other spots within a minute or two. Bots never start a dungeon group on their own." },
+  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, def: true, group: 'Bots', hint: "cMaNGOS WotLK's dungeon finder has no matchmaking: it only starts a dungeon for a full group of 5 that queued together, so queueing alone (or with bots queueing on their own) never pops. Invite 4 bots near your level first (1 tank, 1 healer, 3 damage), then queue as a group. See docs/wow.md." },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinBG', label: 'Bots join battlegrounds', type: BOOL, def: true, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AllowGuildBots', label: 'Bot guilds', type: BOOL, def: true, group: 'Bots' },
   { file: 'aiplayerbot.conf', key: 'AiPlayerbot.SyncQuestWithPlayer', label: 'Grouped bots complete quests with you', type: BOOL, def: false, group: 'Bots' },

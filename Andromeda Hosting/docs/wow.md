@@ -93,25 +93,32 @@ SPP folder.
 Changes apply on the next restart. If you change the number of random bots later, SPP's README
 says the random bots need a reset to take effect.
 
-### Bots in the dungeon finder
+### Dungeons with bots
 
-Bots don't queue for dungeons on their own. They fill the spots in dungeons **a real player has
-queued for**:
+**Queueing alone never pops on this server.** The dungeon finder in cMaNGOS WotLK (the server SPP
+runs) has no matchmaking: it only starts a dungeon for a queue entry that already holds a full
+group of 5. Everyone who queues alone, you and each bot, waits in their own entry forever, so the
+queue stays stuck after you join. SPP's author confirms it only works with a full group. This is in
+the server program itself (`LFGQueue.cpp`), so no setting in the panel or the config files fixes it.
 
-1. Open the dungeon finder (`I`) and queue for a dungeon or *Random Dungeon*, alone or with your
-   group. Pick your role.
-2. Every 30 seconds the bots check the queue. Random bots that are free (not grouped with a
-   player, not in an instance or battleground, not dead), of the same faction, level 15 or higher
-   and in that dungeon's level range then queue for it too. Expect the group to pop within a minute
-   or two.
+What works: **make the group first, then queue.**
 
-If no bots join:
-- **Settings → Bots → Bots use the dungeon finder** must be on. Older panel versions could turn
-  it off when you saved the settings form and SPP's `aiplayerbot.conf` had no
-  `AiPlayerbot.RandomBotJoinLfg` line; look at the switch, turn it on, save and restart.
-- There have to be enough online random bots near your level. With a narrow bot level range
-  or few bots, raise **Minimum random bots** or widen **Bot minimum/maximum level**.
-- The console shows `queues LFG, Dungeon as ...` lines when bots join.
+1. Invite 4 bots near your level: `/invite BotName`, or right-click a bot and choose *Invite*. Use
+   `/who` with a level range and class to find them (e.g. `/who 20-24 priest`). Free random bots
+   accept invites from players, but they can say no if your level or gear score is far below
+   theirs.
+2. Aim for **1 tank, 1 healer and 3 damage** (the dungeon finder checks this): a warrior, paladin
+   or druid to tank, a priest, paladin, shaman or druid to heal.
+3. Open the dungeon finder (`I`), pick your role and the dungeon (or *Random Dungeon*) and queue.
+   The bots answer the role check and accept the dungeon, and everyone is teleported in.
+
+Or skip the dungeon finder: with the group made, walk or fly to the instance portal (or have a GM
+bring the group to them with `.groupgo YourName`).
+
+**Bots use the dungeon finder** (Settings → Bots) makes random bots queue for dungeons that
+players are queued for (the console shows `queues LFG, Dungeon as ...`), but because of the missing
+matchmaking those queues don't pop either. Older panel versions could turn this switch off when you
+saved the settings form and SPP's `aiplayerbot.conf` had no `AiPlayerbot.RandomBotJoinLfg` line.
 
 ## Console, stop, backups
 
