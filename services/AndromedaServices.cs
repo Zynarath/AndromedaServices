@@ -25,7 +25,7 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
 [assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the WotLK website")]
-[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
 #endif
 
 namespace Andromeda
@@ -1154,12 +1154,13 @@ namespace Andromeda
             var t = new Thread(() =>
             {
                 var git = FindGit();
-                string text = "Version " + Assembly.GetExecutingAssembly().GetName().Version.ToString(2);
+                string version = "Version " + Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+                string text = version;
                 if (git != null)
                 {
                     var branch = Run(git, "rev-parse --abbrev-ref HEAD", null, 15000);
                     var commit = Run(git, "log -1 --format=\"%h · updated %cr\"", null, 15000);
-                    if (branch.Ok && commit.Ok) text = "Branch " + branch.LastLine + " · " + commit.LastLine;
+                    if (branch.Ok && commit.Ok) text = version + " · Branch " + branch.LastLine + " · " + commit.LastLine;
                 }
                 try { BeginInvoke((Action)(() => versionLabel.Text = text)); } catch { }
             });
