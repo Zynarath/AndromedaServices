@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Andromeda Services for Android: the panel and the websites in one app.
+<!-- Andromeda Services for Android: a native app for the panel and the service cards.
      versionName is the app's version (see CLAUDE.md); add 1 to versionCode with every new build. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="us.thefinalhour.andromeda"
-    android:versionCode="1"
-    android:versionName="1.0.0">
+    android:versionCode="2"
+    android:versionName="2.0.0">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -15,8 +15,9 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/App"
         android:allowBackup="false"
-        android:usesCleartextTraffic="false">
-        <!-- Turning the phone or opening the keyboard doesn't restart the app (the pages stay as they are). -->
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic: the panel can also be used at an http:// address on your own network or VPN.
+             Turning the phone or opening the keyboard doesn't restart the app (what you were doing stays). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

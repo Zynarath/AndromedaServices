@@ -20,7 +20,7 @@ Where each version lives (change all of them together):
 | Andromeda WotLK Website | `Andromeda WotLK Website/package.json`, `Andromeda WotLK Website/package-lock.json` (same two places), `Andromeda WotLK Website/README.md` (line 3), the table in the root `README.md` |
 | Andromeda Services Website | `Andromeda Services Website/package.json`, `Andromeda Services Website/README.md` (line 3), the table in the root `README.md` (no package-lock: it has no packages) |
 | Andromeda Services (`services/`) | `[assembly: AssemblyVersion("X.Y.Z.0")]` in `services/AndromedaServices.cs`, the table in the root `README.md` |
-| Andromeda App (`Andromeda App/`) | `android:versionName` in `Andromeda App/AndroidManifest.xml` (and add 1 to `android:versionCode`), `Andromeda App/README.md` (line 3), the table in the root `README.md`. Rebuild `Andromeda App/Andromeda.apk` with `build.sh` |
+| Andromeda App (`Andromeda App/`) | `android:versionName` in `Andromeda App/AndroidManifest.xml` (and add 1 to `android:versionCode`), `Andromeda App/README.md` (line 3), the table in the root `README.md`. Rebuild `Andromeda App/Andromeda.apk` with `build.sh` (Android SDK `platforms;android-34` and `build-tools;35.0.0`) |
 | `install.exe` (`services/Installer.cs`) | `[assembly: AssemblyVersion("X.Y.Z.0")]` in `services/Installer.cs`. Bump it when `Installer.cs` changes or `install.exe` is rebuilt |
 
 ## Tests

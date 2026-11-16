@@ -11,10 +11,12 @@ const java = require('../services/java');
 const ddns = require('../services/ddns');
 const discord = require('../services/discord');
 const hoststats = require('../services/hoststats');
+const appcontrol = require('../services/appcontrol');
+const log = require('../util/log')('services');
 const { HttpError } = require('../util/misc');
 
 const router = express.Router();
-router.use(['/system', '/settings', '/curseforge', '/minecraft'], auth.requireAuth);
+router.use(['/system', '/settings', '/curseforge', '/minecraft', '/services'], auth.requireAuth);
 
 function disk(p) {
   try {
@@ -46,6 +48,17 @@ router.get('/system', (_req, res) => {
     history: hoststats.history(), // [{ t, cpu, mem }] every 5 s, last hour
     historyStep: hoststats.EVERY_MS / 1000,
   });
+});
+
+// ---- what Andromeda Services (the Windows app) runs: the panel itself and the websites ----
+router.get('/services', auth.requireAdmin, (_req, res) => {
+  res.json({ ...appcontrol.status(), panelVersion: require('../../package.json').version });
+});
+
+router.post('/services/:key/:action', auth.requireAdmin, (req, res) => {
+  const r = appcontrol.send(req.params.key, req.params.action);
+  log.info(`${req.user.username} asked Andromeda Services to ${r.action} ${r.service}`);
+  res.json(r);
 });
 
 router.get('/system/public-ip', auth.requireAdmin, async (_req, res) => {

@@ -673,3 +673,38 @@ test('Stop when empty: a running server nobody has been on for 10 minutes is sto
   assert.equal(manager.checkEmpty(inst, { online: 0 }, t0 + 60 * min), false);
   assert.equal(lines.length, 1);
 });
+
+test('Andromeda Services from the panel: its status file is read, requests are left for it to run', () => {
+  const control = require('../src/services/appcontrol');
+  fs.rmSync(control.STATUS_FILE, { force: true });
+  assert.equal(control.status().available, false);
+  assert.throws(() => control.send('site', 'restart'), /has to be open on the PC/);
+  const written = { version: '1.3.0', about: 'Version 1.3.0 · Branch main', updating: false, services: [
+    { key: 'panel', name: 'Andromeda Hosting', description: 'The control panel.', state: 'running', version: 'v2.4.0', address: 'https://panel.example.com/', canStop: false },
+    { key: 'site', name: 'Andromeda WotLK Website', state: 'stopped', version: 'v1.0.0', address: 'javascript:alert(1)' },
+    { key: 'web', name: 'Site', state: 'nonsense' }, 'junk',
+  ] };
+  fs.writeFileSync(control.STATUS_FILE, '﻿' + JSON.stringify(written));
+  const st = control.status();
+  assert.deepEqual([st.available, st.version, st.services.length], [true, '1.3.0', 3]);
+  assert.deepEqual(st.services[1], { key: 'site', name: 'Andromeda WotLK Website', description: '', state: 'stopped', version: 'v1.0.0', address: '', canStop: true }, 'only web addresses are passed on');
+  assert.equal(st.services[2].state, 'stopped');
+  // A request is one small file the app picks up.
+  fs.rmSync(control.COMMANDS_DIR, { recursive: true, force: true });
+  assert.deepEqual(control.send('site', 'start'), { ok: true, service: 'Andromeda WotLK Website', action: 'start' });
+  const files = fs.readdirSync(control.COMMANDS_DIR);
+  assert.equal(files.length, 1);
+  assert.match(files[0], /^\d+-[0-9a-f]+\.json$/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(control.COMMANDS_DIR, files[0]), 'utf8')), { service: 'site', action: 'start' });
+  // The panel can be restarted but not stopped: nothing could start it again from afar.
+  assert.throws(() => control.send('panel', 'stop'), /can only be stopped on the PC/);
+  assert.equal(control.send('panel', 'restart').ok, true);
+  assert.throws(() => control.send('nope', 'start'), /Unknown service/);
+  assert.throws(() => control.send('site', 'format-c'), /Unknown action/);
+  // The app closed (the file stops being written): nothing is shown as running, nothing is queued.
+  assert.equal(control.status(Date.now() + 60e3).available, false);
+  fs.writeFileSync(control.STATUS_FILE, JSON.stringify({ ...written, updating: true }));
+  assert.throws(() => control.send('site', 'start'), /installing an update/);
+  fs.rmSync(control.STATUS_FILE, { force: true });
+  fs.rmSync(control.COMMANDS_DIR, { recursive: true, force: true });
+});

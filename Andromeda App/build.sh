@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Builds "Andromeda.apk" from this folder with the Android SDK's own tools (no Gradle, no libraries).
 #
-# Needs: a JDK (11 or newer) and the Android SDK with "platforms;android-34" and "build-tools;34.0.0":
-#   sdkmanager "platforms;android-34" "build-tools;34.0.0"
+# Needs: a JDK (11 or newer) and the Android SDK with "platforms;android-34" and "build-tools;35.0.0":
+#   sdkmanager "platforms;android-34" "build-tools;35.0.0"
 # Point ANDROID_HOME (or ANDROID_SDK_ROOT) at the SDK, then run:  ./build.sh
+# (Build tools 35 or newer: the dex step of 34 fails on classes compiled by JDK 21.)
 #
 # The APK is signed with the key in andromeda-app.keystore in this folder. The first build makes
 # that key. Keep the file: Android only installs an update over the app when it is signed with the
@@ -13,9 +14,9 @@ cd "$(dirname "$0")"
 
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 [ -n "$SDK" ] && [ -d "$SDK" ] || { echo "Set ANDROID_HOME to your Android SDK folder."; exit 1; }
-TOOLS="$SDK/build-tools/${BUILD_TOOLS:-34.0.0}"
+TOOLS="$SDK/build-tools/${BUILD_TOOLS:-35.0.0}"
 JAR="$SDK/platforms/${PLATFORM:-android-34}/android.jar"
-[ -x "$TOOLS/aapt2" ] || { echo "Build tools not found in $TOOLS (sdkmanager \"build-tools;34.0.0\")."; exit 1; }
+[ -x "$TOOLS/aapt2" ] || { echo "Build tools not found in $TOOLS (sdkmanager \"build-tools;35.0.0\")."; exit 1; }
 [ -f "$JAR" ] || { echo "Platform not found: $JAR (sdkmanager \"platforms;android-34\")."; exit 1; }
 
 KEYSTORE="${KEYSTORE:-andromeda-app.keystore}"

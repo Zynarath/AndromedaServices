@@ -25,7 +25,7 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
 [assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the websites")]
-[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
 #endif
 
 namespace Andromeda
@@ -806,6 +806,9 @@ namespace Andromeda
             poll = new System.Windows.Forms.Timer { Interval = 2000 };
             poll.Tick += (o, e) => { PollPorts(); SamplePc(); };
             poll.Start();
+            var remote = new System.Windows.Forms.Timer { Interval = 1000 }; // the panel and the phone app (see RemoteTick)
+            remote.Tick += (o, e) => RemoteTick();
+            remote.Start();
             var updateTimer = new System.Windows.Forms.Timer { Interval = 6 * 60 * 60 * 1000 }; // and quietly every 6 hours
             updateTimer.Tick += (o, e) => CheckForUpdates(false);
             updateTimer.Start();
@@ -1424,6 +1427,83 @@ namespace Andromeda
         }
 
         // Catches services started elsewhere, and ones whose "running" line was missed.
+        // ---------- the panel and the phone app ----------
+        // Andromeda Hosting can show what this app runs, and the phone app shows it through the panel.
+        // The two programs share two things in the panel's data folder:
+        //   services-status.json   written here: this app's version and how each program is doing
+        //   services-commands\     one small file per request (start / stop / restart), run within a second
+        // Nothing listens on the network for this: only the panel, on this PC, can write those files.
+        static string RemoteStatusFile { get { return Path.Combine(DataDir(), "services-status.json"); } }
+        static string RemoteCommandsDir { get { return Path.Combine(DataDir(), "services-commands"); } }
+        readonly DateTime remoteSince = DateTime.UtcNow;
+        string remoteLast = "";
+        int remoteTicks;
+
+        void RemoteTick()
+        {
+            if (exiting) return;
+            try { RunRemoteCommands(); } catch { }
+            try { WriteRemoteStatus(); } catch { }
+        }
+
+        void RunRemoteCommands()
+        {
+            if (!Directory.Exists(RemoteCommandsDir)) return;
+            foreach (var file in Directory.GetFiles(RemoteCommandsDir, "*.json"))
+            {
+                var written = File.GetLastWriteTimeUtc(file);
+                var request = ReadJson(file);
+                try { File.Delete(file); } catch { continue; } // can't be removed: don't run it over and over
+                // A request made while this app was closed is thrown away, not run when it opens.
+                if (written < remoteSince || (DateTime.UtcNow - written).TotalSeconds > 30) continue;
+                object key, action;
+                if (!request.TryGetValue("service", out key) || !request.TryGetValue("action", out action)) continue;
+                var s = services.FirstOrDefault(x => x.Key == (key as string));
+                if (s == null || updating || node == null) continue;
+                switch (action as string)
+                {
+                    case "start":
+                        if (!s.Alive && s.State != State.External) { s.Write("──── started from the panel ────"); Start(s); }
+                        break;
+                    case "stop": // the panel is never stopped this way: nothing could start it again from afar
+                        if (s.Alive && s != panel) { s.Write("──── stopped from the panel ────"); Stop(s, false); }
+                        break;
+                    case "restart":
+                        if (s.Alive) { s.Write("──── restarted from the panel ────"); Restart(s); }
+                        else if (s.State != State.External) Start(s);
+                        break;
+                }
+            }
+        }
+
+        void WriteRemoteStatus()
+        {
+            var list = new List<object>();
+            foreach (var s in services)
+            {
+                list.Add(new Dictionary<string, object>
+                {
+                    { "key", s.Key }, { "name", s.Name }, { "description", s.Description },
+                    { "state", s.State.ToString().ToLowerInvariant() }, { "version", AppVersion(s) },
+                    { "address", s.Open() }, { "canStop", s != panel },
+                });
+            }
+            var status = new Dictionary<string, object>
+            {
+                { "version", Assembly.GetExecutingAssembly().GetName().Version.ToString(3) },
+                { "about", versionLabel.Text }, { "updating", updating }, { "services", list },
+            };
+            var json = new JavaScriptSerializer().Serialize(status);
+            // Written when something changed, and every few seconds anyway so the panel can tell this app is open.
+            if (json == remoteLast && ++remoteTicks < 3) return;
+            remoteLast = json;
+            remoteTicks = 0;
+            var temp = RemoteStatusFile + ".tmp";
+            File.WriteAllText(temp, json, new UTF8Encoding(false));
+            if (File.Exists(RemoteStatusFile)) File.Replace(temp, RemoteStatusFile, null);
+            else File.Move(temp, RemoteStatusFile);
+        }
+
         void PollPorts()
         {
             foreach (var s in services)
