@@ -873,3 +873,15 @@ html[data-theme='grey'] .modal-backdrop { background: rgba(10, 11, 13, 0.55); }
   .set-control .switch { flex-direction: row; }
   .cat-emblem { width: 40px; height: 40px; }
 }
+
+/* Dashboard and sidebar: servers grouped into online and offline. */
+.server-group { margin-top: 26px; }
+.group-head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-2); }
+.group-head::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+.group-head .count { margin-left: 0; letter-spacing: 0; }
+#group-offline .server-card { opacity: 0.82; }
+.card-idle { color: var(--warn); font-size: 12.5px; font-weight: 600; }
+.card-idle:empty { display: none; }
+#group-offline .server-card:hover { opacity: 1; }
+.nav-sub { display: flex; align-items: center; justify-content: space-between; margin: 10px 14px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.nav-sub span { letter-spacing: 0; font-variant-numeric: tabular-nums; }

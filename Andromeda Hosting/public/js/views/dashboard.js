@@ -1,11 +1,15 @@
 import { api, onSocket } from '../api.js';
-import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artInner, copyText, sparkline, bindSparkHover } from '../ui.js';
+import { html, $, on, icon, toast, fmtBytes, statusPill, gameArt, artInner, copyText, sparkline, bindSparkHover, isOnline, stopsInText } from '../ui.js';
+
+// "Empty · stops in 7 min" on the card of a running server nobody is on.
+const idleText = (p) => (stopsInText(p) ? `Empty · ${stopsInText(p)}` : '');
+const playersText = (p) => (p ? `${p.online}${p.max ? '/' + p.max : ''}${p.bots ? ` +${p.bots}🤖` : ''}` : '—');
 
 function card(s) {
   const rt = s.runtime;
   const running = ['running', 'starting', 'stopping'].includes(rt.status);
   const canControl = s.perms.includes('control');
-  const players = rt.players ? `${rt.players.online}${rt.players.max ? '/' + rt.players.max : ''}${rt.players.bots ? ` +${rt.players.bots}🤖` : ''}` : '—';
+  const players = playersText(rt.players);
   const job = rt.job && rt.job.status === 'running' ? rt.job : null;
   return html`
     <article class="server-card" data-id="${s.id}">
@@ -23,7 +27,7 @@ function card(s) {
               <div><dt>Players</dt><dd data-f="players">${players}</dd></div>
               <div><dt>CPU</dt><dd data-f="cpu">${running && rt.stats ? rt.stats.cpu.toFixed(1) + '%' : '—'}</dd></div>
               <div><dt>RAM</dt><dd data-f="mem">${running && rt.stats ? fmtBytes(rt.stats.mem) : '—'}</dd></div>
-            </dl>`}
+            </dl><div class="card-idle" data-f="idle">${idleText(rt.players)}</div>`}
         ${!s.installed && !job && s.lastInstallError ? html`<div class="card-error">${icon('alert')} Install failed — open the server for details</div>` : ''}
       </div>
       <div class="card-actions">
@@ -88,12 +92,14 @@ export async function render(root, { state, refreshServers }) {
         <p class="muted small">Of ${fmtBytes(sys.memTotal)}, ${since}</p></div>`.s);
   };
 
+  // Servers in two groups, the ones that are up first. A server moves between them as it starts and stops.
   const drawCards = () => {
-    patch($('#cards', root), servers.length
-      ? servers.map((s) => card(s).s).join('')
-      : html`<div class="empty-state wide">${icon('server')}<h2>No servers yet</h2>
-          <p>${admin ? 'Create your first ARK or Minecraft server — the panel downloads everything it needs.' : 'An admin has not given you access to any servers yet.'}</p>
-          ${admin ? html`<a class="btn btn-primary" href="#/new">${icon('plus')}Create a server</a>` : ''}</div>`.s);
+    for (const [group, list] of [['online', servers.filter(isOnline)], ['offline', servers.filter((s) => !isOnline(s))]]) {
+      $(`#group-${group}`, root).hidden = !list.length;
+      $(`#count-${group}`, root).textContent = list.length;
+      patch($(`#cards-${group}`, root), list.map((s) => card(s).s).join(''));
+    }
+    $('#no-servers', root).hidden = servers.length > 0;
   };
 
   root.innerHTML = html`
@@ -103,7 +109,17 @@ export async function render(root, { state, refreshServers }) {
     </div>
     <section class="tiles" id="tiles"></section>
     <section class="grid-2 host-charts" id="host-charts"></section>
-    <section class="cards" id="cards"></section>`.s;
+    <section class="server-group" id="group-online" hidden>
+      <h2 class="group-head"><span class="status-dot st-running"></span>Online<span class="count" id="count-online"></span></h2>
+      <div class="cards" id="cards-online"></div>
+    </section>
+    <section class="server-group" id="group-offline" hidden>
+      <h2 class="group-head"><span class="status-dot"></span>Offline<span class="count" id="count-offline"></span></h2>
+      <div class="cards" id="cards-offline"></div>
+    </section>
+    <div class="cards" id="no-servers" hidden><div class="empty-state wide">${icon('server')}<h2>No servers yet</h2>
+      <p>${admin ? 'Create your first ARK or Minecraft server — the panel downloads everything it needs.' : 'An admin has not given you access to any servers yet.'}</p>
+      ${admin ? html`<a class="btn btn-primary" href="#/new">${icon('plus')}Create a server</a>` : ''}</div></div>`.s;
   drawTiles(sys);
   drawCards();
 
@@ -148,7 +164,9 @@ export async function render(root, { state, refreshServers }) {
     } else if (msg.type === 'players') {
       s.runtime.players = msg.players;
       const el = root.querySelector(`[data-id="${s.id}"] [data-f=players]`);
-      if (el) el.textContent = `${msg.players.online}${msg.players.max ? '/' + msg.players.max : ''}${msg.players.bots ? ` +${msg.players.bots}🤖` : ''}`;
+      if (el) el.textContent = playersText(msg.players);
+      const idle = root.querySelector(`[data-id="${s.id}"] [data-f=idle]`);
+      if (idle) idle.textContent = idleText(msg.players);
     } else if (msg.type === 'job') {
       const wasRunning = s.runtime.job && s.runtime.job.status === 'running';
       s.runtime.job = msg.job;

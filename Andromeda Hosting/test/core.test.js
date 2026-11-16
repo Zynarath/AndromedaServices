@@ -640,3 +640,36 @@ test('The page version matches package.json, or every visit warns about an old c
   assert.equal(page, require('../package.json').version);
 });
 
+
+test('Stop when empty: a running server nobody has been on for 10 minutes is stopped', () => {
+  const manager = require('../src/manager/manager');
+  const lines = [];
+  const inst = { server: { name: 'Quiet' }, status: 'running', emptySince: null, isBusy: () => false, appendConsole: (l) => lines.push(l) };
+  const t0 = 1_000_000;
+  const min = 60e3;
+  assert.equal(manager.checkEmpty(inst, { online: 0 }, t0), false, 'the clock starts at the first empty count');
+  assert.equal(manager.emptyStopsIn(inst, t0 + 3 * min), 420);
+  assert.equal(manager.checkEmpty(inst, { online: 0 }, t0 + 9 * min), false);
+  // Someone joins: the 10 minutes start over when they leave.
+  assert.equal(manager.checkEmpty(inst, { online: 1 }, t0 + 9.5 * min), false);
+  assert.equal(manager.emptyStopsIn(inst, t0 + 9.5 * min), null);
+  assert.equal(manager.checkEmpty(inst, { online: 0, bots: 500 }, t0 + 10 * min), false, 'bots are not players');
+  assert.equal(manager.checkEmpty(inst, { online: 0, bots: 500 }, t0 + 19.9 * min), false);
+  // Not in the middle of a backup or update: it waits for the job, then stops.
+  inst.isBusy = () => true;
+  assert.equal(manager.checkEmpty(inst, { online: 0 }, t0 + 20 * min), false);
+  inst.isBusy = () => false;
+  assert.equal(manager.checkEmpty(inst, { online: 0 }, t0 + 20.5 * min), true);
+  assert.match(lines[0], /Nobody has been online for 10 minutes — stopping the server/);
+  // Never while it is still starting, never on a count the game didn't report, never when turned off.
+  inst.status = 'starting';
+  assert.equal(manager.checkEmpty(inst, { online: 0 }, t0), false);
+  assert.equal(inst.emptySince, null);
+  inst.status = 'running';
+  for (const unknown of [null, {}, { online: NaN }]) assert.equal(manager.checkEmpty(inst, unknown, t0 + 60 * min), false);
+  assert.equal(inst.emptySince, null, 'an unknown count is not "empty"');
+  inst.server.stopWhenEmpty = false;
+  manager.checkEmpty(inst, { online: 0 }, t0);
+  assert.equal(manager.checkEmpty(inst, { online: 0 }, t0 + 60 * min), false);
+  assert.equal(lines.length, 1);
+});

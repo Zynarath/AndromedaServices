@@ -127,6 +127,15 @@ export const STATUS = {
   stopped: { label: 'Offline', cls: 'off' },
 };
 
+// A server counts as online while its process is up (starting and stopping included).
+export const isOnline = (server) => ['running', 'starting', 'stopping'].includes(server.runtime.status);
+
+// "stops in 7 min": how long an empty server has left before the panel stops it ('' when it won't).
+export function stopsInText(players) {
+  if (!players || players.stopsIn == null) return '';
+  return players.stopsIn < 60 ? 'stops in under a minute' : `stops in ${Math.ceil(players.stopsIn / 60)} min`;
+}
+
 export function statusPill(status) {
   const s = STATUS[status] || STATUS.stopped;
   return html`<span class="pill pill-${s.cls}"><span class="dot"></span>${s.label}</span>`;

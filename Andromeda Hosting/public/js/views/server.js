@@ -1,5 +1,5 @@
 import { api, onSocket, subscribe } from '../api.js';
-import { html, $, on, icon, toast, fmtBytes, fmtDuration, statusPill, gameArt, copyText, confirmBox, sparkline, bindSparkHover, esc, raw, artInner, webUrl } from '../ui.js';
+import { html, $, on, icon, toast, fmtBytes, fmtDuration, statusPill, gameArt, copyText, confirmBox, sparkline, bindSparkHover, esc, raw, artInner, webUrl, stopsInText } from '../ui.js';
 import * as settingsTab from './tabs/settings.js';
 import * as modsTab from './tabs/mods.js';
 import * as filesTab from './tabs/files.js';
@@ -132,7 +132,7 @@ export async function render(root, ctx) {
           <dl class="kv">
             <div><dt>State</dt><dd>${statusPill(rt.status)}</dd></div>
             <div><dt>Uptime</dt><dd id="uptime">${live && rt.startedAt ? fmtDuration(Date.now() - rt.startedAt) : '—'}</dd></div>
-            <div><dt>Players</dt><dd id="players">${rt.players ? `${rt.players.online}${rt.players.max ? ' / ' + rt.players.max : ''}${rt.players.bots ? ` · ${rt.players.bots} bots` : ''}` : '—'}</dd></div>
+            <div><dt>Players</dt><dd id="players">${playersLine(rt.players)}</dd></div>
             ${s.mc ? html`<div><dt>Memory limit</dt><dd>${(s.mc.memoryMb / 1024).toFixed(1)} GB</dd></div><div><dt>Java</dt><dd>${s.mc.javaMajor || 'auto'}</dd></div>` : ''}
             ${s.ark ? html`<div><dt>Mods</dt><dd>${s.ark.mods.length}</dd></div><div><dt>Max players</dt><dd>${s.ark.maxPlayers}</dd></div>` : ''}
             ${s.sf ? html`<div><dt>Mods</dt><dd>${s.sf.mods}${s.sf.modsDirty ? ' (installed on next start)' : ''}</dd></div>${rt.players && rt.players.map ? html`<div><dt>Session</dt><dd>${rt.players.map}</dd></div>` : ''}` : ''}
@@ -146,6 +146,7 @@ export async function render(root, ctx) {
             ? html`<div class="toggles">
                 <label class="switch"><input type="checkbox" data-flag="autoStart" ${s.autoStart ? 'checked' : ''}><span></span>Start when the panel starts</label>
                 <label class="switch"><input type="checkbox" data-flag="autoRestart" ${s.autoRestart ? 'checked' : ''}><span></span>Restart automatically after a crash</label>
+                <label class="switch" title="Bots don't count as players. Someone has to press Start again before anyone can join."><input type="checkbox" data-flag="stopWhenEmpty" ${s.stopWhenEmpty ? 'checked' : ''}><span></span>Stop when nobody has been on for 10 minutes</label>
               </div>`
             : ''}
         </div>
@@ -165,6 +166,12 @@ export async function render(root, ctx) {
       }
     };
   };
+
+  // "0 / 50 · stops in 7 min": an empty server says how long it has left.
+  function playersLine(p) {
+    if (!p) return '—';
+    return `${p.online}${p.max ? ' / ' + p.max : ''}${p.bots ? ` · ${p.bots} bots` : ''}${stopsInText(p) ? ` · empty, ${stopsInText(p)}` : ''}`;
+  }
 
   function joinPassword(g) {
     if (!g || g.joinPassword === undefined) return g && g.hasPassword ? html`<p class="small muted">Password protected.</p>` : '';
@@ -345,7 +352,7 @@ export async function render(root, ctx) {
     } else if (msg.type === 'players') {
       s.runtime.players = msg.players;
       if (tab.id === 'overview' && $('#players')) {
-        $('#players').textContent = `${msg.players.online}${msg.players.max ? ' / ' + msg.players.max : ''}${msg.players.bots ? ` · ${msg.players.bots} bots` : ''}`;
+        $('#players').textContent = playersLine(msg.players);
         $('#player-list').innerHTML = (msg.players.players || []).map((p) => `<span class="chip">${esc(p)}</span>`).join('');
       }
     } else if (msg.type === 'job') {

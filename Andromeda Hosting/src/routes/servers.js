@@ -47,6 +47,7 @@ function view(inst, user, full = false) {
     createdAt: s.createdAt,
     autoStart: !!s.autoStart,
     autoRestart: !!s.autoRestart,
+    stopWhenEmpty: s.stopWhenEmpty !== false,
     lastInstallError: s.lastInstallError || null,
     cover: covers.info(s),
     summary: game.describe(s),
@@ -172,6 +173,10 @@ router.patch('/servers/:id', (req, res) => {
   }
   if (b.autoStart !== undefined) s.autoStart = !!b.autoStart;
   if (b.autoRestart !== undefined) s.autoRestart = !!b.autoRestart;
+  if (b.stopWhenEmpty !== undefined) {
+    s.stopWhenEmpty = !!b.stopWhenEmpty;
+    inst.emptySince = null; // the 10 minutes start over
+  }
   if (b.backupKeep !== undefined) s.backupKeep = Math.max(1, Math.min(200, Number(b.backupKeep) || 10));
   if (b.backupBeforeUpdate !== undefined) s.backupBeforeUpdate = !!b.backupBeforeUpdate;
   if (b.tuning) {

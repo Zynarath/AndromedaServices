@@ -1,5 +1,5 @@
 import { api, connectSocket, disconnectSocket, onSocket, subscribe } from './api.js';
-import { html, $, on, icon, toast, esc } from './ui.js';
+import { html, $, on, icon, toast, esc, isOnline } from './ui.js';
 import * as login from './views/login.js';
 import * as dashboard from './views/dashboard.js';
 import * as create from './views/create.js';
@@ -11,7 +11,7 @@ import * as fileshare from './views/fileshare.js';
 
 // Bump together with package.json "version". If the server is newer than this page, the browser
 // (or Cloudflare) is showing an old cached copy and the user is asked to reload.
-const PAGE_VERSION = '2.2.0';
+const PAGE_VERSION = '2.3.0';
 
 export const state = { user: null, panelName: 'Andromeda Hosting', servers: [], version: PAGE_VERSION };
 
@@ -45,13 +45,12 @@ function renderNav() {
   const nav = $('#server-nav');
   if (!nav) return;
   const current = location.hash.match(/server\/([\w-]+)/)?.[1];
+  // Online servers first, then the offline ones, each under its own small heading.
+  const link = (s) => html`<a href="#/server/${s.id}" class="nav-server ${s.id === current ? 'active' : ''}" data-sid="${s.id}">
+    <span class="status-dot st-${s.runtime.status}"></span><span class="nav-name">${s.name}</span></a>`;
+  const group = (title, list) => (list.length ? html`<div class="nav-sub">${title}<span>${list.length}</span></div>${list.map(link)}` : '');
   nav.innerHTML = state.servers.length
-    ? state.servers
-        .map(
-          (s) => html`<a href="#/server/${s.id}" class="nav-server ${s.id === current ? 'active' : ''}" data-sid="${s.id}">
-            <span class="status-dot st-${s.runtime.status}"></span><span class="nav-name">${s.name}</span></a>`.s
-        )
-        .join('')
+    ? html`${group('Online', state.servers.filter(isOnline))}${group('Offline', state.servers.filter((s) => !isOnline(s)))}`.s
     : html`<div class="nav-empty">No servers yet</div>`.s;
 }
 

@@ -16,6 +16,9 @@ const logger = require('../util/log');
 
 const log = logger('manager');
 
+// How long a running server may stay empty before the panel stops it.
+const EMPTY_STOP_MS = 10 * 60e3;
+
 class Manager extends EventEmitter {
   constructor() {
     super();
@@ -41,6 +44,7 @@ class Manager extends EventEmitter {
     for (const ev of ['status', 'console', 'job']) inst.on(ev, (payload) => this.emit(ev, server.id, payload));
     inst.on('status', () => {
       server.lastStatus = inst.status;
+      if (inst.status !== 'running') inst.emptySince = null;
       if (inst.status === 'running' && inst.game.onReady) {
         try {
           inst.game.onReady(server, inst);
@@ -78,11 +82,37 @@ class Manager extends EventEmitter {
     for (const inst of this.instances.values()) {
       if (!inst.child || !['running', 'starting'].includes(inst.status) || !inst.game.query) continue;
       try {
-        inst.players = await inst.game.query(inst.server);
+        const players = await inst.game.query(inst.server);
         if (inst.status === 'starting' && inst.server.game === 'minecraft') inst.setStatus('running');
+        const stopping = this.checkEmpty(inst, players);
+        inst.players = { ...players, stopsIn: this.emptyStopsIn(inst) };
         this.emit('players', inst.server.id, inst.players);
+        if (stopping) inst.stop().catch((e) => log.warn(`Stopping the empty server ${inst.server.name} failed: ${e.message}`));
       } catch {}
     }
+  }
+
+  // Stop when empty: a running server nobody has been on for EMPTY_STOP_MS is stopped, so it
+  // doesn't use the PC for nothing. Only a player count the game really reported counts (a failed
+  // query isn't "empty"), bots aren't players, and the clock starts once the server has finished
+  // starting. Returns true when it is time to stop.
+  checkEmpty(inst, players, now = Date.now()) {
+    const on = inst.server.stopWhenEmpty !== false && inst.status === 'running';
+    if (!on || !players || !Number.isFinite(players.online) || players.online > 0) {
+      inst.emptySince = null;
+      return false;
+    }
+    if (!inst.emptySince) inst.emptySince = now;
+    if (now - inst.emptySince < EMPTY_STOP_MS || inst.isBusy()) return false; // never in the middle of a backup or update
+    inst.emptySince = null;
+    inst.appendConsole(`[panel] Nobody has been online for ${EMPTY_STOP_MS / 60000} minutes — stopping the server. (Overview tab → "Stop when empty" turns this off.)`);
+    log.info(`Stopping ${inst.server.name}: empty for ${EMPTY_STOP_MS / 60000} minutes`);
+    return true;
+  }
+
+  // Seconds until an empty server is stopped; null while someone is on (or the option is off).
+  emptyStopsIn(inst, now = Date.now()) {
+    return inst.emptySince ? Math.max(0, Math.round((inst.emptySince + EMPTY_STOP_MS - now) / 1000)) : null;
   }
 
   usedPorts(excludeId) {
@@ -184,6 +214,7 @@ class Manager extends EventEmitter {
       installed: false,
       autoStart: false,
       autoRestart: true,
+      stopWhenEmpty: true,
       eulaAccepted: !!input.eulaAccepted,
       tuning: { affinity: '', priority: 'normal' },
       backupKeep: 10,
@@ -341,3 +372,4 @@ class Manager extends EventEmitter {
 }
 
 module.exports = new Manager();
+module.exports.EMPTY_STOP_MS = EMPTY_STOP_MS;

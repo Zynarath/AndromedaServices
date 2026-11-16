@@ -1,6 +1,6 @@
 # Andromeda Hosting
 
-Version 2.2.0 · part of [Andromeda Services](../README.md)
+Version 2.3.0 · part of [Andromeda Services](../README.md)
 
 A self-hosted game server control panel, like G-Portal or Nitrado, that runs on **your own PC**.
 You and your friends sign in from a browser, start and stop servers, change settings, install and
@@ -82,6 +82,22 @@ server's Overview tab. When it's done, press **Start**.
   start). Players install the same mods with the Satisfactory Mod Manager.
 - *7 Days to Die mods*: **Mods** tab → *Install from .zip*. Mods with their own code (.dll) need Easy
   Anti-Cheat off (Settings → Advanced), and only an admin can install them.
+
+### Online and offline, and stopping empty servers
+
+The dashboard and the sidebar list your servers in two groups: **Online** (running, starting or
+stopping) first, then **Offline**. A server moves between them as it starts and stops.
+
+A running server that **nobody has been on for 10 minutes is stopped** (saved first, like pressing
+Stop), so it doesn't use the PC for nothing. Its card and Overview tab show *Empty · stops in N min*
+while the clock runs, and the Console says why it stopped.
+
+- The 10 minutes start once the server has finished starting, and start over whenever someone joins.
+- Bots don't count as players (WoW's playerbots, Call of Duty bots).
+- A server is only stopped on a player count the game really reported, and never in the middle of
+  a backup or update.
+- A stopped server has to be started again from the panel before anyone can join. To keep a server
+  up around the clock, turn off **Stop when nobody has been on for 10 minutes** on its Overview tab.
 
 ### Changing settings
 
