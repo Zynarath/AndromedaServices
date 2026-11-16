@@ -10,7 +10,8 @@ const path = require('path');
 const net = require('net');
 const { spawn, execFile } = require('child_process');
 const ddns = require('../services/ddns');
-const { Conf, parseDbInfo, describeConf, looksBoolean } = require('../util/conf');
+const { Conf, parseDbInfo, describeConf, looksBoolean, docInfo } = require('../util/conf');
+const modconfig = require('../util/modconfig');
 const { findFiles } = require('../util/paths');
 const { HttpError, sleep } = require('../util/misc');
 
@@ -244,80 +245,123 @@ function realmAddress(server) {
 }
 
 // ---------- settings ----------
+// The settings people change, written out by hand: a plain name, what it does, a slider range and
+// whether it shows straight away (`common`) or behind "Show more". Everything else in the .conf
+// files is listed under "All options" from the files' own documentation (confOptions below).
+//   std     the original game's value, used when the file doesn't document a default
+//   def     switches only: what the server does when the line is missing (see boolDefault)
+//   slider  { min, max, step, soft }: soft = a convenient range, the number box takes any value
 const BOOL = 'bool';
+const M = 'mangosd.conf';
+const B = 'aiplayerbot.conf';
+const rate = (key, label, hint, o = {}) => ({ file: M, key, label, type: 'number', step: 0.5, group: 'Rates', unit: '×', std: 1, slider: { min: 0, max: 10, step: 0.5, soft: true }, hint, ...o });
+const skill = (key, label, what) => ({ file: M, key, label, type: 'number', group: 'Rates', std: 1, slider: { min: 1, max: 10, step: 1, soft: true }, hint: `How many points ${what} go up each time they increase. 1 is the original game.` });
+const world = (key, label, type, hint, o = {}) => ({ file: M, key, label, type, group: 'World', hint, ...o });
+const chars = (key, label, type, hint, o = {}) => ({ file: M, key, label, type, group: 'Characters', hint, ...o });
+const pvp = (key, label, hint, o = {}) => ({ file: M, key, label, type: BOOL, group: 'Instances & PvP', hint, ...o });
+const bot = (key, label, type, hint, o = {}) => ({ file: B, key: `AiPlayerbot.${key}`, label, type, group: 'Bots', hint, ...o });
+const LEVELS = { min: 1, max: 80, step: 1, soft: true };
+const XP = { slider: { min: 0, max: 20, step: 0.5, soft: true }, common: true };
+
 const FIELDS = [
-  { file: 'mangosd.conf', key: 'Rate.XP.Kill', label: 'XP from kills', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.XP.Quest', label: 'XP from quests', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.XP.Explore', label: 'XP from exploring', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Rest.InGame', label: 'Rested XP gain', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Money', label: 'Gold drops', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Normal', label: 'Item drops (common)', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Rare', label: 'Item drops (rare)', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Epic', label: 'Item drops (epic)', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Reputation.Gain', label: 'Reputation gain', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Honor', label: 'Honor gain', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Uncommon', label: 'Item drops (uncommon/green)', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Legendary', label: 'Item drops (legendary)', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Drop.Item.Quest', label: 'Quest item drops', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Rest.Offline.InTavernOrCity', label: 'Rested XP while offline in an inn/city', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Rest.Offline.InWilderness', label: 'Rested XP while offline in the wild', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Talent', label: 'Talent points per level', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'SkillGain.Crafting', label: 'Skill points per crafting skill-up', type: 'number', group: 'Rates' },
-  { file: 'mangosd.conf', key: 'SkillGain.Gathering', label: 'Skill points per gathering skill-up', type: 'number', group: 'Rates' },
-  { file: 'mangosd.conf', key: 'SkillGain.Weapon', label: 'Skill points per weapon skill-up', type: 'number', group: 'Rates' },
-  { file: 'mangosd.conf', key: 'SkillGain.Defense', label: 'Skill points per defense skill-up', type: 'number', group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Mining.Amount', label: 'Ore per mining node', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Health', label: 'Health regeneration', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Mana', label: 'Mana regeneration', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Damage.Fall', label: 'Fall damage', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Auction.Time', label: 'Auction duration', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Auction.Deposit', label: 'Auction deposit', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'Rate.Auction.Cut', label: 'Auction house cut', type: 'number', step: 0.5, group: 'Rates' },
-  { file: 'mangosd.conf', key: 'GameType', label: 'Realm type', type: 'select', options: [{ value: '1', label: 'PvP' }, { value: '0', label: 'Normal (PvE)' }, { value: '6', label: 'RP' }, { value: '8', label: 'RP-PvP' }], group: 'World' },
-  { file: 'mangosd.conf', key: 'MaxPlayerLevel', label: 'Max level', type: 'number', group: 'World' },
-  { file: 'mangosd.conf', key: 'StartPlayerLevel', label: 'Starting level', type: 'number', group: 'World' },
-  { file: 'mangosd.conf', key: 'StartPlayerMoney', label: 'Starting money (copper)', type: 'number', group: 'World' },
-  { file: 'mangosd.conf', key: 'PlayerLimit', label: 'Player limit (0 = none)', type: 'number', group: 'World' },
-  { file: 'mangosd.conf', key: 'SkipCinematics', label: 'Intro cinematics', type: 'select', options: [{ value: '0', label: 'Always show' }, { value: '1', label: 'Skip after the first character' }, { value: '2', label: 'Always skip' }], group: 'World' },
-  { file: 'mangosd.conf', key: 'AllowTwoSide.Accounts', label: 'Horde and Alliance on one account', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Group', label: 'Cross-faction groups', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Guild', label: 'Cross-faction guilds', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Chat', label: 'Cross-faction chat', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Auction', label: 'Shared auction house', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'AllowTwoSide.Interaction.Mail', label: 'Cross-faction mail', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'Motd', label: 'Message of the day', type: 'text', group: 'World', hint: "Shown at login. Use @ for a new line" },
-  { file: 'mangosd.conf', key: 'ActivateWeather', label: 'Weather', type: BOOL, group: 'World' },
-  { file: 'mangosd.conf', key: 'CharactersPerRealm', label: 'Characters per account on this realm (1–10)', type: 'number', group: 'Characters' },
-  { file: 'mangosd.conf', key: 'StartHeroicPlayerLevel', label: 'Death Knight starting level', type: 'number', group: 'Characters' },
-  { file: 'mangosd.conf', key: 'MinLevelForHeroicCharacterCreating', label: 'Level needed to create a Death Knight', type: 'number', group: 'Characters' },
-  { file: 'mangosd.conf', key: 'AllFlightPaths', label: 'Start with every flight path', type: BOOL, group: 'Characters' },
-  { file: 'mangosd.conf', key: 'AlwaysMaxSkillForLevel', label: 'Weapon/defense skills always maxed', type: BOOL, group: 'Characters' },
-  { file: 'mangosd.conf', key: 'MaxPrimaryTradeSkill', label: 'Primary professions per character', type: 'number', group: 'Characters' },
-  { file: 'mangosd.conf', key: 'Death.SicknessLevel', label: 'Resurrection sickness from level', type: 'number', group: 'Characters' },
-  { file: 'mangosd.conf', key: 'Instance.IgnoreLevel', label: 'Enter instances below the required level', type: BOOL, group: 'Instances & PvP' },
-  { file: 'mangosd.conf', key: 'Instance.IgnoreRaid', label: 'Enter raids without a raid group', type: BOOL, group: 'Instances & PvP' },
-  { file: 'mangosd.conf', key: 'Quests.IgnoreRaid', label: 'Allow non-raid quests in raids', type: BOOL, group: 'Instances & PvP' },
-  { file: 'mangosd.conf', key: 'Battleground.CastDeserter', label: 'Deserter debuff for leaving battlegrounds', type: BOOL, group: 'Instances & PvP' },
-  { file: 'mangosd.conf', key: 'Battlefield.WGEnabled', label: 'Wintergrasp battles', type: BOOL, group: 'Instances & PvP' },
-  { file: 'mangosd.conf', key: 'Arena.AutoDistributePoints', label: 'Hand out arena points automatically', type: BOOL, group: 'Instances & PvP' },
-  { file: 'mangosd.conf', key: 'MapUpdate.Threads', label: 'Map update threads', type: 'number', group: 'Performance', hint: 'At most your CPU threads minus one' },
-  { file: 'mangosd.conf', key: 'PlayerSave.Interval', label: 'Save players every (ms)', type: 'number', group: 'Performance' },
-  { file: 'mangosd.conf', key: 'Visibility.Distance.Continents', label: 'View distance on continents (yards)', type: 'number', group: 'Performance' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.Enabled', label: 'Bots enabled', type: BOOL, def: false, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotAutologin', label: 'Random bots log in automatically', type: BOOL, def: true, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MinRandomBots', label: 'Minimum random bots', type: 'number', group: 'Bots', hint: 'SPP default 1000. Lower it if the server lags. Changing the count later needs a random bot reset.' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.MaxRandomBots', label: 'Maximum random bots', type: 'number', group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMinLevel', label: 'Bot minimum level', type: 'number', group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotMaxLevel', label: 'Bot maximum level', type: 'number', group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinLfg', label: 'Bots use the dungeon finder', type: BOOL, def: true, group: 'Bots', hint: "cMaNGOS WotLK's dungeon finder has no matchmaking: it only starts a dungeon for a full group of 5 that queued together, so queueing alone (or with bots queueing on their own) never pops. Invite 4 bots near your level first (1 tank, 1 healer, 3 damage), then queue as a group. See docs/wow.md." },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.RandomBotJoinBG', label: 'Bots join battlegrounds', type: BOOL, def: true, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AllowGuildBots', label: 'Bot guilds', type: BOOL, def: true, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.SyncQuestWithPlayer', label: 'Grouped bots complete quests with you', type: BOOL, def: false, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AutoLearnTrainerSpells', label: 'Bots learn trainer spells on level-up', type: BOOL, def: false, group: 'Bots' },
-  { file: 'aiplayerbot.conf', key: 'AiPlayerbot.AutoLearnQuestSpells', label: 'Bots learn quest spells', type: BOOL, def: false, group: 'Bots' },
-  { file: 'mangosd.conf', key: 'WorldServerPort', label: 'World port (TCP)', type: 'number', group: 'Network' },
-  { file: 'realmd.conf', key: 'RealmServerPort', label: 'Login port (TCP)', type: 'number', group: 'Network' },
+  rate('Rate.XP.Kill', 'XP from kills', 'Experience for killing creatures. 1× is the original game; 2× levels twice as fast.', XP),
+  rate('Rate.XP.Quest', 'XP from quests', 'Experience for handing in quests.', XP),
+  rate('Rate.XP.Explore', 'XP from exploring', 'Experience for discovering a new area on the map.', XP),
+  rate('Rate.Rest.InGame', 'Rested XP gain', 'How fast the rested bonus (the blue part of the XP bar) builds while a character is online in an inn or city.'),
+  rate('Rate.Drop.Money', 'Gold drops', 'How much money creatures carry.', { common: true }),
+  rate('Rate.Drop.Item.Normal', 'Item drops (common)', 'How often creatures drop white items.'),
+  rate('Rate.Drop.Item.Rare', 'Item drops (rare)', 'How often creatures drop blue items.', { common: true }),
+  rate('Rate.Drop.Item.Epic', 'Item drops (epic)', 'How often creatures and bosses drop purple items.', { common: true }),
+  rate('Rate.Reputation.Gain', 'Reputation gain', 'Reputation from kills and quests.', { common: true }),
+  rate('Rate.Honor', 'Honor gain', 'Honor from player kills and battlegrounds.', { common: true }),
+  rate('Rate.Drop.Item.Uncommon', 'Item drops (uncommon/green)', 'How often creatures drop green items.', { common: true }),
+  rate('Rate.Drop.Item.Legendary', 'Item drops (legendary)', 'How often orange items drop.'),
+  rate('Rate.Drop.Item.Quest', 'Quest item drops', 'How often the items a quest asks for drop. Raise it to cut down on "collect 10" grinding.'),
+  rate('Rate.Rest.Offline.InTavernOrCity', 'Rested XP while offline in an inn/city', 'How fast the rested bonus builds while logged out in an inn or city.'),
+  rate('Rate.Rest.Offline.InWilderness', 'Rested XP while offline in the wild', 'How fast the rested bonus builds while logged out anywhere else.'),
+  rate('Rate.Talent', 'Talent points per level', 'Talent points earned per level. Above 1× characters can fill more than one talent tree.', { slider: { min: 0, max: 5, step: 0.5, soft: true } }),
+  skill('SkillGain.Crafting', 'Skill points per crafting skill-up', 'crafting professions'),
+  skill('SkillGain.Gathering', 'Skill points per gathering skill-up', 'gathering professions (mining, herbalism, skinning)'),
+  skill('SkillGain.Weapon', 'Skill points per weapon skill-up', 'weapon skills'),
+  skill('SkillGain.Defense', 'Skill points per defense skill-up', 'the defense skill'),
+  rate('Rate.Mining.Amount', 'Ore per mining node', 'How many times a mining node can be mined before it is used up.'),
+  rate('Rate.Health', 'Health regeneration', 'How fast health comes back.'),
+  rate('Rate.Mana', 'Mana regeneration', 'How fast mana comes back.'),
+  rate('Rate.Damage.Fall', 'Fall damage', 'Damage from falling. 0× turns it off.', { slider: { min: 0, max: 5, step: 0.5, soft: true } }),
+  rate('Rate.Auction.Time', 'Auction duration', 'How long auctions run.', { slider: { min: 0.5, max: 10, step: 0.5, soft: true } }),
+  rate('Rate.Auction.Deposit', 'Auction deposit', 'The deposit paid to put an item up for auction.'),
+  rate('Rate.Auction.Cut', 'Auction house cut', 'The share the auction house keeps from a sale.'),
+
+  world('GameType', 'Realm type', 'select', 'On a PvP realm players can attack each other in contested zones; on a Normal realm only when they choose to. RP realms are the same two, meant for role-playing.', { common: true, options: [{ value: '1', label: 'PvP' }, { value: '0', label: 'Normal (PvE)' }, { value: '6', label: 'RP' }, { value: '8', label: 'RP-PvP' }] }),
+  world('MaxPlayerLevel', 'Max level', 'number', "The level cap. 80 is Wrath of the Lich King's.", { common: true, std: 80, slider: LEVELS }),
+  world('StartPlayerLevel', 'Starting level', 'number', 'The level new characters start at.', { common: true, std: 1, slider: LEVELS }),
+  world('StartPlayerMoney', 'Starting money (copper)', 'number', 'Money new characters start with, in copper: 100 = 1 silver, 10000 = 1 gold.', { common: true, std: 0, unit: 'copper', slider: { min: 0, max: 5000000, step: 10000, soft: true } }),
+  world('PlayerLimit', 'Player limit (0 = none)', 'number', 'The most players online at once, not counting game masters. 0 = no limit.', { common: true, slider: { min: 0, max: 500, step: 10, soft: true } }),
+  world('SkipCinematics', 'Intro cinematics', 'select', 'The intro video a new character sees when it first enters the world.', { options: [{ value: '0', label: 'Always show' }, { value: '1', label: 'Skip after the first character' }, { value: '2', label: 'Always skip' }] }),
+  world('AllowTwoSide.Accounts', 'Horde and Alliance on one account', BOOL, 'One account can have characters of both factions on this realm.', { common: true }),
+  world('AllowTwoSide.Interaction.Group', 'Cross-faction groups', BOOL, 'Horde and Alliance players can invite each other to a group. Handy when only a few friends play.', { common: true }),
+  world('AllowTwoSide.Interaction.Guild', 'Cross-faction guilds', BOOL, 'Horde and Alliance players can be in the same guild.'),
+  world('AllowTwoSide.Interaction.Chat', 'Cross-faction chat', BOOL, 'Horde and Alliance players can understand each other in chat.'),
+  world('AllowTwoSide.Interaction.Auction', 'Shared auction house', BOOL, 'Every auction house shows the auctions of both factions.'),
+  world('AllowTwoSide.Interaction.Mail', 'Cross-faction mail', BOOL, 'Horde and Alliance players can send each other mail.'),
+  world('Motd', 'Message of the day', 'text', 'Shown at login. Use @ for a new line', { common: true }),
+  world('ActivateWeather', 'Weather', BOOL, 'Rain, snow and sandstorms.'),
+
+  chars('CharactersPerRealm', 'Characters per account on this realm (1–10)', 'number', 'How many characters one account can have here.', { common: true, std: 10, slider: { min: 1, max: 10, step: 1 } }),
+  chars('StartHeroicPlayerLevel', 'Death Knight starting level', 'number', 'The level new Death Knights start at. 55 in the original game.', { common: true, std: 55, slider: LEVELS }),
+  chars('MinLevelForHeroicCharacterCreating', 'Level needed to create a Death Knight', 'number', 'An account needs a character of at least this level before it can create a Death Knight. 0 = anyone can.', { common: true, std: 55, slider: { min: 0, max: 80, step: 1, soft: true } }),
+  chars('AllFlightPaths', 'Start with every flight path', BOOL, 'New characters know every flight master from the start.', { common: true }),
+  chars('AlwaysMaxSkillForLevel', 'Weapon/defense skills always maxed', BOOL, 'Weapon and defense skills are always at the highest value for the character\'s level, so nobody has to train them up.'),
+  chars('MaxPrimaryTradeSkill', 'Primary professions per character', 'number', 'How many primary professions (mining, tailoring, enchanting…) one character can learn. 2 in the original game.', { std: 2, slider: { min: 0, max: 11, step: 1, soft: true } }),
+  chars('Death.SicknessLevel', 'Resurrection sickness from level', 'number', 'Characters below this level come back from the spirit healer without resurrection sickness.', { std: 11, slider: { min: 1, max: 81, step: 1, soft: true } }),
+
+  pvp('Instance.IgnoreLevel', 'Enter instances below the required level', 'Players can walk into a dungeon or raid before they reach its level.', { common: true }),
+  pvp('Instance.IgnoreRaid', 'Enter raids without a raid group', 'Raid instances can be entered alone or in a normal 5-player group.', { common: true }),
+  pvp('Quests.IgnoreRaid', 'Allow non-raid quests in raids', 'Ordinary quests still count while you are in a raid group.'),
+  pvp('Battleground.CastDeserter', 'Deserter debuff for leaving battlegrounds', 'Leaving a battleground early puts the Deserter debuff on the player, so they can\'t queue again for 15 minutes.', { common: true }),
+  pvp('Battlefield.WGEnabled', 'Wintergrasp battles', 'The scheduled battle for Wintergrasp in Northrend.'),
+  pvp('Arena.AutoDistributePoints', 'Hand out arena points automatically', 'Arena points are given out on a schedule instead of by a game master command.'),
+
+  { file: M, key: 'MapUpdate.Threads', label: 'Map update threads', type: 'number', group: 'Performance', common: true, hint: 'How many CPU threads update the world. At most your CPU threads minus one', slider: { min: 1, max: 16, step: 1, soft: true } },
+  { file: M, key: 'PlayerSave.Interval', label: 'Save players every (ms)', type: 'number', group: 'Performance', common: true, unit: 'ms', std: 900000, hint: 'How often characters are written to the database, in milliseconds: 900000 = 15 minutes. Shorter loses less after a crash but works the disk harder.', slider: { min: 60000, max: 1800000, step: 60000, soft: true } },
+  { file: M, key: 'Visibility.Distance.Continents', label: 'View distance on continents (yards)', type: 'number', group: 'Performance', common: true, unit: 'yd', hint: 'How far away players see creatures and each other outdoors. Further looks better and costs more CPU, most of all with many bots.', slider: { min: 5, max: 330, step: 5, soft: true } },
+
+  bot('Enabled', 'Bots enabled', BOOL, 'Turns the computer-controlled players on. Off = a world with only real players.', { def: false, common: true }),
+  bot('RandomBotAutologin', 'Random bots log in automatically', BOOL, 'The random bots come online by themselves when the server starts.', { def: true }),
+  bot('MinRandomBots', 'Minimum random bots', 'number', 'The fewest bots online at once. SPP default 1000. Lower it if the server lags. Changing the count later needs a random bot reset.', { common: true, slider: { min: 0, max: 3000, step: 50, soft: true } }),
+  bot('MaxRandomBots', 'Maximum random bots', 'number', 'The most bots online at once. Every bot costs CPU and memory.', { common: true, slider: { min: 0, max: 3000, step: 50, soft: true } }),
+  bot('RandomBotMinLevel', 'Bot minimum level', 'number', 'The lowest level random bots can be.', { common: true, slider: LEVELS }),
+  bot('RandomBotMaxLevel', 'Bot maximum level', 'number', 'The highest level random bots can be.', { common: true, slider: LEVELS }),
+  bot('RandomBotJoinLfg', 'Bots use the dungeon finder', BOOL, "cMaNGOS WotLK's dungeon finder has no matchmaking: it only starts a dungeon for a full group of 5 that queued together, so queueing alone (or with bots queueing on their own) never pops. Invite 4 bots near your level first (1 tank, 1 healer, 3 damage), then queue as a group. See docs/wow.md.", { def: true, common: true }),
+  bot('RandomBotJoinBG', 'Bots join battlegrounds', BOOL, 'Bots queue for battlegrounds, so they start even with only a few real players.', { def: true, common: true }),
+  bot('AllowGuildBots', 'Bot guilds', BOOL, undefined, { def: true }),
+  bot('SyncQuestWithPlayer', 'Grouped bots complete quests with you', BOOL, undefined, { def: false }),
+  bot('AutoLearnTrainerSpells', 'Bots learn trainer spells on level-up', BOOL, 'Bots get their class spells as they level, without visiting a trainer.', { def: false }),
+  bot('AutoLearnQuestSpells', 'Bots learn quest spells', BOOL, 'Bots also get the spells that normally come from class quests.', { def: false }),
+
+  { file: M, key: 'WorldServerPort', label: 'World port (TCP)', type: 'number', group: 'Network', common: true, std: 8085, hint: 'The port the game world listens on. Forward it on your router.' },
+  { file: 'realmd.conf', key: 'RealmServerPort', label: 'Login port (TCP)', type: 'number', group: 'Network', common: true, std: 3724, hint: 'The port the login server listens on. WoW clients use 3724 unless their realmlist says otherwise, so leave it unless something else needs that port.' },
 ];
+
+// The sections of the settings page, in the order they are shown: [title, icon, what it is about].
+const GROUPS = [
+  ['Realm', 'flag', 'The name players see in the realm list, and the address their game connects to.'],
+  ['Rates', 'trending', 'How fast characters progress. 1× is the original game: 2× doubles it, 0.5× halves it.'],
+  ['Bots', 'bot', 'Computer-controlled players that fill the world, join your group and queue for battlegrounds.'],
+  ['World', 'globe', 'The rules of the realm: PvP or PvE, the level cap, what new characters start with and how the two factions mix.'],
+  ['Characters', 'user', 'Limits and head starts for the characters players create.'],
+  ['Instances & PvP', 'swords', 'Who may enter dungeons and raids, and how battlegrounds and arenas behave.'],
+  ['Performance', 'gauge', 'How hard the server works. Leave these alone unless the server lags.'],
+  ['Network', 'network', 'The ports players connect to. Both must be forwarded on your router.'],
+];
+// One-click starting points: each choice fills in a few settings (nothing is saved until Save).
+const confKey = (file, key) => `conf.${file}.${key}`;
+const xpPreset = (label, x) => ({ label, values: Object.fromEntries(['Kill', 'Quest', 'Explore'].map((k) => [confKey(M, `Rate.XP.${k}`), x])) });
+const botPreset = (label, n) => ({ label, values: { [confKey(B, 'AiPlayerbot.MinRandomBots')]: n, [confKey(B, 'AiPlayerbot.MaxRandomBots')]: n } });
+const PRESETS = {
+  Rates: { label: 'Leveling speed', choices: [xpPreset('Original · 1×', 1), xpPreset('Relaxed · 2×', 2), xpPreset('Fast · 5×', 5), xpPreset('Very fast · 10×', 10)] },
+  Bots: { label: 'How busy the world is', choices: [botPreset('Quiet · 100 bots', 100), botPreset('Lively · 500', 500), botPreset('Busy · 1000', 1000), botPreset('Crowded · 2000', 2000)] },
+};
 
 // A switch with no "Key = value" line in the file (missing, or only a commented-out "# Key = 1") runs
 // with its default: the commented-out value if there is one, else the server's own default (def).
@@ -347,7 +391,20 @@ const BOT_GROUPS = [
   [/Level|Xp|Talent|Spell|Learn|Quest|Skill/i, 'Leveling, spells & quests'],
   [/RandomBot|Account|Login|Logout|Online|Count/i, 'Random bots'],
 ];
-const humanize = (key) => key.replace(/^AiPlayerbot\./, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\./g, ' · ');
+// "AiPlayerbot.RandomBotTimedLogout" -> "Random bot timed logout"; "Rate.Drop.Item.Poor" -> "Rate · Drop · Item · Poor".
+const optionName = (key) => key.replace(/^AiPlayerbot\./, '').split('.').map((part) => modconfig.humanize(part)).join(' · ');
+
+// Every option of the three files by "conf.<file>.<key>" (lower case), with the file's own documentation.
+function confDocs(server) {
+  const dir = paths(server).confDir;
+  const out = new Map();
+  for (const file of CONF_FILES) {
+    const full = path.join(dir, file);
+    if (!fs.existsSync(full)) continue;
+    for (const e of describeConf(fs.readFileSync(full, 'utf8'))) out.set(confKey(file, e.key).toLowerCase(), e);
+  }
+  return out;
+}
 
 function confOptions(server) {
   const dir = paths(server).confDir;
@@ -359,7 +416,7 @@ function confOptions(server) {
     for (const e of describeConf(fs.readFileSync(full, 'utf8'))) {
       if (NEVER.test(e.key) || curated.has(`${file}|${e.key}`.toLowerCase())) continue;
       const group = file === 'aiplayerbot.conf' ? (BOT_GROUPS.find(([re]) => re.test(e.key)) || [null, 'Other'])[1] : e.section || 'Other';
-      out.push({ ...e, file, group: `All options: ${group} (${file})`, bool: looksBoolean(e) });
+      out.push({ ...e, file, group, bool: looksBoolean(e) });
     }
   }
   return out;
@@ -621,34 +678,54 @@ const wow = {
 
   settingsSchema(server) {
     const p = paths(server);
-    const groups = new Map([['Realm', []]]);
-    groups.get('Realm').push(
-      { key: 'wow.realmName', label: 'Realm name (shown in the realm list)', type: 'text' },
-      { key: 'wow.address', label: 'Address players connect to', type: 'text', hint: `Blank = the panel's public address (${ddns.publicAddress() || 'not set — 127.0.0.1'}). Use a hostname like play.example.com.` }
+    const docs = confDocs(server);
+    const groups = new Map(GROUPS.map(([title, icon, blurb]) => [title, { title, icon, blurb, presets: PRESETS[title], fields: [] }]));
+    groups.get('Realm').fields.push(
+      { key: 'wow.realmName', label: 'Realm name (shown in the realm list)', type: 'text', common: true, hint: 'What players see when they pick a realm after logging in.' },
+      { key: 'wow.address', label: 'Address players connect to', type: 'text', common: true, hint: `Blank = the panel's public address (${ddns.publicAddress() || 'not set — 127.0.0.1'}). Use a hostname like play.example.com.` }
     );
-    if (p.dbDir) groups.get('Realm').push({ key: 'wow.manageDb', label: 'Start/stop the bundled MySQL with the server', type: 'bool' });
+    if (p.dbDir) groups.get('Realm').fields.push({ key: 'wow.manageDb', label: 'Start/stop the bundled MySQL with the server', type: 'bool', common: true, hint: 'The database that holds accounts and characters starts and stops together with the server. Turn it off only if you run MySQL yourself.' });
     for (const f of FIELDS) {
-      if (f.file === 'aiplayerbot.conf' && !fs.existsSync(path.join(p.confDir, 'aiplayerbot.conf'))) continue;
-      if (!groups.has(f.group)) groups.set(f.group, []);
-      groups.get(f.group).push({ key: `conf.${f.file}.${f.key}`, label: f.label, type: f.type, options: f.options, step: f.step, hint: f.hint, tip: `${f.file}: ${f.key}` });
+      if (f.file === B && !fs.existsSync(path.join(p.confDir, B))) continue;
+      const doc = docInfo((docs.get(confKey(f.file, f.key).toLowerCase()) || {}).doc);
+      // The default the form marks and resets to: what the file documents, else the original game's.
+      const said = doc.def ?? (f.std === undefined ? undefined : String(f.std));
+      const def = f.type === BOOL ? (f.def !== undefined ? !!f.def : said === '0' || said === '1' ? said === '1' : undefined) : said;
+      groups.get(f.group).fields.push({
+        key: confKey(f.file, f.key), label: f.label, type: f.type, options: f.options, step: f.step, tip: `${f.file}: ${f.key}`,
+        hint: f.hint || doc.text.slice(0, 300) || undefined, common: !!f.common, slider: f.slider, unit: f.unit, def,
+      });
     }
-    const curatedCount = groups.size;
+    const curated = [...groups.values()].filter((g) => g.fields.length);
+    for (const g of curated) if (g.presets && !g.presets.choices.every((c) => Object.keys(c.values).every((k) => g.fields.some((f) => f.key === k)))) delete g.presets;
+    // "All options": every other key in the files, described by the files themselves.
+    const all = new Map();
     for (const e of confOptions(server)) {
-      if (!groups.has(e.group)) groups.set(e.group, []);
-      const numeric = /^-?\d+(\.\d+)?$/.test(e.value ?? e.def ?? '');
-      const field = { key: `conf.${e.file}.${e.key}`, label: humanize(e.key), tip: `${e.file}: ${e.key}`, admin: true, hint: (e.doc || '').split('\n').slice(0, 6).join(' · ').slice(0, 400) || undefined };
+      const id = `${e.file}|${e.group}`;
+      if (!all.has(id)) all.set(id, { title: `All options: ${e.group} (${e.file})`, short: e.group, file: e.file, advanced: true, collapsed: true, fields: [] });
+      const doc = docInfo(e.doc);
+      const unset = e.value === undefined; // only there as a commented-out line: the server uses its default
+      const def = doc.def ?? e.def;
+      const field = { key: confKey(e.file, e.key), label: optionName(e.key), tip: `${e.file}: ${e.key}`, admin: true, hint: doc.text.slice(0, 400) || undefined, def };
+      const notSet = (shown) => (unset ? [{ value: '', label: shown === undefined ? 'Not set' : `Not set (${shown})` }] : []);
       if (e.bool) {
         field.type = 'select';
-        field.options = [...(e.value === undefined ? [{ value: '', label: `Not set (default ${e.def === '1' ? 'on' : 'off'})` }] : []), { value: '1', label: 'On (1)' }, { value: '0', label: 'Off (0)' }];
+        field.options = [...notSet(def === undefined ? undefined : def === '1' ? 'on' : 'off'), { value: '1', label: 'On' }, { value: '0', label: 'Off' }];
+      } else if (doc.choices && (unset || doc.choices.some((c) => c.value === e.value))) {
+        field.type = 'select';
+        field.options = [...notSet(def), ...doc.choices.map((c) => ({ value: c.value, label: `${c.label.charAt(0).toUpperCase()}${c.label.slice(1)} (${c.value})` }))];
       } else {
+        const numeric = /^-?\d+(\.\d+)?$/.test(e.value ?? e.def ?? '');
         field.type = numeric ? 'number' : 'text';
-        if (e.value === undefined) field.def = e.def;
+        if (numeric && /^Rate\./.test(e.key)) Object.assign(field, { unit: '×', slider: { min: 0, max: 10, step: 0.5, soft: true } });
+        else if (numeric && doc.max !== undefined && doc.max - doc.min <= 1000) field.slider = { min: doc.min, max: doc.max, step: 1, soft: true };
       }
-      groups.get(e.group).push(field);
+      all.get(id).fields.push(field);
     }
     return {
-      note: `Saved straight into mangosd.conf / aiplayerbot.conf / realmd.conf in ${p.confDir}. The "All options" sections (admins only) list every other setting in those files, with the files' own descriptions; blank = leave as is.`,
-      sections: [...groups].map(([title, fields], i) => ({ title, fields, collapsed: i >= curatedCount })),
+      layout: 'categories',
+      note: `Saved straight into mangosd.conf, aiplayerbot.conf and realmd.conf in ${p.confDir}. Each section shows the settings people change most; "Show more" has the rest of that section, and "All options" (admins only) lists every other line of those files with the files' own descriptions.`,
+      sections: [...curated, ...all.values()],
     };
   },
 

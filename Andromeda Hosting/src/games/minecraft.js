@@ -11,6 +11,7 @@ const { downloadFile } = require('../util/download');
 const { HttpError, splitArgs } = require('../util/misc');
 const modconfig = require('../util/modconfig');
 const { readEntry } = require('../util/zip');
+const { sniffImage } = require('../services/modinfo');
 
 // Minecraft Server List Ping (1.7+): returns player counts, version and MOTD.
 const mcping = (() => {
@@ -586,9 +587,20 @@ function gameruleField(g) {
 // ---- Mod configuration: every mod's own config files, as forms ----
 const CONFIG_EXT = /\.(toml|json|json5|properties|cfg|ya?ml|txt)$/i;
 const MAX_CONFIG_BYTES = 512 * 1024;
-const jarInfoCache = new Map(); // jar path -> { mtime, mods: [{ id, name }] }
+const jarInfoCache = new Map(); // jar path -> { mtime, mods: [{ id, name, logo, description }] }
+const logoCache = new Map(); // "jar path|mtime|entry" -> { type, data } (a mod's own picture, read once)
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
-// Mod ids and display names from each jar (META-INF/mods.toml, neoforge.mods.toml, fabric.mod.json).
+const entryPath = (p) => (typeof p === 'string' && p && !p.split('/').includes('..') ? p.replace(/^\.?\/+/, '') : null);
+const oneLine = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+// A quoted TOML value: key="x", key='x' or a multi-line key='''…''' / key="""…""".
+function tomlString(text, key) {
+  const m = new RegExp(`^\\s*${key}\\s*=\\s*(?:'''([\\s\\S]*?)'''|"""([\\s\\S]*?)"""|"((?:[^"\\\\]|\\\\.)*)"|'([^']*)')`, 'm').exec(text);
+  return m ? m[1] ?? m[2] ?? m[3] ?? m[4] : null;
+}
+
+// Mod ids, display names, descriptions and pictures from each jar (META-INF/mods.toml,
+// neoforge.mods.toml, fabric.mod.json, quilt.mod.json).
 async function jarMods(file) {
   const st = fs.statSync(file);
   const hit = jarInfoCache.get(file);
@@ -599,13 +611,17 @@ async function jarMods(file) {
     if (e && e.name.endsWith('.json')) {
       const j = JSON.parse(e.data.toString('utf8'));
       const q = j.quilt_loader || j;
-      if (q.id) mods.push({ id: String(q.id), name: String((q.metadata && q.metadata.name) || j.name || q.id) });
+      const meta = q.metadata || j;
+      // "icon" is one path, or a picture per size: take the biggest.
+      const icon = meta.icon && typeof meta.icon === 'object' ? meta.icon[Object.keys(meta.icon).sort((a, b) => Number(b) - Number(a))[0]] : meta.icon;
+      if (q.id) mods.push({ id: String(q.id), name: String(meta.name || j.name || q.id), logo: entryPath(icon), description: oneLine(meta.description) });
     } else if (e) {
       // [[mods]] blocks: modId="create" ... displayName="Create"
-      for (const block of e.data.toString('utf8').split(/\[\[mods\]\]/).slice(1)) {
-        const id = /^\s*modId\s*=\s*["']([^"']+)["']/m.exec(block);
-        const name = /^\s*displayName\s*=\s*["']([^"']+)["']/m.exec(block);
-        if (id) mods.push({ id: id[1], name: name ? name[1] : id[1] });
+      const [head, ...blocks] = e.data.toString('utf8').split(/\[\[mods\]\]/);
+      for (const block of blocks) {
+        const own = block.split(/^\s*\[/m)[0]; // up to the next table ([[dependencies.x]], [modproperties.x])
+        const id = tomlString(own, 'modId');
+        if (id) mods.push({ id, name: tomlString(own, 'displayName') || id, logo: entryPath(tomlString(own, 'logoFile') || tomlString(head, 'logoFile')), description: oneLine(tomlString(own, 'description')) });
       }
     }
   } catch {
@@ -614,6 +630,32 @@ async function jarMods(file) {
   jarInfoCache.set(file, { mtime: st.mtimeMs, mods });
   return mods;
 }
+
+// Every mod in mods/, by id: { name, description, logo (path inside the jar), jar }.
+async function installedMods(server) {
+  const out = new Map();
+  const modsDir = path.join(server.dir, 'mods');
+  if (!fs.existsSync(modsDir)) return out;
+  for (const f of fs.readdirSync(modsDir).filter((n) => /\.jar$/i.test(n))) {
+    const jar = path.join(modsDir, f);
+    for (const m of await jarMods(jar)) out.set(m.id.toLowerCase(), { ...m, jar });
+  }
+  return out;
+}
+
+// A mod's own picture, read from its jar: { type, data }, or null when it has none.
+minecraft.modLogo = async function (server, modId) {
+  const m = (await installedMods(server)).get(String(modId).toLowerCase());
+  if (!m || !m.logo) return null;
+  const key = `${m.jar}|${fs.statSync(m.jar).mtimeMs}|${m.logo}`;
+  if (!logoCache.has(key)) {
+    const e = await readEntry(m.jar, m.logo).catch(() => null);
+    const type = e && e.data.length <= MAX_LOGO_BYTES ? sniffImage(e.data) : null;
+    if (logoCache.size >= 200) logoCache.delete(logoCache.keys().next().value);
+    logoCache.set(key, type ? { type, data: e.data } : null);
+  }
+  return logoCache.get(key);
+};
 
 function listConfigFiles(server) {
   const roots = [['config', 'config']];
@@ -655,26 +697,35 @@ function groupFields(fields) {
   return [...groups].map(([title, fs]) => ({ title, fields: fs }));
 }
 
+// What a config file is for, from its name: Forge writes <mod>-client/-common/-server.toml.
+function fileRole(c) {
+  const base = c.file.split('/').pop().replace(/\.[^.]+$/, '');
+  if (/(^|[-_.])client$/i.test(base)) return 'client';
+  if (c.where === 'world') return 'world';
+  if (/(^|[-_.])server$/i.test(base)) return 'server';
+  if (/(^|[-_.])common$/i.test(base)) return 'common';
+  return '';
+}
+const ROLE_ORDER = { world: 0, server: 0, common: 1, '': 2, client: 3 };
+
 minecraft.listModConfigs = async function (server) {
-  const names = new Map();
-  const modsDir = path.join(server.dir, 'mods');
-  if (fs.existsSync(modsDir)) {
-    for (const f of fs.readdirSync(modsDir).filter((n) => /\.jar$/i.test(n))) {
-      for (const m of await jarMods(path.join(modsDir, f))) names.set(m.id.toLowerCase(), m.name);
-    }
-  }
-  const ids = [...names.keys()].sort((a, b) => b.length - a.length);
+  const installed = await installedMods(server);
+  const ids = [...installed.keys()].sort((a, b) => b.length - a.length);
   const groups = new Map();
   for (const c of listConfigFiles(server)) {
     const key = modKeyOf(c.file);
-    const id = names.has(key) ? key : ids.find((i) => key.startsWith(i) || key.replace(/[-_]/g, '').startsWith(i.replace(/[-_]/g, ''))) || key;
-    const g = groups.get(id) || { id, name: names.get(id) || key, files: [] };
-    g.files.push({ file: c.file, where: c.where, client: /client/i.test(c.file.split('/').pop()), format: modconfig.formatOf(c.file) });
+    const id = installed.has(key) ? key : ids.find((i) => key.startsWith(i) || key.replace(/[-_]/g, '').startsWith(i.replace(/[-_]/g, ''))) || key;
+    const mod = installed.get(id);
+    const g = groups.get(id) || { id, name: mod ? mod.name : key, description: (mod && mod.description) || '', image: mod && mod.logo ? `/api/servers/${server.id}/mod-image/${encodeURIComponent(id)}` : null, files: [] };
+    const role = fileRole(c);
+    g.files.push({ file: c.file, where: c.where, label: c.file.split('/').pop(), role, client: role === 'client', format: modconfig.formatOf(c.file) });
     groups.set(id, g);
   }
+  // The files that change how the server plays come first; client-only ones last.
+  for (const g of groups.values()) g.files.sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.file.localeCompare(b.file));
   return {
     kind: 'files',
-    note: 'Config files the mods wrote in config/ and the world\'s serverconfig/. Mods create them the first time they load, so start the server once after adding mods. Changes apply on the next restart.',
+    note: "Config files the mods wrote in config/ and the world's serverconfig/. Mods create them the first time they load, so start the server once after adding mods. Changes apply on the next restart.",
     mods: [...groups.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
 };
@@ -687,8 +738,8 @@ function configPath(server, file) {
 
 minecraft.readModConfig = function (server, file) {
   const text = fs.readFileSync(configPath(server, file), 'utf8');
-  const d = modconfig.describe(file, text);
-  return { file, format: d.format, raw: text, fields: d.fields && d.fields.map(({ line, start, raw, path: p, ...f }) => f) };
+  const d = modconfig.describe(file, text, { normalize: true });
+  return { file, format: d.format, raw: text, fields: d.fields && modconfig.present(d.fields).map(({ line, start, raw, path: p, ...f }) => f) };
 };
 
 minecraft.writeModConfig = function (server, file, { values, raw }) {
@@ -699,7 +750,7 @@ minecraft.writeModConfig = function (server, file, { values, raw }) {
   }
   let r;
   try {
-    r = modconfig.apply(file, fs.readFileSync(full, 'utf8'), values || {});
+    r = modconfig.apply(file, fs.readFileSync(full, 'utf8'), values || {}, { normalize: true });
   } catch (err) {
     throw new HttpError(400, err.message);
   }

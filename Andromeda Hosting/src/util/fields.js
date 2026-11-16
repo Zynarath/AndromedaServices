@@ -2,13 +2,14 @@
 // Settings forms for games whose settings are a flat list of values kept on the server record
 // (Valheim, 7 Days to Die, Satisfactory). Each field:
 //   { name, label, type: text|number|bool|select|textarea, group, def, min, max, step, options: [[value, label]],
-//     pattern, maxLength, admin, hint }
+//     pattern, maxLength, admin, hint, unit, slider: { min, max, step, soft } }
 // `admin` fields end up on a command line or decide what the server runs, so only admins may change them.
 const { HttpError } = require('./misc');
 
-function schema(prefix, fields, groups, { collapsed = [] } = {}) {
+function schema(prefix, fields, groups, { collapsed = [], about = {} } = {}) {
   const sections = groups.map((title) => ({
     title,
+    blurb: about[title], // one line on what the section is for
     collapsed: collapsed.includes(title),
     fields: fields
       .filter((f) => f.group === title)
@@ -20,6 +21,9 @@ function schema(prefix, fields, groups, { collapsed = [] } = {}) {
         admin: f.admin,
         def: f.def,
         min: f.min,
+        max: f.max,
+        unit: f.unit,
+        slider: f.slider,
         step: f.step || (f.type === 'number' && !f.float ? 1 : undefined),
         options: f.options && f.options.map(([value, label]) => ({ value, label })),
       })),

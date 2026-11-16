@@ -16,6 +16,7 @@ const ficsit = require('../services/ficsit');
 const { pipeline } = require('stream/promises');
 const modinfo = require('../services/modinfo');
 const umod = require('../services/umod');
+const { presentSchema } = require('../util/settingsview');
 const { HttpError, randomId } = require('../util/misc');
 const { parseCpuList, PRIORITIES, CORES } = require('../util/procstats');
 
@@ -242,7 +243,8 @@ router.post('/servers/:id/command', async (req, res) => {
 // ---- game settings ----
 router.get('/servers/:id/settings', (req, res) => {
   const inst = load(req, 'settings');
-  res.json({ schema: inst.game.settingsSchema(inst.server), values: inst.game.readSettings(inst.server, { admin: req.user.role === 'admin' }) });
+  const values = inst.game.readSettings(inst.server, { admin: req.user.role === 'admin' });
+  res.json({ schema: presentSchema(inst.game.settingsSchema(inst.server), values), values });
 });
 
 router.put('/servers/:id/settings', (req, res) => {
@@ -279,12 +281,26 @@ function modConfigGame(inst) {
 
 router.get('/servers/:id/mod-config', async (req, res) => {
   const inst = modConfigGame(load(req, 'settings'));
-  res.json({ ...(await inst.game.listModConfigs(inst.server, { refresh: req.query.refresh === '1' })), running: !!inst.child, canRaw: auth.can(req.user, inst.server, 'files') });
+  const list = await inst.game.listModConfigs(inst.server, { refresh: req.query.refresh === '1' });
+  // Rust: each plugin's picture and page from uMod. The settings never wait long for it.
+  if (inst.server.game === 'rust') {
+    const names = list.mods.filter((m) => m.installed).map((m) => m.id);
+    const known = await Promise.race([umod.latestVersions(names).catch(() => ({})), new Promise((r) => setTimeout(() => r({}), 2500))]);
+    for (const m of list.mods) if (known[m.id]) Object.assign(m, { image: known[m.id].logo, url: known[m.id].url });
+  }
+  res.json({ ...list, running: !!inst.child, canRaw: auth.can(req.user, inst.server, 'files') });
 });
 
-// A mod's Workshop/CurseForge picture, for mods in this server's list (downloaded once, then cached).
+// A mod's picture: for ARK the Workshop/CurseForge one of a mod in this server's list (downloaded
+// once, then cached); for Minecraft the mod's own logo from its jar.
 router.get('/servers/:id/mod-image/:modId', async (req, res) => {
   const inst = load(req);
+  if (inst.server.mc) {
+    const logo = await inst.game.modLogo(inst.server, req.params.modId).catch(() => null);
+    if (!logo) throw new HttpError(404, 'No picture for this mod');
+    res.set('Cache-Control', 'private, max-age=86400');
+    return res.type(logo.type).send(logo.data);
+  }
   if (!inst.server.ark || !inst.server.ark.mods.includes(req.params.modId)) throw new HttpError(404, 'Unknown mod');
   const img = await modinfo.getModImage(req.params.modId, inst.server.ark.edition).catch(() => null);
   if (!img) throw new HttpError(404, 'No picture for this mod');

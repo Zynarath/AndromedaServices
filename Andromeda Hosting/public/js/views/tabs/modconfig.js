@@ -1,10 +1,13 @@
 import { api } from '../../api.js';
 import { html, $, $$, on, icon, toast, webUrl } from '../../ui.js';
-import { field } from './settings.js';
+import { row, bindRows, dirtyText, sectionIcon } from './controls.js';
 
-// Mod configuration: each mod (with its Workshop/CurseForge picture and name) and its settings —
-// ARK mod INI sections pre-filled with the defaults from the mod's page, Minecraft mod config files,
-// Rust uMod plugin settings (shown with readable names; the key from the file is on hover).
+// Mod configuration: pick a mod on the left (with its Workshop / CurseForge / uMod picture, or the
+// logo from its jar) and change its settings on the right — ARK mod INI sections pre-filled with
+// the defaults from the mod's page, Minecraft mod config files, Rust uMod plugin settings.
+// Settings have readable names, the explanation their author wrote, sliders for amounts and a
+// marker for what was changed from the default. Big files open on the settings people change
+// most; "All" and the search box reach the rest.
 export async function render(root, { server }) {
   const base = `/api/servers/${server.id}/mod-config`;
   const ark = !!server.ark;
@@ -13,43 +16,45 @@ export async function render(root, { server }) {
   let current = null; // { file, data }
   let modQuery = '';
   let rawMode = false;
+  let showAll = false;
+  let rows = null;
 
-  const thumb = (m, cls = 'mc-thumb') =>
-    m.image ? html`<img class="${cls}" src="${m.image}" alt="" loading="lazy">` : html`<span class="${cls} mc-thumb-none">${icon('box')}</span>`;
+  const thumb = (m, cls = 'mod-pic') =>
+    m.image ? html`<img class="${cls}" src="${m.image}" alt="" loading="lazy">` : html`<span class="${cls} mod-pic-none">${icon('box')}</span>`;
+  const modOf = (file) => list.mods.find((m) => m.files.some((f) => f.file === file)) || {};
+  const fileName = (f) => f.label || (ark ? f.where : f.file.split('/').pop());
+  // The file a mod opens on: the first one that changes how the server plays.
+  const firstFile = (m) => (m.files.find((f) => f.documented) || m.files.find((f) => !f.client) || m.files[0] || {}).file;
+  const modSub = (m) => {
+    const documented = m.files.reduce((n, f) => n + (f.documented || 0), 0);
+    if (ark) return documented ? `${documented} documented setting${documented === 1 ? '' : 's'}` : `${m.files.length} section${m.files.length === 1 ? '' : 's'} in your INI`;
+    if (plugins) return m.files.map((f) => f.label).join(' · ');
+    return `${m.files.length} config file${m.files.length === 1 ? '' : 's'}`;
+  };
+  const statePill = (m) =>
+    plugins && !m.installed ? html`<span class="pill pill-tag" title="The plugin was removed; its settings are kept">not installed</span>` : plugins && !m.enabled ? html`<span class="pill pill-tag">off</span>` : '';
 
   const drawList = () => {
     const q = modQuery.toLowerCase();
     const mods = list.mods.filter((m) => !q || m.name.toLowerCase().includes(q) || String(m.modId || '').includes(q) || m.files.some((f) => f.file.toLowerCase().includes(q)));
+    const open = current ? modOf(current.file).id : null;
     $('#mc-list').innerHTML = html`${mods.length
       ? mods.map(
-          (m) => html`<div class="mc-card">
-            <div class="mc-card-head">${thumb(m)}<div class="mc-card-title"><strong>${m.name}</strong>${plugins && !m.installed ? html` <span class="pill pill-tag" title="The plugin was removed; its settings are kept">not installed</span>` : plugins && !m.enabled ? html` <span class="pill pill-tag">off</span>` : ''}
-              <small class="muted">${m.modId ? html`<span class="mono">${m.modId}</span>` : ''}${m.url ? html` · <a href="${webUrl(m.url)}" target="_blank" rel="noopener">mod page</a>` : ''}</small></div></div>
-            ${m.files.length
-              ? m.files.map(
-                  (f) => html`<button type="button" class="mc-file ${current && current.file === f.file ? 'active' : ''}" data-file="${f.file}">
-                    <span>${f.label || (ark ? f.where : f.file.split('/').slice(1).join('/'))}</span>
-                    ${f.documented ? html`<span class="pill pill-ok" title="Settings documented on the mod page">${f.documented} documented</span>` : ''}
-                    ${f.client ? html`<span class="pill pill-tag" title="Client-side settings: they only matter on players' PCs">client</span>` : ''}
-                    ${f.where === 'world' ? html`<span class="pill pill-tag">world</span>` : ''}</button>`
-                )
-              : html`<p class="muted small mc-none">${ark ? 'No settings found on its mod page. If it has some, add its section above.' : 'No config files.'}</p>`}
-          </div>`
+          (m) => html`<button type="button" class="mod-item ${m.id === open ? 'active' : ''}" data-mod="${m.id}" ${m.files.length ? '' : 'disabled'}>
+            ${thumb(m)}<span class="mod-item-text"><strong>${m.name}</strong><small>${m.files.length ? modSub(m) : 'Nothing to configure'}</small></span>${statePill(m)}</button>`
         )
-      : html`<p class="muted small">${list.mods.length ? 'No mod matches.' : ark ? 'No mods in the mod list yet (Mods tab).' : plugins ? 'No plugin settings yet. Add plugins in the Mods tab and start the server once so they write their settings.' : 'No mod config files yet. Start the server once so the mods create them.'}</p>`}`.s;
+      : html`<p class="muted small mc-none">${list.mods.length ? 'No mod matches.' : ark ? 'No mods in the mod list yet (Mods tab).' : plugins ? 'No plugin settings yet. Add plugins in the Mods tab and start the server once so they write their settings.' : 'No mod config files yet. Start the server once so the mods create them.'}</p>`}`.s;
   };
-
-  // Default value shown as text, for comparing with what's in the input.
-  const asText = (f, v) => (f.type === 'bool' ? (v === true || /^true$/i.test(String(v)) ? 'true' : 'false') : String(v ?? '').trim());
 
   const drawForm = () => {
     const box = $('#mc-form');
     if (!current) {
-      box.innerHTML = html`<div class="mc-empty">${icon('edit')}<p>Pick a mod on the left to see its settings.</p></div>`.s;
+      box.innerHTML = html`<div class="mc-empty">${icon('sliders')}<p>Pick a mod on the left to see its settings.</p></div>`.s;
       return;
     }
     const d = current.data;
-    const mod = list.mods.find((m) => m.files.some((f) => f.file === current.file)) || {};
+    const mod = modOf(current.file);
+    const file = (mod.files || []).find((f) => f.file === current.file) || {};
     const fields = d.fields || [];
     const sections = new Map();
     for (const f of fields) {
@@ -58,86 +63,116 @@ export async function render(root, { server }) {
       sections.get(sec).push(f);
     }
     const showRaw = rawMode || !d.fields;
-    const changed = fields.filter((f) => f.def !== undefined && asText(f, f.value) !== asText(f, f.def)).length;
+    const kept = fields.filter((f) => f.common === false).length;
+    const url = (d.mod && d.mod.url) || mod.url;
+    const stopFirst = ark && list.running;
     box.innerHTML = html`
       <form id="mc-edit" novalidate>
-        <div class="mc-form-head">
-          ${ark ? thumb(mod, 'mc-hero') : ''}
-          <div class="mc-form-title"><h3>${ark ? mod.name || current.file.slice(current.file.indexOf(':') + 1) : plugins ? `${mod.name || current.file.split('/').pop()} — ${d.where}` : current.file.split('/').pop()}</h3>
-            <p class="muted small mono">${ark ? d.where : plugins ? `oxide/${current.file}` : current.file}</p>
-            ${fields.some((f) => f.def !== undefined) ? html`<p class="small">${changed} of ${fields.filter((f) => f.def !== undefined).length} settings changed from their defaults</p>` : ''}</div>
+        <div class="mod-hero">${mod.image ? html`<span class="mod-hero-bg" style="background-image:url('${mod.image}')"></span>` : ''}
+          ${thumb(mod, 'mod-hero-pic')}
+          <div class="mod-hero-text">
+            <h3>${mod.name || fileName(file)} ${statePill(mod)}</h3>
+            ${mod.description ? html`<p class="mod-hero-about">${mod.description}</p>` : ''}
+            <p class="mod-hero-meta"><span class="mono">${ark ? d.where : plugins ? `oxide/${current.file}` : current.file}</span><span id="mc-changed"></span></p>
+          </div>
           <div class="btn-row">
-            ${d.mod && d.mod.url ? html`<a class="btn btn-sm btn-ghost" href="${webUrl(d.mod.url)}" target="_blank" rel="noopener">Mod page</a>` : ''}
+            ${url ? html`<a class="btn btn-sm" href="${webUrl(url)}" target="_blank" rel="noopener" title="${plugins ? 'What each setting does is explained on the plugin\'s page' : 'Open the mod\'s page'}">${icon('external')}${plugins ? 'Plugin page' : 'Mod page'}</a>` : ''}
             ${!ark && list.canRaw && d.fields ? html`<button type="button" class="btn btn-sm btn-ghost" id="mc-raw">${showRaw ? 'Show as form' : 'Edit raw file'}</button>` : ''}
           </div>
         </div>
+        ${(mod.files || []).length > 1
+          ? html`<div class="file-tabs" role="tablist">${mod.files.map(
+              (f) => html`<button type="button" role="tab" class="file-tab ${f.file === current.file ? 'active' : ''}" data-file="${f.file}" title="${ark ? f.where : f.file}">${fileName(f)}
+                ${f.client ? html`<span class="tag" title="Client-side settings: they only matter on players' PCs">players' PCs</span>` : f.role === 'world' ? html`<span class="tag" title="Kept with this world">this world</span>` : ''}</button>`
+            )}</div>`
+          : ''}
         ${d.mod && d.mod.sources && d.mod.sources.length
           ? html`<details class="adv mc-sources"><summary>Where these settings come from (${d.mod.sources.length} source${d.mod.sources.length === 1 ? '' : 's'} checked)</summary><ul>${d.mod.sources.map(
               (src) => html`<li>${src.url ? html`<a href="${webUrl(src.url)}" target="_blank" rel="noopener">${src.label}</a>` : src.label} — ${src.error ? html`<span class="muted">couldn't read it (${src.error})</span>` : `${src.settings} setting${src.settings === 1 ? '' : 's'}`}</li>`
             )}</ul><p class="muted small">The panel reads the mod's page, its discussions about settings, and documents the page links to (Pastebin, GitHub, Google Docs). If the mod explains a setting only in a video or on Discord, add it below.</p></details>`
           : ''}
-        ${ark && list.running ? html`<p class="form-error">Stop the server to change mod settings — ARK rewrites its INI files when it shuts down.</p>` : ''}
+        ${file.client ? html`<div class="callout">${icon('info')}<div>This file holds client-side settings (graphics, sounds, key hints). They only matter on players' own PCs, so changing them here does nothing for the server.</div></div>` : ''}
+        ${stopFirst ? html`<p class="form-error">Stop the server to change mod settings — ARK rewrites its INI files when it shuts down.</p>` : ''}
         ${ark && !d.documented && !showRaw ? html`<p class="muted small">The mod page doesn't document settings for this section, so only what's in your INI is shown. Add settings from the mod's instructions below.</p>` : ''}
         ${showRaw
           ? d.raw === undefined
             ? html`<p class="muted">This file can't be shown as a form, and editing it as text needs the Files permission.</p>`
             : html`${d.fields ? '' : html`<p class="muted small">This file can't be shown as a form, so here it is as text.</p>`}
               <textarea name="__raw" class="mono mc-raw" rows="24" spellcheck="false">${d.raw}</textarea>`
-          : html`${fields.length > 8 ? html`<input type="search" id="mc-find" class="filter" placeholder="Find a setting…" autocomplete="off">` : ''}
+          : html`${fields.length > 6
+                ? html`<div class="cat-tools">
+                    <label class="search-box">${icon('search')}<input type="search" id="mc-find" placeholder="Find a setting…" autocomplete="off" aria-label="Find a setting"></label>
+                    ${kept ? html`<div class="seg" role="radiogroup" aria-label="Which settings to show"><label class="seg-opt"><input type="radio" name="__view" value="common" ${showAll ? '' : 'checked'}><span>Most used · ${fields.length - kept}</span></label><label class="seg-opt"><input type="radio" name="__view" value="all" ${showAll ? 'checked' : ''}><span>All · ${fields.length}</span></label></div>` : ''}
+                  </div>`
+                : ''}
               ${fields.length ? '' : html`<p class="muted">No settings yet. Add the ones from the mod's page below.</p>`}
-              ${[...sections].map(
-                ([sec, fs]) => html`<fieldset>${sec ? html`<legend>${sec}</legend>` : ''}<div class="form-grid">${fs.map((f) =>
-                  field({ ...f, key: 'v:' + f.id, type: f.type === 'list' ? 'text' : f.type, def: undefined, tip: f.key && f.key !== f.label ? `In the file: ${f.key}` : undefined, hint: [f.hint, f.type === 'list' ? 'List: keep the [ ] brackets' : ''].filter(Boolean).join(' · ') || undefined }, f.value)
-                )}</div></fieldset>`
-              )}
+              <div id="mc-sections" class="${kept && !showAll ? 'only-common' : ''}">${[...sections].map(
+                ([sec, fs]) => html`<section class="set-sec"><h4>${icon(sectionIcon(sec || (plugins ? file.label : mod.name)))}<span>${sec || (sections.size > 1 ? 'General' : 'Settings')}</span><span class="count">${fs.length}</span></h4>
+                  <div class="set-list">${fs.map((f) => row({ ...f, key: 'v:' + f.id, tip: f.key && f.key !== f.label ? f.key : undefined, badge: ark && f.inFile === false ? 'not in your INI yet' : undefined }, f.value))}</div></section>`
+              )}</div>
+              <p class="muted" id="mc-nomatch" hidden>No settings match.</p>
+              ${kept ? html`<button type="button" class="more-btn" id="mc-more">${icon('chevron')}<span></span></button>` : ''}
               ${d.canAdd
-                ? html`<fieldset><legend>Add a setting</legend><div class="form-grid">
+                ? html`<details class="adv"><summary>Add a setting that isn't listed</summary><div class="form-grid">
                     <label class="field"><span>Setting name</span><input name="__newKey" placeholder="e.g. MaxWildLevel" autocomplete="off"></label>
-                    <label class="field"><span>Value</span><input name="__newValue" placeholder="e.g. 300" autocomplete="off"></label></div></fieldset>`
+                    <label class="field"><span>Value</span><input name="__newValue" placeholder="e.g. 300" autocomplete="off"></label></div></details>`
                 : ''}`}
-        <div class="form-actions sticky"><button class="btn btn-primary" ${ark && list.running ? 'disabled' : ''}>${plugins && list.running ? 'Save and reload plugin' : 'Save'}</button>
+        <div class="form-actions sticky save-bar"><button class="btn btn-primary" ${stopFirst ? 'disabled' : ''}>${plugins && list.running ? 'Save and reload plugin' : 'Save'}</button>
           ${ark && fields.some((f) => f.def !== undefined) && !showRaw ? html`<button type="button" class="btn" id="mc-write-all" ${list.running ? 'disabled' : ''} title="Also write the settings that are still at their default into the INI">Save and write all defaults</button>` : ''}
+          <span class="dirty-note" id="mc-dirty"></span><button type="button" class="btn btn-sm btn-ghost" id="mc-discard" hidden>Discard changes</button>
           <span class="muted small">${plugins ? (list.running ? 'The plugin reloads with the new settings right away.' : 'Changes apply when the server starts.') : 'Changes apply on the next (re)start.'}</span></div>
       </form>`.s;
 
-    // Default / changed markers and "reset" on every setting that has a known default.
     const form = $('#mc-edit');
-    for (const f of fields) {
-      if (f.def === undefined) continue;
-      const el = form.elements['v:' + f.id];
-      if (!el) continue;
-      const wrap = el.closest('.field, .field-switch');
-      const bar = document.createElement('div');
-      bar.className = 'mc-def';
-      wrap.appendChild(bar);
-      const update = () => {
-        const now = asText(f, f.type === 'bool' ? el.checked : el.value);
-        const isDefault = now.toLowerCase() === asText(f, f.def).toLowerCase() || (now !== '' && Number(now) === Number(f.def));
-        bar.innerHTML = isDefault
-          ? html`<span class="pill pill-tag">default</span>`.s
-          : html`<span class="pill pill-warn">changed</span> <button type="button" class="link-btn">reset to ${f.type === 'bool' ? (asText(f, f.def) === 'true' ? 'on' : 'off') : f.def}</button>`.s;
-        const btn = bar.querySelector('button');
-        if (btn)
-          btn.onclick = () => {
-            if (f.type === 'bool') el.checked = asText(f, f.def) === 'true';
-            else el.value = f.def;
-            update();
-          };
-      };
-      el.addEventListener(f.type === 'bool' ? 'change' : 'input', update);
-      update();
-    }
-    $('#mc-find')?.addEventListener('input', (e) => {
-      const q = e.target.value.toLowerCase();
-      for (const fs of $$('fieldset', form)) {
-        let any = false;
-        for (const item of fs.querySelectorAll('.form-grid > *')) {
-          const show = !q || item.textContent.toLowerCase().includes(q) || (item.title || '').toLowerCase().includes(q);
-          item.hidden = !show;
-          if (show) any = true;
-        }
-        fs.hidden = !any && !!q;
+    const body = $('#mc-sections');
+    // Sections whose settings are all kept back (or filtered out) don't show an empty heading.
+    const tidy = () => {
+      if (!body) return;
+      let any = false;
+      for (const sec of $$('.set-sec', body)) {
+        const visible = $$('.set-row', sec).some((r) => !r.hidden && (!body.classList.contains('only-common') || !r.matches('.set-more:not(.is-changed):not(.is-dirty)')));
+        sec.hidden = !visible;
+        if (visible) any = true;
       }
+      $('#mc-nomatch').hidden = any || !fields.length;
+      const more = $('#mc-more');
+      if (more) {
+        const hiddenNow = body.classList.contains('only-common') ? $$('.set-more:not(.is-changed):not(.is-dirty)', body).length : 0;
+        more.hidden = !!($('#mc-find') || {}).value || (body.classList.contains('only-common') && !hiddenNow);
+        more.classList.toggle('open', !body.classList.contains('only-common'));
+        more.querySelector('span').textContent = body.classList.contains('only-common') ? `Show all ${fields.length} settings (${hiddenNow} more)` : 'Show only the most used';
+      }
+    };
+    const summary = () => {
+      const withDef = $$('.set-row[data-def]', form);
+      const changed = withDef.filter((r) => r.classList.contains('is-changed')).length;
+      $('#mc-changed').textContent = showRaw ? '' : `${fields.length} setting${fields.length === 1 ? '' : 's'}${withDef.length ? ` · ${changed} changed from ${withDef.length === 1 ? 'its default' : 'their defaults'}` : ''}`;
+      const n = rows.dirty();
+      $('#mc-dirty').textContent = dirtyText(n);
+      $('#mc-discard').hidden = !n;
+    };
+    rows = bindRows(form, summary);
+    summary();
+    tidy();
+
+    const setView = (all) => {
+      showAll = all;
+      body.classList.toggle('only-common', !all);
+      for (const r of $$('input[name="__view"]', form)) r.checked = (r.value === 'all') === all;
+      tidy();
+    };
+    on(form, 'change', 'input[name="__view"]', (_e, el) => setView(el.value === 'all'));
+    $('#mc-more')?.addEventListener('click', () => setView(body.classList.contains('only-common')));
+    $('#mc-discard').onclick = () => rows.discard();
+    // Searching looks through every setting, whichever view is on.
+    $('#mc-find')?.addEventListener('input', (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      body.classList.toggle('only-common', !q && !showAll && kept > 0);
+      for (const sec of $$('.set-sec', body)) {
+        const whole = !!q && sec.querySelector('h4').textContent.toLowerCase().includes(q);
+        for (const r of $$('.set-row', sec)) r.hidden = !!q && !whole && !r.dataset.search.includes(q);
+      }
+      tidy();
     });
     $('#mc-raw')?.addEventListener('click', () => {
       rawMode = !rawMode;
@@ -172,7 +207,9 @@ export async function render(root, { server }) {
   };
 
   const open = async (file) => {
+    const sameMod = current && modOf(current.file).id === modOf(file).id;
     current = { file, data: await api.get(`${base}/file?file=${encodeURIComponent(file)}`) };
+    if (!sameMod) showAll = false;
     drawList();
     drawForm();
   };
@@ -186,14 +223,17 @@ export async function render(root, { server }) {
     <div class="panel">
       <div class="panel-head"><h3>Mod configuration</h3>
         <div class="btn-row">${ark ? html`<button class="btn btn-sm" id="mc-refresh" title="Fetch names, pictures and settings from the mod pages again">${icon('refresh')}Refresh mod info</button>` : html`<button class="btn btn-sm" id="mc-rescan">${icon('refresh')}Rescan</button>`}</div></div>
-      <p class="muted small" id="mc-note"></p>
-      ${ark
-        ? html`<details class="adv"><summary>A mod's settings aren't listed?</summary>
-            <p class="muted small">Some mods explain their settings on another site instead of their mod page. Create the section they tell you to use, then add their settings to it.</p>
-            <form class="input-row" id="mc-new"><select name="file"><option value="gus">GameUserSettings.ini</option><option value="game">Game.ini</option></select><input name="section" placeholder="Section name, e.g. AnnunakiGenesis" autocomplete="off"><button class="btn">${icon('plus')}Add section</button></form></details>`
-        : ''}
+      <details class="adv mc-about"><summary>How this page works</summary><p class="muted small" id="mc-note"></p></details>
       <div class="mc-layout">
-        <div class="mc-side"><input type="search" id="mc-search" placeholder="Find a mod…" autocomplete="off"><div id="mc-list"><p class="muted small">Looking up your mods…</p></div></div>
+        <div class="mc-side">
+          <label class="search-box">${icon('search')}<input type="search" id="mc-search" placeholder="Find a mod…" autocomplete="off" aria-label="Find a mod"></label>
+          <div id="mc-list"><p class="muted small">Looking up your mods…</p></div>
+          ${ark
+            ? html`<details class="adv"><summary>A mod's settings aren't listed?</summary>
+                <p class="muted small">Some mods explain their settings on another site instead of their mod page. Create the section they tell you to use, then add their settings to it.</p>
+                <form id="mc-new"><select name="file"><option value="gus">GameUserSettings.ini</option><option value="game">Game.ini</option></select><input name="section" placeholder="Section name, e.g. AnnunakiGenesis" autocomplete="off"><button class="btn btn-sm">${icon('plus')}Add section</button></form></details>`
+            : ''}
+        </div>
         <div class="mc-main" id="mc-form"></div>
       </div>
     </div>`.s;
@@ -202,11 +242,12 @@ export async function render(root, { server }) {
   root.addEventListener(
     'error',
     (e) => {
-      if (e.target.tagName !== 'IMG' || !e.target.matches('.mc-thumb, .mc-hero')) return;
+      if (e.target.tagName !== 'IMG' || !e.target.matches('.mod-pic, .mod-hero-pic')) return;
       const ph = document.createElement('span');
-      ph.className = `${e.target.className} mc-thumb-none`;
+      ph.className = `${e.target.className} mod-pic-none`;
       ph.innerHTML = icon('box');
       e.target.replaceWith(ph);
+      root.querySelector('.mod-hero-bg')?.remove();
     },
     true
   );
@@ -235,9 +276,14 @@ export async function render(root, { server }) {
       e.target.disabled = false;
     }
   });
-  on(root, 'click', '[data-file]', (_e, el) => {
+  const go = (file) => {
     rawMode = false;
-    open(el.dataset.file).catch((err) => toast(err.message, 'error'));
+    open(file).catch((err) => toast(err.message, 'error'));
+  };
+  on(root, 'click', '[data-file]', (_e, el) => go(el.dataset.file));
+  on(root, 'click', '[data-mod]', (_e, el) => {
+    const m = list.mods.find((x) => x.id === el.dataset.mod);
+    if (m && firstFile(m)) go(firstFile(m));
   });
   $('#mc-new')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -255,5 +301,5 @@ export async function render(root, { server }) {
   });
   // Open the first documented mod straight away.
   const first = list.mods.find((m) => m.files.some((f) => f.documented)) || list.mods.find((m) => m.files.length);
-  if (first) await open(first.files[0].file).catch(() => {});
+  if (first) await open(firstFile(first)).catch(() => {});
 }

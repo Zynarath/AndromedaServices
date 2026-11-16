@@ -141,4 +141,47 @@ function looksBoolean(entry) {
   return !doc.includes('\n') && (/^(enable|disable)\b/i.test(doc) || /\.Enabled?$/.test(entry.key));
 }
 
-module.exports = { Conf, parseDbInfo, describeConf, looksBoolean };
+// What an option's documentation says besides its description, so a form can offer it as more
+// than a text box:
+//   def      the "Default: 1" value
+//   choices  the values it lists ("Default: 1 (PVP)" / "0 (Normal)" / "6 - RP"): [{ value, label }]
+//   min/max  a range it states ("security level (0..4)", "in range from 1 to 100")
+//   text     the description without those lines
+function docInfo(doc) {
+  const lines = String(doc || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const out = {};
+  const parts = []; // [line, choice | null]
+  let defaults = 0;
+  for (const l of lines) {
+    const d = /^Default:\s*(.*)$/i.exec(l);
+    const body = d ? d[1] : l;
+    const c = /^(-?\d+)\s*(?:\(([^()]+)\)|[-=:]\s+(.+))$/.exec(body);
+    if (d) {
+      defaults++;
+      const m = /^"([^"]*)"|^(-?\d+(?:\.\d+)?)(?![\w.])/.exec(d[1]);
+      if (m && out.def === undefined) out.def = m[1] ?? m[2];
+      if (!c) {
+        const rest = d[1].replace(/^"[^"]*"|^-?\d+(?:\.\d+)?/, '').replace(/^[\s\-:,]+/, '').trim();
+        if (rest && !m) parts.push([l, null]); // "Default: same as the world port": worth reading
+        continue;
+      }
+    }
+    parts.push([l, c ? { value: c[1], label: (c[2] || c[3]).trim() } : null]);
+  }
+  if (defaults > 1 && !parts.some(([, c]) => c)) delete out.def; // several options documented together
+  const listed = parts.filter(([, c]) => c).map(([, c]) => c);
+  const values = listed.map((c) => Number(c.value));
+  const small = values.every((v) => v >= 0 && v <= 64) && new Set(values).size === values.length;
+  const enumerated = small && (listed.length >= 3 || (listed.length === 2 && values.includes(0) && values.includes(1)));
+  if (enumerated) out.choices = [...listed].sort((a, b) => Number(a.value) - Number(b.value));
+  const text = parts.filter(([, c]) => !c || !enumerated).map(([l]) => l).join(' ');
+  const range = /\((\d+)\s*\.\.\s*(\d+)\)|\((\d+)\s*-\s*(\d+)\)|\brange\s+(?:from\s+)?(\d+)\s+to\s+(\d+)\b|\bfrom\s+(\d+)\s+to\s+(\d+)\b/i.exec(text);
+  if (range) {
+    const nums = range.slice(1).filter((x) => x !== undefined).map(Number);
+    if (nums[1] > nums[0]) Object.assign(out, { min: nums[0], max: nums[1] });
+  }
+  out.text = text.replace(/\s+/g, ' ').trim();
+  return out;
+}
+
+module.exports = { Conf, parseDbInfo, describeConf, looksBoolean, docInfo };

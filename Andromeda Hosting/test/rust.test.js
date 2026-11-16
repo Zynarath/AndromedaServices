@@ -78,6 +78,14 @@ test('launch command line', async () => {
   assert.equal(arg('+rcon.web'), '1');
   assert.equal(arg('+app.port'), '-1');
   assert.equal(arg('+server.pve'), 'true');
+  // Game rules go on the command line only when they differ from Rust's own defaults.
+  for (const convar of ['+decay.scale', '+decay.upkeep', '+server.stability', '+craft.instant', '+server.itemdespawn']) assert.ok(!l.args.includes(convar), convar);
+  rust.writeSettings(s, { 'rust.decayScale': '0.5', 'rust.upkeep': false, 'rust.instantCraft': true, 'rust.itemDespawn': 600, 'rust.stability': true });
+  const changed = (await rust.buildLaunch(s)).args;
+  const after = (name) => changed[changed.indexOf(name) + 1];
+  assert.deepEqual([after('+decay.scale'), after('+decay.upkeep'), after('+craft.instant'), after('+server.itemdespawn')], ['0.5', 'false', 'true', '600']);
+  assert.ok(!changed.includes('+server.stability'), 'still the default');
+  assert.throws(() => rust.writeSettings(s, { 'rust.decayScale': 50 }), /Building decay speed: must be from 0 to 10/);
   assert.equal(arg('+server.hostname'), 'Rusty Test');
   assert.equal(arg('+server.level'), 'Procedural Map');
   assert.deepStrictEqual(rust.ports(s).map((p) => [p.port, p.forward]), [[28115, true], [28117, true], [28116, false]]);

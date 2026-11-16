@@ -5,6 +5,7 @@ const Ini = require('../util/ini');
 const Rcon = require('../util/rcon');
 const steamcmd = require('../services/steamcmd');
 const modinfo = require('../services/modinfo');
+const modconfig = require('../util/modconfig');
 const { HttpError, randomPassword, splitArgs } = require('../util/misc');
 
 const EDITIONS = {
@@ -922,7 +923,7 @@ ark.listModConfigs = async function (server, opts = {}) {
       const have = existing.find((e) => e.section.toLowerCase() === doc.section.toLowerCase());
       const file = have ? have.file : doc.file;
       claimed.add(modId(file, (have || doc).section).toLowerCase());
-      files.push({ file: modId(file, (have || doc).section), where: `${EXTRA[file].file} [${(have || doc).section}]`, documented: doc.settings.length, keys: have ? have.keys : 0 });
+      files.push({ file: modId(file, (have || doc).section), label: (have || doc).section, where: `${EXTRA[file].file} [${(have || doc).section}]`, documented: doc.settings.length, keys: have ? have.keys : 0 });
     }
     return { id: 'mod:' + info.id, modId: info.id, name: info.name || `Mod ${info.id}`, found: !!info.found, image: info.found && info.imageUrl ? modImageUrl(server, info.id) : null, url: info.url || null, sources: info.sources || [], files };
   });
@@ -930,7 +931,7 @@ ark.listModConfigs = async function (server, opts = {}) {
   const hidden = mods.filter((m) => !m.files.length).map((m) => m.name);
   mods.splice(0, mods.length, ...mods.filter((m) => m.files.length));
   const other = existing.filter((e) => !claimed.has(modId(e.file, e.section).toLowerCase()));
-  if (other.length) mods.push({ id: 'other', name: 'Other mod sections', files: other.map((e) => ({ file: modId(e.file, e.section), where: `${EXTRA[e.file].file} [${e.section}]`, keys: e.keys })) });
+  if (other.length) mods.push({ id: 'other', name: 'Other mod sections', files: other.map((e) => ({ file: modId(e.file, e.section), label: e.section, where: `${EXTRA[e.file].file} [${e.section}]`, keys: e.keys })) });
   return {
     kind: 'ini',
     note: 'Each mod with the settings its Workshop/CurseForge page documents, pre-filled with their defaults. Change a value to override it; settings left at the default stay out of your INI files (use "Write all defaults" to put them all in). Sections the mods wrote themselves are included.',
@@ -960,18 +961,18 @@ ark.readModConfig = async function (server, id) {
     const value = inFile ? inFile.values[inFile.values.length - 1] : s.def;
     const type = typeOf(s.def);
     fields.push({
-      id: s.key, label: s.key, type, def: s.def, inFile: !!inFile, section: 'Documented settings',
+      id: s.key, key: s.key, label: modconfig.humanize(s.key), type, def: s.def, inFile: !!inFile, section: 'Documented settings',
       value: type === 'bool' ? /^true$/i.test(String(value).trim()) : value,
-      hint: [s.doc, `Default: ${s.def}`, s.source && !/page$/.test(s.source) ? `from ${s.source}` : '', inFile ? '' : 'not in your INI yet'].filter(Boolean).join(' · '),
+      hint: [s.doc, s.source && !/page$/.test(s.source) ? `From ${s.source}` : ''].filter(Boolean).join(' · ') || undefined,
     });
     seen.delete(s.key.toLowerCase());
   }
   for (const { key, values } of seen.values()) {
-    const base = { id: key, label: key, inFile: true, section: doc ? 'Also in your INI' : '' };
+    const base = { id: key, key, label: modconfig.humanize(key), inFile: true, section: doc ? 'Also in your INI' : '' };
     if (values.length > 1) fields.push({ ...base, type: 'textarea', value: values.join('\n'), hint: 'Repeated setting: one value per line' });
     else fields.push({ ...base, type: typeOf(values[0]), value: typeOf(values[0]) === 'bool' ? /^true$/i.test(values[0].trim()) : values[0] });
   }
-  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields, canAdd: true, documented: !!doc, mod: mod && { name: mod.name, url: mod.url, sources: mod.sources || [] } };
+  return { file: id, format: 'ini', where: `${EXTRA[which].file} [${section}]`, fields: modconfig.present(fields), canAdd: true, documented: !!doc, mod: mod && { name: mod.name, url: mod.url, sources: mod.sources || [] } };
 };
 
 // values: { key: value } (existing or new keys). Only while the server is stopped: ARK writes its

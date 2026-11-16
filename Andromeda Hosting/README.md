@@ -1,6 +1,6 @@
 # Andromeda Hosting
 
-Version 2.1.1 · part of [Andromeda Services](../README.md)
+Version 2.2.0 · part of [Andromeda Services](../README.md)
 
 A self-hosted game server control panel, like G-Portal or Nitrado, that runs on **your own PC**.
 You and your friends sign in from a browser, start and stop servers, change settings, install and
@@ -82,6 +82,31 @@ server's Overview tab. When it's done, press **Start**.
   start). Players install the same mods with the Satisfactory Mod Manager.
 - *7 Days to Die mods*: **Mods** tab → *Install from .zip*. Mods with their own code (.dll) need Easy
   Anti-Cheat off (Settings → Advanced), and only an admin can install them.
+
+### Changing settings
+
+Every game's **Settings** tab works the same way:
+
+- The settings are split into sections (Rates, World, Bots, Ports…) listed on the left, each with a
+  line on what it is for. One section shows at a time.
+- Each setting has its name, what it does, and the control that fits it: a switch, a slider with a
+  number box for amounts (the box takes any value, the slider just covers a handy range), buttons
+  for a few choices, a list for many. Amounts show their unit and, where it helps, the same amount
+  in words (*900000 ms* → *15 min*).
+- A section shows the settings people change most. **Show more** has the rest of that section, and
+  the search box looks through every section at once.
+- **default** / **changed** shows which settings you moved away from the game's default, with
+  *reset* next to the changed ones. Settings you edited since opening the page are marked, and the
+  bar at the bottom counts them (**Discard changes** undoes them). Nothing is written until
+  **Save game settings**.
+- World of Warcraft adds one-click choices (leveling speed, how many bots) and **Show all options**
+  (admins): every other line of `mangosd.conf`, `realmd.conf` and `aiplayerbot.conf`, described by
+  the files themselves.
+
+ARK, Minecraft and Rust also have a **Mod configuration** tab for the settings of each mod or
+plugin: pick a mod on the left (with its Workshop / CurseForge / uMod picture, or the logo from its
+jar) and its settings open on the right in the same style, opening on the most used ones. Minecraft
+config files that only matter on players' PCs (`*-client.toml`) are marked and listed last.
 
 ---
 

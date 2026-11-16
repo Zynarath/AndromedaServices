@@ -94,6 +94,15 @@ const FIELDS = [
   { name: 'levelUrl', label: 'Custom map URL', type: 'text', group: 'Map', maxLength: 500, pattern: /^https?:\/\/\S+\.map(\?\S*)?$/i, patternHint: 'a http(s):// link to a .map file', hint: 'Only with "Custom map". Players download it from this address when they join.' },
   { name: 'pve', label: 'PvE (players can\'t hurt each other)', type: 'bool', group: 'Gameplay', def: false },
   { name: 'saveInterval', label: 'Save the world every (seconds)', type: 'number', group: 'Gameplay', min: 60, max: 3600, def: 300, hint: 'The panel also saves on every stop and before backups.' },
+  // Game rules that need no plugin. `convar` is Rust's own name for the setting; it goes on the
+  // command line only when it differs from the game's default (def), so untouched servers start as before.
+  { name: 'decayScale', convar: 'decay.scale', label: 'Building decay speed', type: 'number', float: true, group: 'Gameplay', min: 0, max: 10, def: 1, unit: '×', slider: { min: 0, max: 2, step: 0.1, soft: true }, hint: 'How fast bases fall apart once their upkeep runs out. 1× is the normal game, 0.5× half as fast, 0 = bases never decay.' },
+  { name: 'upkeep', convar: 'decay.upkeep', label: 'Bases need upkeep', type: 'bool', group: 'Gameplay', def: true, hint: 'Bases use up resources from their tool cupboard to stay standing. Off = no upkeep cost.' },
+  { name: 'stability', convar: 'server.stability', label: 'Building stability', type: 'bool', group: 'Gameplay', def: true, hint: 'Buildings need support from below and collapse without it. Off lets players build floating bases.' },
+  { name: 'radiation', convar: 'server.radiation', label: 'Radiation', type: 'bool', group: 'Gameplay', def: true, hint: 'Monuments are radioactive, so players need protective clothing to loot them.' },
+  { name: 'instantCraft', convar: 'craft.instant', label: 'Instant crafting', type: 'bool', group: 'Gameplay', def: false, hint: 'Everything is crafted at once instead of taking time.' },
+  { name: 'itemDespawn', convar: 'server.itemdespawn', label: 'Dropped items disappear after (seconds)', type: 'number', group: 'Gameplay', min: 10, max: 86400, def: 300, slider: { min: 60, max: 1800, step: 30, soft: true }, hint: 'How long an item lies on the ground before it is removed. 300 = 5 minutes.' },
+  { name: 'globalChat', convar: 'server.globalchat', label: 'Server-wide chat', type: 'bool', group: 'Gameplay', def: true, hint: 'Chat reaches every player. Off = only players nearby see it.' },
   { name: 'oxide', label: 'Use uMod (Oxide) plugins', type: 'bool', group: 'uMod', def: true, hint: 'Installed with the server and again after every game update. Turn off for a vanilla server (Reinstall then removes uMod).' },
   { name: 'port', label: 'Game port (UDP)', type: 'number', group: 'Ports', min: 1024, max: 65535, def: 28015, required: true },
   { name: 'queryPort', label: 'Query port (UDP, server browser)', type: 'number', group: 'Ports', min: 1024, max: 65535, def: 28017, required: true },
@@ -104,6 +113,15 @@ const FIELDS = [
   { name: 'branch', label: 'Game version', type: 'select', group: 'Advanced', admin: true, def: '', options: [['', 'Release (default)'], ['staging', 'Staging (test branch)']], hint: 'Admin only. Applies on the next update; players need the same branch. uMod is made for Release.' },
   { name: 'extraArgs', label: 'Extra command-line arguments', type: 'text', group: 'Advanced', admin: true, maxLength: 1000, hint: 'Admin only. e.g. +decay.scale 0.5 +server.tags "monthly,vanilla"' },
 ];
+
+const ABOUT = {
+  Server: 'How the server looks in Rust\'s server browser, and how many players fit.',
+  Map: 'The world players spawn into. Changing the map, seed or size starts everyone on a new map.',
+  Gameplay: 'The rules of the world that need no plugin: PvE, decay, upkeep, radiation, crafting. For gather rates, kits, teleports and the like, add uMod plugins in the Mods tab and set them up in Mod configuration.',
+  uMod: 'uMod (Oxide) is what runs plugins. Add them in the Mods tab; their settings are in the Mod configuration tab.',
+  Ports: 'The ports Rust listens on. Forward the game and query ports on your router; never the RCON port.',
+  Advanced: 'Admin only. Things that rarely need changing.',
+};
 
 const rs = (server) => server.rust;
 const exePath = (server) => (EXE[process.platform] ? path.join(server.dir, EXE[process.platform]) : null);
@@ -289,7 +307,11 @@ const rust = {
     if (s.description) args.push('+server.description', s.description.replace(/\n/g, '\\n'));
     if (s.url) args.push('+server.url', s.url);
     if (s.headerImage) args.push('+server.headerimage', s.headerImage);
-    args.push(...splitArgs(s.extraArgs));
+    for (const f of FIELDS) {
+      if (!f.convar || s[f.name] === undefined || s[f.name] === null || s[f.name] === '' || s[f.name] === f.def) continue;
+      args.push(`+${f.convar}`, f.type === 'bool' ? (s[f.name] ? 'true' : 'false') : String(s[f.name]));
+    }
+    args.push(...splitArgs(s.extraArgs)); // last, so what's typed there wins
     const env = {};
     if (process.platform === 'linux') env.LD_LIBRARY_PATH = [server.dir, path.join(server.dir, 'RustDedicated_Data', 'Plugins', 'x86_64'), process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
     return { command: exe, args, cwd: server.dir, env, logFile };
@@ -370,7 +392,7 @@ const rust = {
   settingsSchema() {
     return {
       note: 'Rust reads these from its command line, so changes apply on the next (re)start. The world is kept in server/<save folder name>. Plugins and their settings are in the Mods and Mod configuration tabs.',
-      sections: fields.schema('rust', FIELDS, GROUPS, { collapsed: ['Ports', 'Advanced'] }),
+      sections: fields.schema('rust', FIELDS, GROUPS, { collapsed: ['Ports', 'Advanced'], about: ABOUT }),
     };
   },
 
@@ -439,7 +461,7 @@ const rust = {
     const groups = new Map();
     for (const c of configFiles(server)) {
       const p = plugins.get(c.plugin);
-      const g = groups.get(c.plugin) || { id: c.plugin, name: p ? p.title : modconfig.humanize(c.plugin), modId: null, url: null, image: null, installed: !!p, enabled: p ? p.enabled : false, files: [] };
+      const g = groups.get(c.plugin) || { id: c.plugin, name: p ? p.title : modconfig.humanize(c.plugin), description: p ? p.description : '', modId: null, url: null, image: null, installed: !!p, enabled: p ? p.enabled : false, files: [] };
       g.files.push({ file: c.file, label: c.label, format: 'json' });
       groups.set(c.plugin, g);
     }
@@ -447,7 +469,7 @@ const rust = {
     const noConfig = [...plugins.values()].filter((p) => !groups.has(p.name)).map((p) => p.title);
     return {
       kind: 'plugins',
-      note: 'Settings of your uMod plugins, with readable names (hover a setting to see its name in the file). Plugins write their settings the first time they load, so start the server once after adding one. While the server runs, saving reloads the plugin so changes apply at once.',
+      note: 'Settings of your uMod plugins, with readable names (the name in the file is shown under each one). Plugins write their settings the first time they load, so start the server once after adding one. While the server runs, saving reloads the plugin so changes apply at once.',
       mods: [...groups.values()].sort((a, b) => Number(b.installed) - Number(a.installed) || a.name.localeCompare(b.name)),
       hidden: noConfig,
     };
@@ -457,7 +479,7 @@ const rust = {
     const c = configPath(server, file);
     const text = fs.readFileSync(c.full, 'utf8');
     const d = modconfig.describe(file, text, { normalize: true });
-    return { file, format: d.format, where: c.label, raw: text, fields: d.fields && d.fields.map(({ line, start, raw, path: p, ...f }) => f) };
+    return { file, format: d.format, where: c.label, raw: text, fields: d.fields && modconfig.present(d.fields).map(({ line, start, raw, path: p, ...f }) => f) };
   },
 
   writeModConfig(server, file, { values, raw }) {

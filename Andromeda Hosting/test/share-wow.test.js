@@ -187,6 +187,27 @@ test('WoW: "All options" lists every key from the .conf files with their own des
   assert.ok(keys.includes('conf.aiplayerbot.conf.AiPlayerbot.RandomBotTimedLogout'));
   for (const hidden of ['LoginDatabaseInfo', 'Ra.Enable', 'Console.Enable', 'ConfVersion']) assert.ok(!keys.includes('conf.mangosd.conf.' + hidden), hidden);
   assert.equal(new Set(keys).size, keys.length, 'curated keys are not listed twice');
+  // The page: sections with a picture and a line on what they are for; the settings people change
+  // first, the rest behind "Show more", and everything else in the files under "All options".
+  const schema = wow.settingsSchema(server);
+  assert.equal(schema.layout, 'categories');
+  assert.deepEqual(schema.sections.filter((x) => !x.advanced).map((x) => x.title), ['Realm', 'Rates', 'Bots', 'World', 'Characters', 'Instances & PvP', 'Performance', 'Network']);
+  const rates = schema.sections.find((x) => x.title === 'Rates');
+  assert.ok(rates.icon && rates.blurb);
+  assert.ok(rates.fields.filter((f) => f.common).length <= 10 && rates.fields.length > 20);
+  const kill = fields.find((f) => f.key === 'conf.mangosd.conf.Rate.XP.Kill');
+  assert.deepEqual([kill.common, kill.unit, kill.def, kill.slider.max], [true, '×', '1', 20]);
+  assert.match(kill.hint, /levels twice as fast/);
+  assert.deepEqual(rates.presets.choices[2], { label: 'Fast · 5×', values: { 'conf.mangosd.conf.Rate.XP.Kill': 5, 'conf.mangosd.conf.Rate.XP.Quest': 5, 'conf.mangosd.conf.Rate.XP.Explore': 5 } });
+  // Defaults and choices come from the files' own documentation.
+  assert.equal(fields.find((f) => f.key === 'conf.mangosd.conf.AllFlightPaths').def, false, '"Default: 0 (false)" in the file');
+  const logoutField = fields.find((f) => f.key === 'conf.mangosd.conf.InstantLogout');
+  assert.deepEqual([logoutField.type, logoutField.def, logoutField.slider], ['number', '1', { min: 0, max: 4, step: 1, soft: true }], 'a documented range becomes a slider');
+  const timed = fields.find((f) => f.key === 'conf.aiplayerbot.conf.AiPlayerbot.RandomBotTimedLogout');
+  assert.deepEqual([timed.label, timed.type, timed.def], ['Random bot timed logout', 'number', '1'], 'commented out in the file: the box is empty and shows its default');
+  const { docInfo } = require('../src/util/conf');
+  assert.deepEqual(docInfo('Realm type\nDefault: 1 (PVP)\n0 (Normal)\n6 (RP)'), { def: '1', choices: [{ value: '0', label: 'Normal' }, { value: '1', label: 'PVP' }, { value: '6', label: 'RP' }], text: 'Realm type' });
+  assert.equal(docInfo('Save interval\nDefault: 900000 (15 min)\n0 (disabled)').choices, undefined, 'an amount with one special value is not a list of choices');
   assert.ok(fields.find((f) => f.key === 'conf.mangosd.conf.InstantLogout').admin);
   // Non-admins can't change them; admins can, including turning on a commented-out bot option.
   wow.writeSettings(server, { 'conf.mangosd.conf.InstantLogout': '3' }, { admin: false });

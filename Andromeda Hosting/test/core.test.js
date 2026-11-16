@@ -371,7 +371,8 @@ test('Mod configuration: Minecraft config files become forms, grouped by the mod
   // Two "jars" with real mod metadata.
   const jarSrc = path.join(tmp, 'jar-create');
   fs.mkdirSync(path.join(jarSrc, 'META-INF'), { recursive: true });
-  fs.writeFileSync(path.join(jarSrc, 'META-INF', 'mods.toml'), 'modLoader="javafml"\n[[mods]]\nmodId="create"\ndisplayName="Create"\n');
+  fs.writeFileSync(path.join(jarSrc, 'META-INF', 'mods.toml'), 'modLoader="javafml"\nlogoFile="logo.png"\n[[mods]]\nmodId="create"\ndisplayName="Create"\ndescription=\'\'\'\nRotational\npower.\n\'\'\'\n[[dependencies.create]]\nmodId="forge"\n');
+  fs.writeFileSync(path.join(jarSrc, 'logo.png'), Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'));
   await createZip(jarSrc, path.join(dir, 'mods', 'create-1.0.jar'));
   const jarSrc2 = path.join(tmp, 'jar-sodium');
   fs.mkdirSync(jarSrc2, { recursive: true });
@@ -388,9 +389,19 @@ test('Mod configuration: Minecraft config files become forms, grouped by the mod
   assert.deepEqual(byName.Create, ['config/create-common.toml', 'world/serverconfig/create-server.toml']);
   assert.deepEqual(byName.Waystones, ['config/waystones/settings.json']);
   assert.deepEqual(byName.mystery, ['config/mystery.json5']);
+  // What each file is for, and the mod's own picture and description from its jar.
+  const create = list.mods.find((m) => m.name === 'Create');
+  assert.deepEqual(create.files.map((f) => [f.label, f.role]), [['create-server.toml', 'world'], ['create-common.toml', 'common']], 'the file that changes the world comes first');
+  assert.equal(create.image, '/api/servers/mcfg/mod-image/create');
+  assert.equal(create.description, 'Rotational power.');
+  assert.deepEqual((await mc.modLogo(server, 'create')).type, 'image/png');
+  assert.equal(await mc.modLogo(server, 'waystones'), null, 'no picture in that jar');
+  assert.equal(await mc.modLogo(server, '../create'), null);
   // Form fields, with ranges and allowed values; the raw text for formats without a form.
   const toml = mc.readModConfig(server, 'config/create-common.toml');
-  assert.deepEqual(toml.fields.map((f) => [f.label, f.type, f.value, f.min, f.max]), [['frequency', 'number', 4, 0, 10]]);
+  assert.deepEqual(toml.fields.map((f) => [f.label, f.key, f.type, f.value, f.min, f.max]), [['Frequency', 'frequency', 'number', 4, 0, 10]], 'a readable name, with the name in the file kept');
+  assert.deepEqual(toml.fields[0].slider, { min: 0, max: 10, step: 1 }, 'the range the file states becomes a slider');
+  assert.equal(toml.fields[0].hint, undefined, 'the range is shown by the slider, not repeated as text');
   assert.equal(mc.readModConfig(server, 'config/mystery.json5').fields, null);
   mc.writeModConfig(server, 'config/create-common.toml', { values: { [toml.fields[0].id]: 7 } });
   assert.equal(fs.readFileSync(path.join(dir, 'config/create-common.toml'), 'utf8'), '[worldgen]\n\t#Range: 0 ~ 10\n\tfrequency = 7\n');
@@ -399,7 +410,7 @@ test('Mod configuration: Minecraft config files become forms, grouped by the mod
   assert.deepEqual(srv.fields[0].options, ['LOW', 'HIGH']);
   assert.throws(() => mc.writeModConfig(server, 'world/serverconfig/create-server.toml', { values: { [srv.fields[0].id]: 'MEDIUM' } }), /not one of/);
   const json = mc.readModConfig(server, 'config/waystones/settings.json');
-  mc.writeModConfig(server, 'config/waystones/settings.json', { values: { [json.fields.find((f) => f.label === 'allowGlobal').id]: false } });
+  mc.writeModConfig(server, 'config/waystones/settings.json', { values: { [json.fields.find((f) => f.key === 'allowGlobal').id]: false } });
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'config/waystones/settings.json'), 'utf8')), { cooldown: 30, allowGlobal: false });
   mc.writeModConfig(server, 'config/mystery.json5', { raw: '{ a: 2 }\n' });
   assert.equal(fs.readFileSync(path.join(dir, 'config/mystery.json5'), 'utf8'), '{ a: 2 }\n');
@@ -453,11 +464,13 @@ test('Mod configuration: ARK mod sections, with names and documented defaults fr
     const byKey = Object.fromEntries(d.fields.map((f) => [f.id, f]));
     assert.equal(byKey.DisableAlphas.value, false);
     assert.equal(byKey.DisableAlphas.inFile, false);
-    assert.match(byKey.DisableAlphas.hint, /no alpha creatures · Default: False · not in your INI yet/);
+    assert.equal(byKey.DisableAlphas.hint, 'no alpha creatures');
+    assert.deepEqual([byKey.DisableAlphas.label, byKey.DisableAlphas.key, byKey.DisableAlphas.def], ['Disable alphas', 'DisableAlphas', 'False'], 'a readable name; the default is its own value');
     assert.equal(byKey.MaxWildLevel.value, '150');
     assert.equal(byKey.Tier3Chance.value, '0.25');
     assert.equal(byKey.Blacklist.type, 'textarea');
-    assert.match(byKey.AlphaSpawnChance.hint, /chance a wild dino spawns as an alpha · Default: 0.1 · from Steam discussion: Server config/);
+    assert.match(byKey.AlphaSpawnChance.hint, /chance a wild dino spawns as an alpha · From Steam discussion: Server config/);
+    assert.deepEqual(byKey.AlphaSpawnChance.slider, { min: 0, max: 1, step: 0.01, soft: true }, 'a chance gets a 0–1 slider');
     const before = asked.length;
     await ark.listModConfigs(server);
     assert.equal(asked.length, before, 'mod details are cached');
@@ -573,3 +586,57 @@ test('ARK: max wild dino level sets the difficulty values, and wins over them', 
   assert.equal(server.ark.wildLevelCap, null);
   assert.equal(server.ark.settings.OverrideOfficialDifficulty, 5);
 });
+
+test('Mod configuration: units, sliders and the settings shown first', () => {
+  const modconfig = require('../src/util/modconfig');
+  const toml = ['[kinetics]', '#Maximum length in blocks of mechanical belts.', '#Range: > 5', 'maxBeltLength = 20', '#Range: 0 ~ 2147483647', 'maxStress = 256', 'damageMultiplier = 1.0', 'cooldownSeconds = 60', 'minHeight = -100', 'worldSeed = 1337', ''].join('\n');
+  const f = Object.fromEntries(modconfig.present(modconfig.describe('a.toml', toml, { normalize: true }).fields).map((x) => [x.key, x]));
+  assert.deepEqual([f.maxBeltLength.min, f.maxBeltLength.hint, f.maxBeltLength.unit], [5, 'Maximum length in blocks of mechanical belts.', 'blocks'], 'a one-sided range is a minimum; the unit comes from the comment');
+  assert.deepEqual(f.maxBeltLength.slider, { min: 5, max: 100, step: 1, soft: true });
+  assert.deepEqual(f.maxStress.slider, { min: 0, max: 1000, step: 10, soft: true }, 'a range as wide as an integer is no use as a slider: one around the value instead');
+  assert.deepEqual([f.damageMultiplier.unit, f.damageMultiplier.slider], ['×', { min: 0, max: 5, step: 0.05, soft: true }]);
+  assert.equal(f.cooldownSeconds.unit, 's');
+  assert.deepEqual([f.minHeight.unit, f.minHeight.slider], [undefined, undefined], '"min" is minimum, not minutes; negative values get no slider');
+  assert.equal(f.worldSeed.slider, undefined, 'a seed names something, it is not an amount');
+  assert.equal(modconfig.unitOf({ type: 'number', key: 'Extra distance to block monument teleporting', value: 0 }), undefined, '"block" is a verb here, not a unit');
+  assert.throws(() => modconfig.apply('a.toml', toml, { [f.maxBeltLength.id]: 2 }, { normalize: true }), /Max belt length: must be 5 or more/);
+  // A long file opens on the settings people change; the rest stays behind "All".
+  const big = { Options: { MaxHomes: 3, 'Teleport cooldown (seconds)': 30, EnablePvP: false, 'Gather rate': 2.5 }, Messages: {}, Debug: { DebugMode: false, 'Config version': 3, 'Chat prefix color': '#ff0000', 'Discord webhook url': '' } };
+  for (let i = 0; i < 20; i++) big.Messages[`Message ${i}`] = `Text ${i}`;
+  const shown = modconfig.present(modconfig.describe('Big.json', JSON.stringify(big), { normalize: true }).fields);
+  const common = shown.filter((x) => x.common).map((x) => x.key);
+  for (const k of ['MaxHomes', 'Teleport cooldown (seconds)', 'EnablePvP', 'Gather rate']) assert.ok(common.includes(k), k);
+  for (const k of ['DebugMode', 'Config version', 'Chat prefix color', 'Discord webhook url']) assert.ok(!common.includes(k), k);
+  assert.equal(common.length, 4, 'nothing unlikely is added just to fill the page');
+  const lang = modconfig.present(modconfig.describe('Lang.json', JSON.stringify(big.Messages), { normalize: true }).fields);
+  assert.equal(lang.filter((x) => x.common).length, 12, 'a file of only messages opens on its first few');
+  assert.ok(modconfig.present(shown.slice(0, 6)).every((x) => x.common), 'a short file shows everything');
+});
+
+test('Settings pages: every game gets sections with sliders and the likeliest settings first', () => {
+  const { presentSchema } = require('../src/util/settingsview');
+  const rust = require('../src/games').games.rust;
+  const server = { id: 'r', name: 'R', game: 'rust', dir: path.join(tmp, 'rust-view'), rust: rust.defaults({ name: 'R', rust: {} }) };
+  const schema = presentSchema(rust.settingsSchema(server), rust.readSettings(server));
+  assert.equal(schema.layout, 'categories');
+  const all = Object.fromEntries(schema.sections.flatMap((x) => x.fields).map((f) => [f.key, f]));
+  assert.deepEqual(all['rust.maxPlayers'].slider, { min: 1, max: 500, step: 5 });
+  assert.equal(all['rust.saveInterval'].unit, 's');
+  assert.equal(all['rust.seed'].slider, undefined);
+  assert.equal(all['rust.port'].slider, undefined);
+  assert.match(schema.sections.find((x) => x.title === 'Gameplay').blurb, /need no plugin/);
+  assert.ok(schema.sections.every((x) => x.fields.every((f) => typeof f.common === 'boolean')));
+  // A long section keeps its less likely settings behind "Show more"; the page's own choices are kept.
+  const long = { sections: [{ title: 'Rules', fields: [...Array.from({ length: 14 }, (_x, i) => ({ key: `k${i}`, label: i < 3 ? `Max players ${i}` : `Chat colour ${i}`, type: 'number' })), { key: 'maps', label: 'Maps', type: 'maps' }] }] };
+  const fields = presentSchema(long, {}).sections[0].fields;
+  assert.deepEqual(fields.filter((f) => f.common).map((f) => f.key).slice(0, 4), ['k0', 'k1', 'k2', 'k3']);
+  assert.equal(fields.filter((f) => f.common).length, 8);
+  assert.ok(fields.find((f) => f.key === 'maps').common, 'picture grids always show');
+  assert.equal(presentSchema({ layout: 'categories', sections: [] }).sections.length, 0, 'a game that laid out its own page is left alone');
+});
+
+test('The page version matches package.json, or every visit warns about an old cached copy', () => {
+  const page = /const PAGE_VERSION = '([^']+)'/.exec(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8'))[1];
+  assert.equal(page, require('../package.json').version);
+});
+

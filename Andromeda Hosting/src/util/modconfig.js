@@ -6,17 +6,24 @@
 
 const NUM = /^[+-]?(\d[\d_]*)(\.\d+)?([eE][+-]?\d+)?$/;
 
-// Hints from the comment lines right above a value.
+// Hints from the comment lines right above a value. Lines the form shows another way (the range as a
+// slider, the default as a marker, the allowed values as choices) stay out of the explanation.
 function readComments(lines) {
-  const out = { hint: lines.join(' ').trim() || undefined };
+  const out = {};
+  const text = [];
   for (const l of lines) {
     const range = /Range:\s*(-?[\d.]+(?:[eE][+-]?\d+)?)\s*~\s*(-?[\d.]+(?:[eE][+-]?\d+)?)/i.exec(l);
-    if (range) Object.assign(out, { min: Number(range[1]), max: Number(range[2]) });
     const def = /^\s*Default:\s*(.+?)\s*$/i.exec(l);
-    if (def) out.def = def[1].replace(/^"(.*)"$/, '$1');
     const allowed = /Allowed Values:\s*(.+)$/i.exec(l);
-    if (allowed) out.options = allowed[1].split(',').map((s) => s.trim()).filter(Boolean);
+    const oneSided = /Range:\s*([<>])=?\s*(-?[\d.]+(?:[eE][+-]?\d+)?)\s*$/i.exec(l); // Forge: "Range: > 5" = 5 or more
+    if (range) {
+      if (Number(range[1]) <= Number(range[2])) Object.assign(out, { min: Number(range[1]), max: Number(range[2]) });
+    } else if (oneSided) out[oneSided[1] === '>' ? 'min' : 'max'] = Number(oneSided[2]);
+    else if (def) out.def = def[1].replace(/^"(.*)"$/, '$1');
+    else if (allowed) out.options = allowed[1].split(',').map((s) => s.trim()).filter(Boolean);
+    else text.push(l.trim());
   }
+  out.hint = text.join(' ').replace(/\s+/g, ' ').trim() || undefined;
   return out;
 }
 
@@ -187,6 +194,124 @@ function normalizeFields(fields) {
   });
 }
 
+// ---- Presentation: what a setting is measured in, a slider for it, and which settings come first ----
+const UNIT_WORDS = [
+  [/^(ms|millis|milliseconds?)$/, 'ms'],
+  [/^(secs?|seconds?)$/, 's'],
+  [/^(mins|minutes?)$/, 'min'], // not "min": that is "minimum" far more often
+  [/^(hrs?|hours?)$/, 'h'],
+  [/^days?$/, 'days'],
+  [/^ticks?$/, 'ticks'],
+  [/^(percent|percentage|pct)$/, '%'],
+  [/^(multipliers?|mult|modifiers?|scale|factor)$/, '×'],
+  [/^blocks$/, 'blocks'], // not "block": that is usually the verb ("block teleport while mounted")
+  [/^chunks$/, 'chunks'],
+  [/^(meters?|metres?)$/, 'm'],
+];
+const words = (s) => humanize(String(s || '')).toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean);
+const unitWord = (list) => {
+  for (let i = list.length - 1; i >= 0; i--) {
+    const hit = UNIT_WORDS.find(([re]) => re.test(list[i]));
+    if (hit) return hit[1];
+  }
+  return undefined;
+};
+
+// The unit a number is in, when its name or its comment says so ("CooldownSeconds", "(in ticks)").
+function unitOf(f) {
+  if (f.type !== 'number') return undefined;
+  const key = f.key || f.label;
+  if (/%/.test(key)) return '%';
+  const own = unitWord(words(key));
+  if (own) return own;
+  const said = /(?:\bin|\bof|\()\s*(milliseconds|seconds|minutes|hours|days|ticks|blocks|chunks|percent)\b/i.exec(f.hint || '');
+  if (said) return unitWord([said[1].toLowerCase()]);
+  // "Gather resource modifiers › Wood": the unit is in the group's name.
+  const group = String(f.section || '').split(/\s*›\s*|\./).pop();
+  const inherited = unitWord(words(group));
+  return inherited === '×' ? '×' : undefined;
+}
+
+// 1, 2, 5, 10, 20, 50…: the first of these that is not below x.
+function niceCeil(x) {
+  const mag = 10 ** Math.floor(Math.log10(x));
+  for (const m of [1, 2, 5, 10]) if (m * mag >= x * (1 - 1e-9)) return Number((m * mag).toPrecision(12));
+  return x;
+}
+
+// Numbers that name something rather than measure it.
+const NO_SLIDER = /\b(seed|ports?|ids?|steam ?id|version|password|year|key|code|hash|colou?r)\b/;
+const isChance = (f) => /\b(chance|probability|odds)\b/.test(words(f.key || f.label).join(' '));
+
+// A slider for a number: the range the file states when it is a usable one ("Range: 0 ~ 10"), else a
+// range around the current and default values. `soft` ranges are a convenience, not a limit: the
+// number box next to the slider still takes any value.
+function sliderFor(f, unit = unitOf(f)) {
+  if (f.type !== 'number' || NO_SLIDER.test(words(f.key || f.label).join(' '))) return undefined;
+  const v = Number(f.value);
+  const d = f.def === undefined || f.def === '' ? NaN : Number(f.def);
+  if (!Number.isFinite(v)) return undefined;
+  const hasMin = Number.isFinite(f.min);
+  const hasMax = Number.isFinite(f.max);
+  const min = hasMin ? f.min : 0;
+  if (v < min || (Number.isFinite(d) && d < min)) return undefined; // negative values with no known floor
+  const ref = Math.max(Math.abs(v), Number.isFinite(d) ? Math.abs(d) : 0);
+  const text = `${f.raw ?? f.value} ${f.def ?? ''}`;
+  const float = !f.int && (/\d\.\d/.test(text) || unit === '×' || isChance(f) || !Number.isInteger(v) || (Number.isFinite(d) && !Number.isInteger(d)) || (hasMin && !Number.isInteger(f.min)) || (hasMax && !Number.isInteger(f.max)));
+  let max;
+  let soft = true;
+  if (hasMax && f.max - min <= Math.max(1000, ref * 20)) {
+    max = f.max;
+    soft = false;
+  } else if (isChance(f) && ref <= 1) max = 1;
+  else if ((unit === '%' || isChance(f)) && ref <= 100) max = 100;
+  else if (unit === '×') max = Math.max(5, niceCeil(ref * 3));
+  else if (ref > 0) max = niceCeil(ref * 3);
+  else return undefined; // 0 with nothing to say how big it gets
+  if (hasMax) max = Math.min(max, f.max);
+  if (!(max > min)) return undefined;
+  const step = float ? niceCeil((max - min) / 100) : Math.max(1, niceCeil((max - min) / 100));
+  return { min, max, step, ...(soft ? { soft: true } : {}) };
+}
+
+// Which settings people actually change: switches, amounts, rates and limits come first; colours,
+// messages, IDs, debug options and the like wait behind "Show all".
+const LIKELY = /\b(enabled?|disabled?|allow(ed)?|max(imum)?|min(imum)?|limit|rates?|multipliers?|modifiers?|chance|cooldown|amount|count|damage|health|time|duration|radius|range|distance|cost|price|xp|experience|drops?|loot|spawn(s|ing)?|levels?|speed|pvp|pve|stack(s|ing)?|size|capacity|delay|interval|rewards?|difficulty|decay|upkeep|gather(ing)?|craft(ing)?|teleport|homes?|kits?|players?|frequency|density)\b/;
+const UNLIKELY = /\b(debug|log(ging|s)?|verbose|version|colou?rs?|messages?|prefix|format|sounds?|particles?|effects?|icons?|images?|url|webhook|token|keys?|ids?|guid|uuid|permissions?|commands?|anchor|offset|position|pos|font|lang(uage)?|locale|tooltips?|render(ing|er)?|textures?|models?|shaders?|animations?|telemetry|metrics|avatar|hex|rgba?|json|path|file|folder|directory|ui|gui|hud|cui|overlay|display|steam ?id|update check(er)?)\b/;
+const COMMON_LIMIT = 12;
+
+function likelihood(f) {
+  const name = words(f.key || f.label).join(' ');
+  const group = words(f.section).join(' ');
+  let score = { bool: 3, number: 3, select: 3, text: 1 }[f.type] || 0;
+  if (LIKELY.test(name)) score += 3;
+  if (UNLIKELY.test(name)) score -= 4;
+  else if (UNLIKELY.test(group)) score -= 2;
+  if (f.hint) score += 1; // explained by its author: meant to be changed
+  const depth = String(f.section || '').split(/\s*›\s*|\./).filter(Boolean).length;
+  if (depth > 2) score -= 1;
+  if (/#\d+/.test(f.section || '')) score -= 2; // one entry of a list (kit #3, zone #7)
+  return score;
+}
+
+// Adds to every field what the form needs to draw it well: `unit`, `slider` and `common` (false for
+// the settings kept behind "Show all"). Small files show everything.
+function present(fields, { limit = COMMON_LIMIT } = {}) {
+  if (!fields) return fields;
+  const out = fields.map((f) => {
+    const unit = unitOf(f);
+    const slider = sliderFor(f, unit);
+    return { ...f, ...(unit ? { unit } : {}), ...(slider ? { slider } : {}), common: true };
+  });
+  if (out.length <= limit + 3) return out;
+  const ranked = out.map((f, i) => [likelihood(f), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  // Enough likely ones: only those. A file of nothing but messages or colours: its first few.
+  const likely = ranked.filter(([score]) => score > 0);
+  const keep = new Set((likely.length >= 4 ? likely : ranked).slice(0, limit).map(([, i]) => i));
+  out.forEach((f, i) => (f.common = keep.has(i)));
+  return out;
+}
+
 const FORMATS = { '.toml': 'toml', '.json': 'json', '.properties': 'properties', '.cfg': 'cfg' };
 
 function formatOf(file) {
@@ -215,7 +340,9 @@ function checkValue(f, v) {
   if (f.type === 'number') {
     const n = Number(v);
     if (v === '' || !Number.isFinite(n)) throw new Error(`${f.label}: must be a number`);
-    if ((f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) throw new Error(`${f.label}: must be between ${f.min} and ${f.max}`);
+    const low = f.min !== undefined && n < f.min;
+    const high = f.max !== undefined && n > f.max;
+    if (low || high) throw new Error(`${f.label}: must be ${f.min !== undefined && f.max !== undefined ? `between ${f.min} and ${f.max}` : low ? `${f.min} or more` : `${f.max} or less`}`);
     if (f.int && !Number.isInteger(n)) throw new Error(`${f.label}: must be a whole number`);
     return n;
   }
@@ -261,4 +388,4 @@ function apply(file, text, values, opts = {}) {
   return { text: lines.join(eol), changed: changes.length };
 }
 
-module.exports = { describe, apply, formatOf, humanize, parseToml, parseJson, parseCfg, parseProperties };
+module.exports = { describe, apply, formatOf, humanize, present, unitOf, sliderFor, likelihood, parseToml, parseJson, parseCfg, parseProperties };

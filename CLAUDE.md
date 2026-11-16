@@ -16,7 +16,7 @@ Where each version lives (change all of them together):
 
 | Program | Files |
 |---|---|
-| Andromeda Hosting | `Andromeda Hosting/package.json`, `Andromeda Hosting/package-lock.json` (the top `version` and `packages[""].version`), `Andromeda Hosting/README.md` (line 3), the table in the root `README.md` |
+| Andromeda Hosting | `Andromeda Hosting/package.json`, `Andromeda Hosting/package-lock.json` (the top `version` and `packages[""].version`), `PAGE_VERSION` in `Andromeda Hosting/public/js/app.js` (if it differs, every visit warns about an old cached page; `npm test` checks it), `Andromeda Hosting/README.md` (line 3), the table in the root `README.md` |
 | Andromeda WotLK Website | `Andromeda WotLK Website/package.json`, `Andromeda WotLK Website/package-lock.json` (same two places), `Andromeda WotLK Website/README.md` (line 3), the table in the root `README.md` |
 | Andromeda Services Website | `Andromeda Services Website/package.json`, `Andromeda Services Website/README.md` (line 3), the table in the root `README.md` (no package-lock: it has no packages) |
 | Andromeda Services (`services/`) | `[assembly: AssemblyVersion("X.Y.Z.0")]` in `services/AndromedaServices.cs`, the table in the root `README.md` |

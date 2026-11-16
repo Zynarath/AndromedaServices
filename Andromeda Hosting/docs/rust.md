@@ -33,14 +33,32 @@ Players join with `client.connect <address>:28015` in the F1 console, or find th
 
 Many plugins use permissions. Grant them in the **Console**, e.g. `oxide.grant group default kits.use`.
 
+## Game rules without plugins (Settings → Gameplay)
+
+A few rules of the game itself are in **Settings → Gameplay**, with a short explanation each: PvE, building decay
+speed, upkeep, building stability, radiation, instant crafting, how long dropped items stay, and server-wide chat.
+They are passed to Rust on its command line, and only the ones you changed from the game's default. Anything else
+Rust offers can still go in *Advanced → Extra command-line arguments*. Gather rates, kits, teleports and similar
+need a uMod plugin.
+
 ## Plugin settings (Mod configuration tab)
 
 Plugins write their settings to `oxide/config/<Plugin>.json` the first time they load, and their chat messages to
 `oxide/lang/en/<Plugin>.json`. Both are shown as forms:
 
+- Pick a plugin on the left (with its uMod picture and what it does); its settings open on the right. Plugins
+  with two files have a tab for each: *Settings* and *Messages (English)*.
 - Setting names are made readable: `MaxHomesPerPlayer`, `max_homes_per_player` and `maxHomesPerPlayer` all show as
-  *Max homes per player*; notes like `(true/false)` are dropped because the switch already says that. Hover a
-  setting to see its exact name in the file. The file keeps its original names when saved.
+  *Max homes per player*; notes like `(true/false)` are dropped because the switch already says that. A setting's
+  exact name in the file is shown under it. The file keeps its original names when saved.
+- Each setting gets the control that fits it: a switch, a slider with a number box for amounts (the slider covers
+  a handy range around the current value; the box takes any number), a colour picker for `#RRGGBB` values, and
+  chips with an *Add* box for lists. Amounts show their unit when the name says it (*seconds*, *multiplier*).
+- A big file opens on **Most used**: switches, limits, cooldowns, rates. Colours, messages, IDs, permissions and
+  debug options are behind **All** and the search box.
+- uMod plugins don't ship explanations in their settings file, so a setting's name is all the panel can show.
+  **Plugin page** opens the plugin on uMod, where its author documents each setting.
+- Edited settings are marked, and the bar at the bottom counts unsaved changes (**Discard changes** undoes them).
 - Nested groups become sections (*Options › Gather resource modifiers*), and lists of entries (kits, zones…) are
   numbered *#1, #2…*.
 - While the server runs, **Save and reload plugin** writes the file and runs `oxide.reload <Plugin>`, so changes
