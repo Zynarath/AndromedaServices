@@ -61,7 +61,9 @@ test('every title defaults to Domination, all base maps shuffled, 4x XP, and bot
     const s = server(key);
     const cfg = cod.buildConfig(s);
     assert.match(cfg, /set g_gametype "dom"/, key);
-    assert.match(cfg, /set scr_xpscale "4"/, key);
+    // CoD4 has no scr_xpscale: the panel's own XP script reads andromeda_xpscale.
+    assert.match(cfg, key === 'cod4x' ? /set andromeda_xpscale "4"\r\nset ModStats "0"/ : /set scr_xpscale "4"/, key);
+    assert.equal(/scr_xpscale/.test(cfg), key !== 'cod4x', key);
     assert.equal(/scr_weaponxpscale "4"/.test(cfg), t.weaponXp, `${key} weapon XP only where the game has it`);
     if (t.botRepo) assert.match(cfg, /set bots_manage_fill "12"/, key);
     else assert.doesNotMatch(cfg, /bots_/, `${key} has no Bot Warfare, so no bot settings`);
@@ -189,6 +191,10 @@ test('CoD4x launch runs from the server folder with the bot mod', async () => {
   assert.ok(l.args.join(' ').includes(`+set fs_homepath ${s.dir}`));
   assert.ok(l.args.join(' ').includes('+set fs_game mods/mp_bots'));
   assert.equal(l.args[l.args.length - 1], '+map_rotate');
+  // The mod carries the XP script, so it loads with bots off too (bots_manage_fill 0 keeps bots out).
+  s.cod.bots.enabled = false;
+  assert.ok((await cod.buildLaunch(s)).args.includes('fs_game'));
+  assert.match(cod.buildConfig(s), /set bots_manage_fill "0"/);
   assert.ok(fs.existsSync(path.join(s.dir, 'main', 'hp_abc123.cfg')));
   assert.ok(fs.existsSync(path.join(s.dir, 'generated-server.cfg')));
 });
@@ -247,6 +253,57 @@ test('Bot Warfare source is packed the way each game loads it', async () => {
   await tools.packBotWarfare(src, { title: 't5', storage: 't5' }, log);
   assert.deepEqual(fs.readdirSync(tools.plutoStorage('t5')).sort(), ['maps', 'mp', 'scripts']);
   await assert.rejects(tools.packBotWarfare(path.join(tmp, 'empty-src-' + Date.now()), { title: 't6', storage: 't6' }, log), /expected maps/);
+});
+
+test('CoD4x bots: waypoints go next to the server, and the XP script is started from Bot Warfare', async () => {
+  const src = path.join(tmp, 'bw-src-cod4x');
+  for (const d of ['maps/mp/bots', 'maps/mp/gametypes', 'scripts/mp', 'scriptdata/waypoints']) fs.mkdirSync(path.join(src, d), { recursive: true });
+  fs.writeFileSync(path.join(src, 'maps/mp/bots/_bot.gsc'), '// bot');
+  fs.writeFileSync(path.join(src, 'scripts/mp/bots.gsc'), '// bot');
+  fs.writeFileSync(path.join(src, 'scriptdata/waypoints/mp_crash_wp.csv'), '1');
+  fs.writeFileSync(path.join(src, 'scriptdata/botnames.txt'), 'Price');
+  const gsx = 'CodeCallback_StartGameType()\n{\n\tif ( !isDefined( level.gametypestarted ) )\n\t{\n\t\t[[level.callbackStartGameType]]();\n\t\t\n\t\tlevel.gametypestarted = true; // started\n\t\t\n\t\tlevel thread scripts\\mp\\bots::init();\n\t}\n}\n';
+  fs.writeFileSync(path.join(src, 'maps/mp/gametypes/_callbacksetup.gsx'), gsx);
+  const warnings = [];
+  const log = { info() {}, warn: (m) => warnings.push(m) };
+  const base = path.join(tmp, 'bw-cod4x');
+  await tools.packBotWarfare(src, { title: 'cod4x', modBase: base }, log);
+  const iwd = path.join(base, 'mods/mp_bots/z_svr_bots.iwd');
+  const names = await listZip(iwd);
+  assert.ok(names.includes('maps/mp/bots/_bot.gsc'));
+  assert.ok(!names.some((n) => n.startsWith('scriptdata')), 'CoD4x scripts cannot read files inside an iwd');
+  assert.equal(fs.readFileSync(path.join(base, 'scriptdata/waypoints/mp_crash_wp.csv'), 'utf8'), '1');
+  assert.ok(fs.existsSync(path.join(base, 'scriptdata/botnames.txt')));
+  // The XP script is in the mod, and started right after the game mode has set level.rankedMatch.
+  const { readEntry } = require('../src/util/zip');
+  assert.equal((await readEntry(iwd, 'scripts/mp/andromeda_xp.gsc')).data.toString(), tools.COD4X_XP_SCRIPT);
+  assert.match(tools.COD4X_XP_SCRIPT, /level\.rankedMatch = true;/);
+  assert.match(tools.COD4X_XP_SCRIPT, /getdvarfloat\( "andromeda_xpscale" \)/);
+  const patched = (await readEntry(iwd, 'maps/mp/gametypes/_callbacksetup.gsx')).data.toString();
+  assert.match(patched, /level\.gametypestarted = true; \/\/ started\n\t\tscripts\\mp\\andromeda_xp::init\(\);\n/);
+  assert.equal(patched.split('andromeda_xp::init').length, 2, 'started once');
+  assert.deepEqual(warnings, []);
+  // Nothing to repair on a mod packed this way.
+  assert.equal(await tools.repairCod4xBots(base, log), false);
+
+  // A mod packed by an older panel: waypoints inside the iwd, no XP script. Repaired from the iwd itself.
+  const old = path.join(tmp, 'bw-cod4x-old');
+  const { createZip } = require('../src/util/zip');
+  fs.rmSync(path.join(src, 'scripts/mp/andromeda_xp.gsc'));
+  fs.writeFileSync(path.join(src, 'maps/mp/gametypes/_callbacksetup.gsx'), gsx);
+  await createZip(src, path.join(old, 'mods/mp_bots/z_svr_bots.iwd'), { globs: ['maps/**', 'scripts/**', 'scriptdata/**'] });
+  assert.equal(await tools.repairCod4xBots(old, log), true);
+  assert.ok(fs.existsSync(path.join(old, 'scriptdata/waypoints/mp_crash_wp.csv')));
+  const fixed = await listZip(path.join(old, 'mods/mp_bots/z_svr_bots.iwd'));
+  assert.ok(fixed.includes('scripts/mp/andromeda_xp.gsc') && !fixed.some((n) => n.startsWith('scriptdata')));
+  assert.equal(await tools.repairCod4xBots(old, log), false, 'only once');
+  // No mod, or an empty file: nothing to do.
+  assert.equal(await tools.repairCod4xBots(path.join(tmp, 'no-such-server'), log), false);
+
+  // A Bot Warfare without its _callbacksetup.gsx still installs; the log says XP isn't covered.
+  fs.rmSync(path.join(src, 'maps/mp/gametypes'), { recursive: true });
+  await tools.packBotWarfare(src, { title: 'cod4x', modBase: path.join(tmp, 'bw-cod4x-nohook') }, log);
+  assert.match(warnings.join('\n'), /XP script couldn't be added/);
 });
 
 test('map previews: wiki look-up picks the map page, caches the picture, and remembers misses', async () => {

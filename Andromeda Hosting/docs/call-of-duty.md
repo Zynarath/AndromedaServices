@@ -146,7 +146,7 @@ game loads it, following each mod's README:
 
 | Game | Where | Players need it? |
 |---|---|---|
-| IW4x, CoD4x | `mods/mp_bots/z_svr_bots.iwd` (+ `fs_game mods/mp_bots`) | No. `z_svr_` iwds stay on the server |
+| IW4x, CoD4x | `mods/mp_bots/z_svr_bots.iwd` (+ `fs_game mods/mp_bots`). On CoD4x, the `scriptdata` folder (waypoints, bot names) also goes into the server folder | No. `z_svr_` iwds stay on the server |
 | BO2 | `Plutonium\storage\t6\scripts` | No |
 | MW3 | `Plutonium\storage\iw5\` (maps, scripts, scriptdata) | No |
 | BO1 | `Plutonium\storage\t5\` (maps, scripts, mp) | No |
@@ -158,6 +158,34 @@ Bot difficulty uses each mod's own scale. Andromeda Hosting shows the right choi
 0–9 for CoD4x/IW4x/MW3, 0–3 for BO2, easy/normal/hard/fu for BO1.
 
 Update the bots from the server's **Mods** tab.
+
+**CoD4x waypoints:** the bots find their way with a waypoint file per map,
+`scriptdata\waypoints\<map>_wp.csv` in the server folder. CoD4x scripts open files straight from
+the server folder and can't read inside an `.iwd`, so that's where the panel puts them. Without
+its waypoint file a bot only walks straight at things: it gets stuck on walls and stops after
+the first flag. Up to 2.5.0 the panel packed the waypoints into the `.iwd`; a server set up then
+is fixed the next time it starts (the console says *CoD4x bot mod updated*). When a map loads,
+the server console should say `Loaded <n> waypoints from file.` A custom map with no waypoint
+file in Bot Warfare has none, and bots stay dumb on it.
+
+## XP on CoD4x
+
+Call of Duty 4 itself has no XP multiplier (`scr_xpscale` came with later games), and it only
+counts XP at all when `sv_pure` is 1, which CoD4x switches off by itself when its own
+`xbase_00.iwd` isn't in the server's `main` folder. So the panel adds a small script of its own
+to the bot mod (`scripts/mp/andromeda_xp.gsc` in `z_svr_bots.iwd`):
+
+- it turns XP on whatever `sv_pure` is;
+- it reads the panel's multiplier (`andromeda_xpscale` in the config) and adds the extra XP on
+  top of what the game gives. The **+10** pop-ups in game still show the normal amount; the
+  extra goes straight to your rank, so watch the rank bar.
+
+The config also sets `ModStats 0`, so XP goes to each player's normal CoD4 rank and classes.
+With CoD4x's default (`ModStats 1`) a server running a mod keeps a separate rank that starts at
+level 1. To go back to that, add `set ModStats "1"` under *Extra config lines*.
+
+The script lives in the bot mod, so XP needs Bot Warfare installed (**Mods** tab). The mod loads
+even with bots turned off in Settings.
 
 ## What's verified and what isn't
 
@@ -186,8 +214,12 @@ what the console says:
   *Extra config lines*.
 - **Map pictures**: the wiki search picks the page whose title matches the map's name. A card can
   end up with a wrong or missing picture if the wiki names a page differently.
-- **XP dvars**: `scr_xpscale` everywhere; `scr_weaponxpscale` on MW3/BO1/BO2. Check a match's
-  end-of-game XP.
+- **XP dvars**: `scr_xpscale` on every game but CoD4x; `scr_weaponxpscale` on MW3/BO1/BO2. Check
+  a match's end-of-game XP.
+- **CoD4x XP script and waypoints**: both follow the game's own rank scripts, the CoD4x server
+  source and Bot Warfare's source, and the packing is tested, but neither has been run against a
+  real CoD4x server from here. If the server stops loading maps after this update, the console
+  will show a script error: tell me what it says.
 - **Map rotation format**: `gametype dom map …` for CoD4x/IW4x/BO1;
   `dsr DOM_default map …` for MW3. MW3 needs the stock DSR files (`admin/DOM_default.dsr`), which
   come with Plutonium's IW5 server configs.

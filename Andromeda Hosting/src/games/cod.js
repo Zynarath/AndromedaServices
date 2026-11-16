@@ -455,8 +455,14 @@ function buildConfig(server) {
     `set rcon_password "${clean(c.rconPassword)}"`,
     `set sv_maxclients "${Math.max(2, Math.min(64, Number(c.maxClients) || 18))}"`,
     `set g_gametype "${clean(c.gametype || 'dom')}"`,
-    `set scr_xpscale "${Number(c.xpScale) || 1}"`,
   ];
+  if (c.title === 'cod4x') {
+    // CoD4 has no scr_xpscale: the panel's XP script in the bot mod reads andromeda_xpscale instead.
+    // ModStats 0: XP goes to the player's normal CoD4 rank, not a separate one kept for the mod.
+    lines.push(`set andromeda_xpscale "${Number(c.xpScale) || 1}"`, `set ModStats "0"`);
+  } else {
+    lines.push(`set scr_xpscale "${Number(c.xpScale) || 1}"`);
+  }
   if (t.weaponXp) lines.push(`set scr_weaponxpscale "${Number(c.weaponXpScale) || 1}"`);
   lines.push(`set logfile "2"`, `set g_log "hp_${server.id}_games.log"`);
   if (!t.pluto) lines.push(`set sv_allowDownload "1"`);
@@ -684,6 +690,18 @@ const cod = {
     log.info(`${t.label} server is ready. Config: ${cfgName(server)}`);
   },
 
+  // A CoD4x bot mod packed by an older panel has its waypoints where the server can't read them
+  // and no XP script: fix it up before the start.
+  async preStart(instance) {
+    if (instance.server.cod.title !== 'cod4x') return;
+    const say = (m) => instance.appendConsole(`[panel] ${m}`);
+    try {
+      await tools.repairCod4xBots(instance.server.dir, { info: say, warn: say });
+    } catch (err) {
+      say(`Couldn't update the bot mod (${err.message}). Use "Update Bot Warfare" in the Mods tab.`);
+    }
+  },
+
   async buildLaunch(server) {
     const c = server.cod;
     const t = title(server);
@@ -707,7 +725,9 @@ const cod = {
         ],
       };
     }
-    const fsGame = !t.pluto && c.bots.enabled && botsInstalled(server) ? ['+set', 'fs_game', 'mods/mp_bots'] : [];
+    // CoD4x loads the bot mod even with bots turned off (bots_manage_fill 0 keeps it bot-free),
+    // because the mod also carries the panel's XP script.
+    const fsGame = !t.pluto && (c.bots.enabled || c.title === 'cod4x') && botsInstalled(server) ? ['+set', 'fs_game', 'mods/mp_bots'] : [];
     if (server.cod.title === 'cod4x') {
       const exe = tools.findCod4xExe(server.dir);
       if (!exe) throw new HttpError(400, 'CoD4x server files are missing. Use Reinstall in Settings.');
@@ -820,7 +840,7 @@ const cod = {
       {
         title: 'XP',
         fields: [
-          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : {}) },
+          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : server.cod.title === 'cod4x' ? { hint: 'Needs the bot mod installed (Mods tab), which carries the XP script. The XP pop-ups in game show the normal amount; the extra XP is added to your rank.' } : {}) },
           ...(t.weaponXp ? [{ key: 'cod.weaponXpScale', label: 'Weapon XP multiplier', type: 'number', step: 1 }] : []),
         ],
       },

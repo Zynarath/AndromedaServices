@@ -9,7 +9,7 @@ const path = require('path');
 const { spawn, execFile } = require('child_process');
 const config = require('../config');
 const { fetchJson, fetchWithRetry, downloadFile } = require('../util/download');
-const { extractZip, createZip } = require('../util/zip');
+const { extractZip, createZip, listZip, readEntry } = require('../util/zip');
 const { findFiles } = require('../util/paths');
 
 // Prefer the Plutonium you already play with (%LOCALAPPDATA%\Plutonium, kept updated by its launcher);
@@ -163,7 +163,8 @@ function plutoStorage(game) {
 // ---- Bot Warfare ----
 // Built from each repo's source (the layout the READMEs describe), so it doesn't depend on how a
 // release archive happens to be packaged and doesn't use the rate-limited GitHub API.
-//  - IW4x / CoD4x: mods/mp_bots/z_svr_bots.iwd ("svr" iwds stay on the server; players download nothing)
+//  - IW4x / CoD4x: mods/mp_bots/z_svr_bots.iwd ("svr" iwds stay on the server; players download nothing).
+//    CoD4x also gets scriptdata/ (waypoints, bot names) next to the server, where its scripts read files
 //  - Plutonium T6: scripts/ into Plutonium's storage/t6
 //  - Plutonium IW5 / T5: maps/, scripts/, scriptdata/ (+ mp/ for T5) into storage/<game>
 async function installBotWarfare({ repo, title, modBase, storage }, log) {
@@ -182,12 +183,117 @@ async function installBotWarfare({ repo, title, modBase, storage }, log) {
   return `master (${new Date().toISOString().slice(0, 10)})`;
 }
 
+// ---- CoD4x: XP ----
+// Stock CoD4 has no XP multiplier (scr_xpscale arrived with later games) and only counts XP at all
+// when sv_pure is 1 (level.rankedMatch in _globallogic.gsc), which CoD4x turns off by itself when
+// its own xbase_00.iwd isn't in main. This script rides in the bot mod: it turns XP on, and adds the
+// extra XP for the panel's multiplier (andromeda_xpscale) on top of what the game gives.
+const COD4X_XP_PATH = 'scripts/mp/andromeda_xp.gsc';
+const COD4X_XP_SCRIPT = [
+  '// Written by Andromeda Hosting. XP on a CoD4x server: see docs/call-of-duty.md.',
+  'init()',
+  '{',
+  '\tlevel.rankedMatch = true;',
+  '\tlevel.andromedaXpScale = getdvarfloat( "andromeda_xpscale" );',
+  '',
+  '\tif ( level.andromedaXpScale > 1 )',
+  '\t{',
+  '\t\tlevel thread onPlayerConnect();',
+  '\t}',
+  '}',
+  '',
+  'onPlayerConnect()',
+  '{',
+  '\tfor ( ;; )',
+  '\t{',
+  '\t\tlevel waittill( "connected", player );',
+  '\t\tplayer thread watchXp();',
+  '\t}',
+  '}',
+  '',
+  '// The game adds XP to self.pers[ "rankxp" ]; whatever it adds, add the rest of the multiplier.',
+  'watchXp()',
+  '{',
+  '\tself endon( "disconnect" );',
+  '',
+  '\twhile ( !isdefined( self.pers[ "rankxp" ] ) )',
+  '\t{',
+  '\t\twait 0.05;',
+  '\t}',
+  '',
+  '\tlast = self.pers[ "rankxp" ];',
+  '',
+  '\tfor ( ;; )',
+  '\t{',
+  '\t\twait 0.25;',
+  '\t\tnow = self.pers[ "rankxp" ];',
+  '',
+  '\t\tif ( now > last )',
+  '\t\t{',
+  '\t\t\tbonus = int( ( now - last ) * ( level.andromedaXpScale - 1 ) );',
+  '\t\t\tself maps\\mp\\gametypes\\_rank::incRankXP( bonus );',
+  '',
+  '\t\t\tif ( self maps\\mp\\gametypes\\_rank::updateRank() )',
+  '\t\t\t{',
+  '\t\t\t\tself thread maps\\mp\\gametypes\\_rank::updateRankAnnounceHUD();',
+  '\t\t\t}',
+  '',
+  '\t\t\tnow = self.pers[ "rankxp" ];',
+  '\t\t}',
+  '',
+  '\t\tlast = now;',
+  '\t}',
+  '}',
+  '',
+].join('\r\n');
+const COD4X_CALLBACKS = 'maps/mp/gametypes/_callbacksetup.gsx';
+
+// Add the XP script to a Bot Warfare source tree and start it from Bot Warfare's own
+// _callbacksetup.gsx, right after the game mode has started (where it starts its own scripts).
+function addCod4xXpScript(tree, log) {
+  const file = path.join(tree, COD4X_CALLBACKS);
+  if (!fs.existsSync(file)) {
+    log.warn(`Bot Warfare has no ${COD4X_CALLBACKS}, so the XP script couldn't be added. XP then depends on sv_pure, and the XP multiplier does nothing.`);
+    return false;
+  }
+  let text = fs.readFileSync(file, 'utf8');
+  if (!text.includes('andromeda_xp::init')) {
+    const m = /^([ \t]*)level\.gametypestarted\s*=\s*true;[^\n]*\n/m.exec(text);
+    if (!m) {
+      log.warn(`Couldn't find where to start the XP script in ${COD4X_CALLBACKS}. XP then depends on sv_pure, and the XP multiplier does nothing.`);
+      return false;
+    }
+    const at = m.index + m[0].length;
+    const eol = m[0].endsWith('\r\n') ? '\r\n' : '\n';
+    text = text.slice(0, at) + `${m[1]}scripts\\mp\\andromeda_xp::init();${eol}` + text.slice(at);
+    fs.writeFileSync(file, text);
+  }
+  const script = path.join(tree, COD4X_XP_PATH);
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  fs.writeFileSync(script, COD4X_XP_SCRIPT);
+  return true;
+}
+
 // Put an extracted Bot Warfare source tree where each game loads it from.
 async function packBotWarfare(tmp, { title, modBase, storage }, log) {
   {
     const has = (d) => fs.existsSync(path.join(tmp, d));
     if (!has('maps') && !has('scripts')) throw new Error("The Bot Warfare download doesn't contain the expected maps/ or scripts/ folders");
-    if (title === 'iw4x' || title === 'cod4x') {
+    if (title === 'cod4x') {
+      // CoD4x scripts open files straight from the server folder (fs_homepath), never from inside an
+      // iwd, and Bot Warfare reads scriptdata/waypoints/<map>_wp.csv and scriptdata/botnames.txt
+      // that way. So scriptdata goes next to the server, and only the scripts go in the iwd.
+      addCod4xXpScript(tmp, log);
+      const out = path.join(modBase, 'mods', 'mp_bots', 'z_svr_bots.iwd');
+      await createZip(tmp, out, { globs: ['maps/**', 'scripts/**'] });
+      log.info(`Bot Warfare packed into ${out}`);
+      if (has('scriptdata')) {
+        copyDir(path.join(tmp, 'scriptdata'), path.join(modBase, 'scriptdata'));
+        log.info(`Bot waypoints copied into ${path.join(modBase, 'scriptdata')}`);
+      } else {
+        log.warn("The Bot Warfare download has no scriptdata folder, so the bots have no waypoints and won't find their way around.");
+      }
+    } else if (title === 'iw4x') {
       const out = path.join(modBase, 'mods', 'mp_bots', 'z_svr_bots.iwd');
       await createZip(tmp, out, { globs: ['maps/**', 'scripts/**', 'scriptdata/**'] });
       log.info(`Bot Warfare packed into ${out}`);
@@ -198,6 +304,33 @@ async function packBotWarfare(tmp, { title, modBase, storage }, log) {
       log.info(`Bot Warfare copied into ${target}`);
     }
   }
+}
+
+// A CoD4x bot mod packed by an older panel has the waypoints inside the iwd (where the server can't
+// read them) and no XP script. Everything needed is in that iwd, so it's repacked without a download.
+// Returns true when it changed something.
+async function repairCod4xBots(serverDir, log) {
+  const iwd = path.join(serverDir, 'mods', 'mp_bots', 'z_svr_bots.iwd');
+  if (!fs.existsSync(iwd) || !fs.statSync(iwd).size) return false;
+  const names = await listZip(iwd);
+  const xp = names.includes(COD4X_XP_PATH) ? await readEntry(iwd, COD4X_XP_PATH) : null;
+  const xpCurrent = !!xp && xp.data.toString('utf8') === COD4X_XP_SCRIPT;
+  const waypointsPacked = names.some((n) => n.startsWith('scriptdata/'));
+  const waypointsMissing = !fs.existsSync(path.join(serverDir, 'scriptdata', 'waypoints'));
+  // Without Bot Warfare's _callbacksetup.gsx the XP script can't be added, so don't retry every start.
+  const xpPossible = names.includes(COD4X_CALLBACKS);
+  if ((xpCurrent || !xpPossible) && !(waypointsPacked && waypointsMissing)) return false;
+  const tmp = path.join(config.cacheDir, `bw-repair-${Date.now()}`);
+  try {
+    await extractZip(iwd, tmp);
+    // Waypoints already next to the server may have been edited there: keep those.
+    if (!waypointsMissing) fs.rmSync(path.join(tmp, 'scriptdata'), { recursive: true, force: true });
+    await packBotWarfare(tmp, { title: 'cod4x', modBase: serverDir }, { info() {}, warn: log.warn });
+    log.info('CoD4x bot mod updated: bot waypoints moved next to the server, XP script added.');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  return true;
 }
 
 // CoD4x wants the base game's main/*.iwd and zone/ inside the server folder. Hard links take no
@@ -230,4 +363,4 @@ function linkGameFiles(gameDir, serverDir, log) {
   if (linked || copied) log.info(`Game files: ${linked} linked, ${copied} copied into the server folder.`);
 }
 
-module.exports = { installT7x, T7X_URL, installCod4x, pickCod4xAsset, findCod4xExe, updatePlutonium, plutoStorage, installBotWarfare, packBotWarfare, linkGameFiles, latestRelease, plutoRoot, plutoBootstrapper };
+module.exports = { installT7x, T7X_URL, installCod4x, pickCod4xAsset, findCod4xExe, updatePlutonium, plutoStorage, installBotWarfare, packBotWarfare, repairCod4xBots, addCod4xXpScript, COD4X_XP_SCRIPT, linkGameFiles, latestRelease, plutoRoot, plutoBootstrapper };
