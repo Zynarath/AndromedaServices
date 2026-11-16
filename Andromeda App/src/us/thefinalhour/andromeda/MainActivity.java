@@ -43,6 +43,8 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable ticker = this::tick;
     private boolean resumed;
+    private long verifiedAt;
+    JSONObject pendingLogin;  // what was typed on the sign-in screen when a page had to be shown first
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -81,11 +83,37 @@ public class MainActivity extends Activity {
             panelVersion = json.optString("version", "");
             JSONObject u = json.optJSONObject("user");
             if (u != null) signedIn(u);
+            else if (pendingLogin != null) finishLogin();
             else setOver(new LoginScreen(this, json.optBoolean("setupRequired") ? "This panel has no account yet. Create the first admin on the PC it runs on, then sign in here." : null));
         }, f -> {
-            if (f.challenge) setOver(new VerifyScreen(this));
-            else setOver(new LoginScreen(this, f.message));
+            if (f.challenge && !justVerified()) setOver(new VerifyScreen(this, f));
+            else setOver(new LoginScreen(this, f.challenge ? stillStopped(f) : f.message));
         });
+    }
+
+    /** The sign-in that was typed when a page got in the way goes through now, without typing it again. */
+    private void finishLogin() {
+        JSONObject body = pendingLogin;
+        pendingLogin = null;
+        api.post("/api/auth/login", body, json -> {
+            if (json.optBoolean("totpRequired")) setOver(new LoginScreen(this, "Sign in once more, with the 6-digit code from your authenticator app."));
+            else connect();
+        }, f -> setOver(new LoginScreen(this, f.challenge ? stillStopped(f) : f.message)));
+    }
+
+    /** The page in front of the panel was just dealt with: don't send the user straight back to it. */
+    boolean justVerified() {
+        return System.currentTimeMillis() - verifiedAt < 30000;
+    }
+
+    void verified() {
+        verifiedAt = System.currentTimeMillis();
+        connect();
+    }
+
+    /** What to say when the page was passed and the app is stopped all the same. */
+    String stillStopped(Api.Failure f) {
+        return "The page in front of the panel was passed, but the app's own requests are still stopped" + (f.where.isEmpty() ? "" : " (sent to " + f.where + ")") + ". In Cloudflare, let /api/* on the panel's address through without that page, then try again.";
     }
 
     void signedIn(JSONObject u) {
@@ -120,7 +148,9 @@ public class MainActivity extends Activity {
         if (f.signedOut()) {
             if (user != null) signedOut("You were signed out. Sign in again.");
         } else if (f.challenge) {
-            if (!(over instanceof VerifyScreen)) setOver(new VerifyScreen(this));
+            if (over instanceof VerifyScreen) return;
+            if (justVerified()) Ui.toast(this, stillStopped(f));
+            else setOver(new VerifyScreen(this, f));
         } else Ui.toast(this, f.message);
     }
 

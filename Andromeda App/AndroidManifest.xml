@@ -3,8 +3,8 @@
      versionName is the app's version (see CLAUDE.md); add 1 to versionCode with every new build. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="us.thefinalhour.andromeda"
-    android:versionCode="2"
-    android:versionName="2.0.0">
+    android:versionCode="3"
+    android:versionName="2.0.1">
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />

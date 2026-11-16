@@ -10,7 +10,7 @@ three programs, the Windows app that runs them and an Android app to use them fr
 | [`Andromeda WotLK Website/`](Andromeda%20WotLK%20Website/) | 1.0.0 | The WotLK website for your realm: news, armory, realm status, who's online, honor, auction house and invite-only sign-up. See its [README](Andromeda%20WotLK%20Website/README.md). |
 | [`Andromeda Services Website/`](Andromeda%20Services%20Website/) | 1.0.2 | The public website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist. Runs on this PC for now, at <http://localhost:8092>. See its [README](Andromeda%20Services%20Website/README.md). |
 | [`services/`](services/) | 1.3.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |
-| [`Andromeda App/`](Andromeda%20App/) | 2.0.0 | The Android app: the panel's dashboard and server pages and the Andromeda Services cards, as a native app (no browser). Install [`Andromeda.apk`](Andromeda%20App/Andromeda.apk); see its [README](Andromeda%20App/README.md). |
+| [`Andromeda App/`](Andromeda%20App/) | 2.0.1 | The Android app: the panel's dashboard and server pages and the Andromeda Services cards, as a native app (no browser). Install [`Andromeda.apk`](Andromeda%20App/Andromeda.apk); see its [README](Andromeda%20App/README.md). |
 
 ## Install (Windows)
 

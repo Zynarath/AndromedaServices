@@ -51,12 +51,18 @@ final class Api {
     static final class Failure {
         final int status;        // HTTP status, 0 when the panel wasn't reached at all
         final String message;    // ready to show
-        final boolean challenge; // Cloudflare wants to check the browser first
+        final boolean challenge; // something in front of the panel wants a page shown first (a check, a sign-in)
+        final String where;      // the site it sent the app to instead, when it did ("" otherwise)
 
         Failure(int status, String message, boolean challenge) {
+            this(status, message, challenge, "");
+        }
+
+        Failure(int status, String message, boolean challenge, String where) {
             this.status = status;
             this.message = message;
             this.challenge = challenge;
+            this.where = where;
         }
 
         boolean signedOut() {
@@ -145,7 +151,32 @@ final class Api {
             JSONObject json = null;
             Failure failure = null;
             try {
-                Response r = request(method, path, body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8));
+                byte[] bytes = body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8);
+                String asked = address() + path;
+                Response r = request(method, asked, bytes);
+                // Sent somewhere else instead of answered. Two kinds are followed: the same address over
+                // https (the address is then remembered that way), and a plain move on the same site.
+                // Anything else is a page that wants to be seen first: Cloudflare Access's sign-in, a check.
+                String elsewhere = "";
+                for (int hops = 0; hops < 3 && r.status >= 300 && r.status < 400 && r.status != 304; hops++) {
+                    String location = r.header("Location");
+                    if (location == null) break;
+                    URL from = new URL(asked);
+                    URL to = new URL(from, location);
+                    boolean sameSite = to.getHost().equalsIgnoreCase(from.getHost()) && port(to) == port(from) && !to.getPath().contains("/cdn-cgi/");
+                    boolean toHttps = to.getHost().equalsIgnoreCase(from.getHost()) && from.getProtocol().equals("http") && to.getProtocol().equals("https") && to.getFile().equals(from.getFile());
+                    if (toHttps) {
+                        setAddress("https://" + to.getAuthority());
+                        asked = address() + path;
+                        r = request(method, asked, bytes);
+                    } else if (sameSite && method.equals("GET")) {
+                        asked = to.toString();
+                        r = request("GET", asked, null);
+                    } else {
+                        elsewhere = sameSite ? to.getHost() + to.getPath() : to.getHost();
+                        break;
+                    }
+                }
                 String text = new String(r.body, StandardCharsets.UTF_8);
                 boolean challenge = "challenge".equalsIgnoreCase(r.header("cf-mitigated"))
                     || ((r.status == 403 || r.status == 503) && (text.contains("Just a moment") || text.contains("challenge-platform")));
@@ -153,9 +184,12 @@ final class Api {
                 try {
                     parsed = new JSONObject(text);
                 } catch (Exception notJson) {
-                    // an error page from something in between (Cloudflare, a proxy)
+                    // a page from something in between (Cloudflare, a proxy)
                 }
+                boolean page = parsed == null && r.status >= 200 && r.status < 300 && text.trim().startsWith("<");
                 if (challenge) failure = new Failure(r.status, "Cloudflare wants to check this phone before it lets the app through.", true);
+                else if (r.status >= 300 && r.status < 400) failure = new Failure(r.status, "Instead of answering, the panel's address sends the app to a page first" + (elsewhere.isEmpty() ? "" : " (" + elsewhere + ")") + ". That is usually a sign-in or a check set up in Cloudflare.", true, elsewhere);
+                else if (page) failure = new Failure(r.status, "The panel's address answered with a web page instead of the panel. Something in front of it wants to show that page first.", true);
                 else if (r.status >= 200 && r.status < 300 && parsed != null) json = parsed;
                 else if (parsed != null && parsed.has("error")) failure = new Failure(r.status, parsed.optString("error"), false);
                 else if (r.status == 401) failure = new Failure(401, "Please sign in", false);
@@ -186,6 +220,10 @@ final class Api {
             }
             return null;
         }
+    }
+
+    private static int port(URL u) {
+        return u.getPort() == -1 ? u.getDefaultPort() : u.getPort();
     }
 
     private Response request(String method, String path, byte[] body) throws IOException {

@@ -191,8 +191,10 @@ final class LoginScreen extends Screen {
             } else app.connect();
         }, f -> {
             idle();
-            if (f.challenge) app.failed(f);
-            else say(f.message);
+            if (f.challenge && !app.justVerified()) {
+                app.pendingLogin = body; // finished by itself once the page is dealt with
+                app.failed(f);
+            } else say(f.challenge ? app.stillStopped(f) : f.message);
         });
     }
 
@@ -204,22 +206,27 @@ final class LoginScreen extends Screen {
 }
 
 /**
- * When the panel is behind Cloudflare and Cloudflare decides to check the "browser" before letting
- * anything through, the check has to run in a real page once. This screen shows that page; as soon
- * as the panel answers the app again, it closes by itself. It is the only web page in the app.
+ * When something in front of the panel (Cloudflare) wants a page shown before it lets anything
+ * through — its "checking your browser" step, or a Cloudflare Access sign-in — that page has to be
+ * dealt with once. This screen shows it; as soon as the panel answers the app again, it closes by
+ * itself, and what the page set (its cookies) covers the app's own requests from then on. It is
+ * the only web page in the app.
  */
 final class VerifyScreen extends Screen {
     private WebView web;
 
-    VerifyScreen(MainActivity app) {
+    VerifyScreen(MainActivity app, Api.Failure why) {
         super(app);
         LinearLayout box = Ui.column(app);
         box.setBackgroundColor(Ui.BG);
         int p = Ui.dp(app, 16);
         LinearLayout head = Ui.column(app);
         head.setPadding(p, p, p, p);
-        head.addView(Ui.heading(app, "Checking the connection"));
-        head.addView(Ui.muted(app, "Cloudflare, which sits in front of your panel, wants to check this phone once. It usually takes a few seconds; tick the box below if it asks. The app carries on by itself."));
+        boolean signIn = why != null && !why.where.isEmpty();
+        head.addView(Ui.heading(app, signIn ? "One more step to reach your panel" : "Checking the connection"));
+        head.addView(Ui.muted(app, signIn
+            ? "Your panel's address sends visitors to " + why.where + " first. Do what the page below asks (usually a sign-in). The app carries on by itself, and only asks again when that sign-in runs out."
+            : "Cloudflare, which sits in front of your panel, wants to check this phone once. It usually takes a few seconds; tick the box below if it asks. The app carries on by itself."));
         box.addView(head);
         web = new WebView(app);
         web.setBackgroundColor(Color.BLACK);
@@ -229,7 +236,10 @@ final class VerifyScreen extends Screen {
         android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         box.addView(web, new LinearLayout.LayoutParams(Ui.MATCH, 0, 1f));
         TextView cancel = Ui.button(app, "Use another address", Ui.Kind.GHOST);
-        cancel.setOnClickListener(v -> app.signedOut(null));
+        cancel.setOnClickListener(v -> {
+            app.pendingLogin = null;
+            app.signedOut(null);
+        });
         box.addView(cancel, Ui.margins(app, Ui.lp(Ui.MATCH, Ui.dp(app, 44)), 16, 8, 16, 8));
         view = box;
         web.loadUrl(app.api.address() + "/");
@@ -237,7 +247,7 @@ final class VerifyScreen extends Screen {
 
     @Override
     void tick() {
-        app.api.get("/api/auth/state", json -> app.connect(), null);
+        app.api.get("/api/auth/state", json -> app.verified(), null);
     }
 
     @Override

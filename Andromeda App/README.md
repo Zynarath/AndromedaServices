@@ -1,6 +1,6 @@
 # Andromeda App
 
-Version 2.0.0 · part of [Andromeda Services](../README.md)
+Version 2.0.1 · part of [Andromeda Services](../README.md)
 
 Andromeda Services on an Android phone, as an app of its own: the dashboard and server pages of
 **Andromeda Hosting** and the service cards of the **Andromeda Services** window, drawn by the app
@@ -56,12 +56,24 @@ Players / Accounts, creating or deleting servers, panel settings and users.
 To use the panel on your home network or VPN instead, type that address on the sign-in screen,
 e.g. `http://192.168.1.20:8080`.
 
-### If Cloudflare stops the app
+### If something in front of the panel stops the app
 
-Your panel is behind Cloudflare. If Cloudflare decides to check the "browser" before letting a
-request through, the app shows a *Checking the connection* screen once: that is Cloudflare's own
-check running inside the app, and it closes by itself when it passes. If it keeps coming back, add
-a Cloudflare rule that skips the challenge for `panel.thefinalhour.us/api/*`.
+Your panel is behind Cloudflare, which can put a page in front of it. The app deals with both kinds
+by showing that page once, inside the app, and carrying on by itself when it is passed:
+
+- **"Checking your browser"**: Cloudflare's own check. It usually passes in a few seconds.
+- **A sign-in page** (Cloudflare Access, or any rule that redirects visitors): the screen says
+  *One more step to reach your panel* and shows the sign-in. Sign in there; the app then finishes
+  the panel sign-in you typed and only asks again when Cloudflare's sign-in runs out.
+
+Two things can still get in the way:
+
+- Signing in **with Google** often refuses to work inside an app. Use Cloudflare's one-time code by
+  email instead, or let the app past the page with the rule below.
+- If the app says the page was passed but its requests are still stopped, Cloudflare is treating
+  the app's requests differently from the page. In Cloudflare, add a rule (an Access *Bypass*
+  policy, or a WAF *Skip* rule) for `panel.thefinalhour.us/api/*`. The panel still asks for your
+  username and password, and its 2FA code, on every one of those requests.
 
 ## Build it yourself
 
