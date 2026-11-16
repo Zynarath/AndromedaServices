@@ -2,14 +2,15 @@
 
 Self-hosted game servers, a World of Warcraft website and the website for Andromeda game server
 hosting, run from your own PC. The repository has
-three programs and the Windows app that runs them:
+three programs, the Windows app that runs them and an Android app to use them from your phone:
 
 | Folder | Version | What it is |
 |---|---|---|
 | [`Andromeda Hosting/`](Andromeda%20Hosting/) | 2.3.0 | The game server control panel: ARK, Minecraft (CurseForge modpacks), Call of Duty (including Black Ops III with bots), Satisfactory, 7 Days to Die, Valheim, Rust with uMod, and World of Warcraft: WotLK with bots. See its [README](Andromeda%20Hosting/README.md). |
 | [`Andromeda WotLK Website/`](Andromeda%20WotLK%20Website/) | 1.0.0 | The WotLK website for your realm: news, armory, realm status, who's online, honor, auction house and invite-only sign-up. See its [README](Andromeda%20WotLK%20Website/README.md). |
 | [`Andromeda Services Website/`](Andromeda%20Services%20Website/) | 1.0.2 | The public website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist. Runs on this PC for now, at <http://localhost:8092>. See its [README](Andromeda%20Services%20Website/README.md). |
-| [`services/`](services/) | 1.1.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |
+| [`services/`](services/) | 1.2.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |
+| [`Andromeda App/`](Andromeda%20App/) | 1.0.0 | The Android app: Andromeda Hosting, the WotLK website and the Andromeda Services website on your phone, one tab each. Install [`Andromeda.apk`](Andromeda%20App/Andromeda.apk); see its [README](Andromeda%20App/README.md). |
 
 ## Install (Windows)
 
@@ -34,6 +35,13 @@ A Windows app that runs everything without console windows:
   Services Website**, each with its own Start / Stop / Restart / Open buttons, version, status and
   live log. The WotLK website's **Settings** (SPP folder, name, port, sign-up, Discord link) are
   set here, and the Andromeda Services Website's **Waitlist** button shows who signed up.
+- **Open** (and the link on each card, and the tray menu) goes to each one's public address:
+  <https://panel.thefinalhour.us/>, <https://wow.thefinalhour.us/> and <https://thefinalhour.us/>.
+  *on this PC* next to the link opens the same thing at `localhost`, for when the domain is down
+  (and to create the first admin account, which only works from this PC). To use other addresses,
+  add lines like `open.panel=https://panel.example.com` to `Andromeda Hosting\data\services.ini`
+  (`open.panel`, `open.site`, `open.web`; nothing after the `=` means this PC).
+- Each card shows its program's version, read again after every update.
 - *Start when Andromeda Services opens* is a setting for each one (off at first for the Andromeda
   Services Website). *Open Andromeda Services when I
   sign in to Windows* starts it all at login, quietly in the system tray.

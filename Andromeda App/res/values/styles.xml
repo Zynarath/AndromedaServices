@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Black like the panel, with its blue accent. -->
+    <color name="canvas">#000000</color>
+    <color name="icon_back">#0b0d10</color>
+    <style name="App" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:statusBarColor">@color/canvas</item>
+        <item name="android:navigationBarColor">@color/canvas</item>
+        <item name="android:colorAccent">#1d9bf0</item>
+    </style>
+</resources>

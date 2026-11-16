@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Andromeda Services for Android: the panel and the websites in one app.
+     versionName is the app's version (see CLAUDE.md); add 1 to versionCode with every new build. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="us.thefinalhour.andromeda"
+    android:versionCode="1"
+    android:versionName="1.0.0">
+
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/App"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false">
+        <!-- Turning the phone or opening the keyboard doesn't restart the app (the pages stay as they are). -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

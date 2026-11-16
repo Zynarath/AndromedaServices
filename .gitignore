@@ -1,2 +1,7 @@
 Andromeda Services.exe
 Andromeda Services.new.exe
+
+# Andromeda App: build output and the signing key (see its README)
+Andromeda App/build/
+*.keystore
+*.idsig

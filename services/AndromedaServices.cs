@@ -25,7 +25,7 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
 [assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the websites")]
-[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
 #endif
 
 namespace Andromeda
@@ -43,7 +43,8 @@ namespace Andromeda
         public string Script;           // relative to Dir
         public int StopWaitSeconds;     // how long a clean stop may take before it is forced
         public Func<int> Port;          // where it listens (read from its config each time)
-        public Func<string> Url;
+        public Func<string> Url;        // on this PC: http://localhost:<port>
+        public Func<string> Open;       // what the Open button shows: its public address (your domain)
         public State State = State.Stopped;
         public Process Proc;
         public bool StopRequested;
@@ -535,6 +536,7 @@ namespace Andromeda
             catch { }
         }
         public bool Get(string key, bool def) { string v; return values.TryGetValue(key, out v) ? v == "1" : def; }
+        public string Get(string key, string def) { string v; return values.TryGetValue(key, out v) ? v : def; }
         public void Set(string key, bool on)
         {
             values[key] = on ? "1" : "0";
@@ -578,6 +580,8 @@ namespace Andromeda
         readonly TextBox logBox;
         readonly Dictionary<Service, Pill> pills = new Dictionary<Service, Pill>();
         readonly Dictionary<Service, LinkLabel> urlLabels = new Dictionary<Service, LinkLabel>();
+        readonly Dictionary<Service, Label> versionLabels = new Dictionary<Service, Label>();
+        readonly Dictionary<Service, LinkLabel> localLabels = new Dictionary<Service, LinkLabel>();
         readonly Dictionary<Service, ModernButton[]> buttons = new Dictionary<Service, ModernButton[]>();
         readonly Dictionary<Service, ModernButton> logTabs = new Dictionary<Service, ModernButton>();
         readonly ModernButton updateButton;
@@ -634,6 +638,12 @@ namespace Andromeda
                 Port = () => 8092, // the site always uses 8092 when started from here
                 Url = () => "http://localhost:8092",
             };
+            // "Open" goes to each one's public address, so the link is the same one everyone else uses.
+            // Another address: a line like "open.panel=https://panel.example.com" in data\services.ini
+            // (open.panel / open.site / open.web); "open.panel=" with nothing after it opens it on this PC.
+            panel.Open = () => OpenAddress(panel, "https://panel.thefinalhour.us/");
+            site.Open = () => OpenAddress(site, "https://wow.thefinalhour.us/");
+            web.Open = () => OpenAddress(web, "https://thefinalhour.us/");
             // The website folder is missing in copies that haven't updated to it yet.
             services = Directory.Exists(web.Dir) ? new[] { panel, site, web } : new[] { panel, site };
 
@@ -775,9 +785,9 @@ namespace Andromeda
             tray = new NotifyIcon { Text = "Andromeda Services", Icon = Icon ?? SystemIcons.Application, Visible = true };
             var menu = new ContextMenuStrip();
             menu.Items.Add("Open Andromeda Services", null, (o, e) => ShowWindow());
-            menu.Items.Add("Open the panel", null, (o, e) => OpenUrl(panel.Url()));
-            menu.Items.Add("Open the WotLK website", null, (o, e) => OpenUrl(site.Url()));
-            if (services.Contains(web)) menu.Items.Add("Open the Andromeda Services website", null, (o, e) => OpenUrl(web.Url()));
+            menu.Items.Add("Open the panel", null, (o, e) => OpenUrl(panel.Open()));
+            menu.Items.Add("Open the WotLK website", null, (o, e) => OpenUrl(site.Open()));
+            if (services.Contains(web)) menu.Items.Add("Open the Andromeda Services website", null, (o, e) => OpenUrl(web.Open()));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Start all", null, (o, e) => { foreach (var s in services) Start(s); });
             menu.Items.Add("Stop all", null, (o, e) => { foreach (var s in services.Reverse()) Stop(s, false); });
@@ -862,14 +872,18 @@ namespace Andromeda
             pill.Set("Stopped", Theme.Muted);
             var desc = new Label { Text = s.Description, AutoSize = true, Location = new Point(20, 88), ForeColor = Theme.Muted, BackColor = Theme.Card };
             var url = new LinkLabel { Text = "", AutoSize = true, Location = new Point(20, 110), LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text, BackColor = Theme.Card, LinkBehavior = LinkBehavior.HoverUnderline };
-            url.LinkClicked += (o, e) => OpenUrl(s.Url());
+            url.LinkClicked += (o, e) => OpenUrl(s.Open());
+            // The same thing straight from this PC, for when the domain is down (and to make the first admin account).
+            var local = new LinkLabel { Text = "on this PC", AutoSize = true, Location = new Point(20, 110), LinkColor = Theme.Muted, ActiveLinkColor = Theme.Text, BackColor = Theme.Card, LinkBehavior = LinkBehavior.HoverUnderline };
+            local.LinkClicked += (o, e) => OpenUrl(s.Url());
+            url.SizeChanged += (o, e) => local.Location = new Point(url.Right + 10, 110);
 
             var main = new ModernButton("Start", ButtonKind.Primary) { Margin = new Padding(0) };
             var restart = new ModernButton("Restart", ButtonKind.Secondary);
             var open = new ModernButton("Open", ButtonKind.Secondary);
             main.Click += (o, e) => { if (s.Alive) Stop(s, false); else Start(s); };
             restart.Click += (o, e) => Restart(s);
-            open.Click += (o, e) => OpenUrl(s.Url());
+            open.Click += (o, e) => OpenUrl(s.Open());
             // Buttons in a row; their widths change with the text (Start/Stop), so place them on resize.
             ModernButton settingsButton = null;
             if (s == site)
@@ -894,7 +908,9 @@ namespace Andromeda
             var auto = new Toggle("Start when Andromeda Services opens", settings.Get("autostart." + s.Key, s.AutoStartDefault)) { Location = new Point(21, 190) };
             auto.CheckedChanged += (o, e) => settings.Set("autostart." + s.Key, auto.Checked);
 
-            card.Controls.AddRange(new Control[] { name, version, pill, desc, url, main, restart, open, auto });
+            card.Controls.AddRange(new Control[] { name, version, pill, desc, url, local, main, restart, open, auto });
+            versionLabels[s] = version;
+            localLabels[s] = local;
             if (settingsButton != null) card.Controls.Add(settingsButton);
             pills[s] = pill;
             urlLabels[s] = url;
@@ -942,7 +958,12 @@ namespace Andromeda
             }
             if (updating && !s.Alive) { text = "Updating…"; color = Theme.Blue; }
             pills[s].Set(text, color);
-            urlLabels[s].Text = s.Url();
+            urlLabels[s].Text = s.Open();
+            localLabels[s].Visible = s.Open() != s.Url(); // nothing to add when Open already means this PC
+            localLabels[s].Location = new Point(urlLabels[s].Right + 10, 110);
+            // Read again every time: an update changes it while this window stays open.
+            var version = AppVersion(s);
+            if (versionLabels[s].Text != version) versionLabels[s].Text = version;
             var b = buttons[s];
             bool alive = s.Alive;
             b[0].Text = alive ? "Stop" : "Start";
@@ -1163,6 +1184,13 @@ namespace Andromeda
             return d == null || d.Count > 0;
         }
 
+        // Where "Open" goes: the address set in services.ini, else the one given, else this PC.
+        string OpenAddress(Service s, string usual)
+        {
+            var address = settings.Get("open." + s.Key, usual).Trim();
+            return address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || address.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? address : s.Url();
+        }
+
         // "v2.0.0" from the app's package.json.
         static string AppVersion(Service s)
         {
@@ -1197,7 +1225,7 @@ namespace Andromeda
                     var commit = Run(git, "log -1 --format=\"%h · updated %cr\"", null, 15000);
                     if (branch.Ok && commit.Ok) text = version + " · Branch " + branch.LastLine + " · " + commit.LastLine;
                 }
-                try { BeginInvoke((Action)(() => versionLabel.Text = text)); } catch { }
+                try { BeginInvoke((Action)(() => { versionLabel.Text = text; foreach (var s in services) RefreshCard(s); })); } catch { }
             });
             t.IsBackground = true;
             t.Start();
