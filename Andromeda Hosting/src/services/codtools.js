@@ -187,7 +187,8 @@ async function installBotWarfare({ repo, title, modBase, storage }, log) {
 // Stock CoD4 has no XP multiplier (scr_xpscale arrived with later games) and only counts XP at all
 // when sv_pure is 1 (level.rankedMatch in _globallogic.gsc), which CoD4x turns off by itself when
 // its own xbase_00.iwd isn't in main. This script rides in the bot mod: it turns XP on, and adds the
-// extra XP for the panel's multiplier (andromeda_xpscale) on top of what the game gives.
+// extra XP for the panel's multiplier (andromeda_xpscale) on top of what the game gives, and makes
+// the game's XP pop-up show the full amount.
 const COD4X_XP_PATH = 'scripts/mp/andromeda_xp.gsc';
 const COD4X_XP_SCRIPT = [
   '// Written by Andromeda Hosting. XP on a CoD4x server: see docs/call-of-duty.md.',
@@ -225,7 +226,7 @@ const COD4X_XP_SCRIPT = [
   '',
   '\tfor ( ;; )',
   '\t{',
-  '\t\twait 0.25;',
+  '\t\twait 0.05;',
   '\t\tnow = self.pers[ "rankxp" ];',
   '',
   '\t\tif ( now > last )',
@@ -236,6 +237,12 @@ const COD4X_XP_SCRIPT = [
   '\t\t\tif ( self maps\\mp\\gametypes\\_rank::updateRank() )',
   '\t\t\t{',
   '\t\t\t\tself thread maps\\mp\\gametypes\\_rank::updateRankAnnounceHUD();',
+  '\t\t\t}',
+  '',
+  '\t\t\t// The game\'s own pop-up adds up what it is given, so the extra makes it show the full amount.',
+  '\t\t\tif ( bonus > 0 && isdefined( self.enableText ) && self.enableText && !level.hardcoreMode )',
+  '\t\t\t{',
+  '\t\t\t\tself thread maps\\mp\\gametypes\\_rank::updateRankScoreHUD( bonus );',
   '\t\t\t}',
   '',
   '\t\t\tnow = self.pers[ "rankxp" ];',

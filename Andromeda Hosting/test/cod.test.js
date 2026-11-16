@@ -279,6 +279,7 @@ test('CoD4x bots: waypoints go next to the server, and the XP script is started 
   assert.equal((await readEntry(iwd, 'scripts/mp/andromeda_xp.gsc')).data.toString(), tools.COD4X_XP_SCRIPT);
   assert.match(tools.COD4X_XP_SCRIPT, /level\.rankedMatch = true;/);
   assert.match(tools.COD4X_XP_SCRIPT, /getdvarfloat\( "andromeda_xpscale" \)/);
+  assert.match(tools.COD4X_XP_SCRIPT, /_rank::updateRankScoreHUD\( bonus \);/, 'the pop-up shows the multiplied XP');
   const patched = (await readEntry(iwd, 'maps/mp/gametypes/_callbacksetup.gsx')).data.toString();
   assert.match(patched, /level\.gametypestarted = true; \/\/ started\n\t\tscripts\\mp\\andromeda_xp::init\(\);\n/);
   assert.equal(patched.split('andromeda_xp::init').length, 2, 'started once');

@@ -177,8 +177,8 @@ to the bot mod (`scripts/mp/andromeda_xp.gsc` in `z_svr_bots.iwd`):
 
 - it turns XP on whatever `sv_pure` is;
 - it reads the panel's multiplier (`andromeda_xpscale` in the config) and adds the extra XP on
-  top of what the game gives. The **+10** pop-ups in game still show the normal amount; the
-  extra goes straight to your rank, so watch the rank bar.
+  top of what the game gives. The XP pop-ups in game show the full amount (**+40** for a kill
+  at 4x). As in the normal game, there are no pop-ups in hardcore.
 
 The config also sets `ModStats 0`, so XP goes to each player's normal CoD4 rank and classes.
 With CoD4x's default (`ModStats 1`) a server running a mod keeps a separate rank that starts at

@@ -840,7 +840,7 @@ const cod = {
       {
         title: 'XP',
         fields: [
-          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : server.cod.title === 'cod4x' ? { hint: 'Needs the bot mod installed (Mods tab), which carries the XP script. The XP pop-ups in game show the normal amount; the extra XP is added to your rank.' } : {}) },
+          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : server.cod.title === 'cod4x' ? { hint: 'Needs the bot mod installed (Mods tab), which carries the XP script. The XP pop-ups in game show the multiplied amount.' } : {}) },
           ...(t.weaponXp ? [{ key: 'cod.weaponXpScale', label: 'Weapon XP multiplier', type: 'number', step: 1 }] : []),
         ],
       },
