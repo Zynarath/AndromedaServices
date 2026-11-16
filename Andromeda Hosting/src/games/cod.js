@@ -72,7 +72,17 @@ const q3 = (() => {
     }
     return { info, players, hostname: stripColors(info.sv_hostname || info.hostname || ''), map: info.mapname, gametype: info.g_gametype, maxClients: Number(info.sv_maxclients) || null };
   }
-  return { rcon, getStatus, stripColors };
+  // H1-Mod answers "getInfo <challenge>" instead of "getstatus": one line of \\key\\value pairs, with
+  // player and bot counts but no names.
+  async function getInfo(host, port) {
+    const [first] = await request(host, port, `getInfo hp${Date.now()}`, { timeout: 2500, quietMs: 50 });
+    const info = {};
+    const parts = stripHeader(first).split('\n')[0].split('\\').slice(1);
+    for (let i = 0; i + 1 < parts.length; i += 2) info[parts[i]] = parts[i + 1];
+    if (!('sv_maxclients' in info) && !('mapname' in info)) throw new Error('Not an info response');
+    return { info, running: info.sv_running !== '0', clients: Number(info.clients) || 0, bots: Number(info.bots) || 0, map: info.mapname, maxClients: Number(info.sv_maxclients) || null };
+  }
+  return { rcon, getStatus, getInfo, stripColors };
 })();
 
 // Bot Warfare difficulty values differ per game (from each mod's README / source).
@@ -263,6 +273,35 @@ const TITLES = {
       ['mp_lonestar', 'Tremor'], ['mp_warhawk', 'Warhawk'], ['mp_snow', 'Whiteout'],
     ],
   },
+  // Modern Warfare Remastered with H1-Mod (github.com/auroramod/h1-mod): the same codebase as S1x.
+  // From its source: "-dedicated" picks the server, "-stdout" prints the console, configs load from
+  // main/, sv_mapRotation takes "gametype <mode> map <map>", "spawnBot <n>" adds the game's own bots,
+  // and the server answers "getInfo" (not "getstatus").
+  h1: {
+    wikiGame: 'Modern Warfare Remastered',
+    label: 'Modern Warfare Remastered (H1-Mod)',
+    short: 'H1-Mod',
+    namePrefix: 'MWR Server',
+    port: 27016,
+    platforms: ['win32'],
+    botRepo: null,
+    spawnBots: true,
+    infoQuery: true,
+    stdout: true,
+    maxXpScale: 4,
+    weaponXp: false,
+    gameHint: 'Your Modern Warfare Remastered folder with H1-Mod in it (contains h1-mod.exe)',
+    exes: ['h1-mod.exe'],
+    clientHelp: 'Download h1-mod.exe from github.com/auroramod/h1-mod/releases and put it in your Modern Warfare Remastered folder first.',
+    gametypes: [['dom', 'Domination'], ['war', 'Team Deathmatch'], ['dm', 'Free-for-all'], ['conf', 'Kill Confirmed'], ['sd', 'Search & Destroy'], ['sab', 'Sabotage'], ['koth', 'Headquarters'], ['hp', 'Hardpoint'], ['ctf', 'Capture the Flag'], ['gun', 'Gun Game']],
+    maps: [
+      ['mp_convoy', 'Ambush'], ['mp_backlot', 'Backlot'], ['mp_bloc', 'Bloc'], ['mp_bog', 'Bog'], ['mp_countdown', 'Countdown'], ['mp_crash', 'Crash'],
+      ['mp_crossfire', 'Crossfire'], ['mp_citystreets', 'District'], ['mp_farm', 'Downpour'], ['mp_overgrown', 'Overgrown'], ['mp_pipeline', 'Pipeline'], ['mp_shipment', 'Shipment'],
+      ['mp_showdown', 'Showdown'], ['mp_strike', 'Strike'], ['mp_vacant', 'Vacant'], ['mp_cargoship', 'Wet Work'],
+      ['mp_crash_snow', 'Winter Crash', 'bonus map'], ['mp_bog_summer', 'Beach Bog', 'bonus map'], ['mp_farm_spring', 'Daybreak', 'bonus map'],
+      ['mp_broadcast', 'Broadcast', 'DLC'], ['mp_carentan', 'Chinatown', 'DLC'], ['mp_creek', 'Creek', 'DLC'], ['mp_killhouse', 'Killhouse', 'DLC'],
+    ],
+  },
 };
 // Titles run from your game folder with the client's own executable (no extra downloads).
 const findExe = (t, dir) => (t.exes || []).map((e) => path.join(dir, e)).find((p) => fs.existsSync(p)) || null;
@@ -272,7 +311,7 @@ const findExe = (t, dir) => (t.exes || []).map((e) => path.join(dir, e)).find((p
 //  - CoD4x, MW2 (IW4x), BO1 (Plutonium T5), AW (S1x), Ghosts (IW6x): the series' scr_ dvars (scr_<mode>_timelimit, ...)
 //  - MW3 (Plutonium IW5) takes them from DSR files instead, so the panel doesn't offer them there.
 // `key` is what's stored; blank = the game mode's default; `always` = written even when blank.
-const RULES_KIND = { t6: 'gts', cod4x: 'scr', iw4x: 'scr', t5: 'scr', s1x: 'scr', iw6x: 'scr' };
+const RULES_KIND = { t6: 'gts', cod4x: 'scr', iw4x: 'scr', t5: 'scr', s1x: 'scr', iw6x: 'scr', h1: 'scr' };
 const MATCH_RULES = [
   { key: 'hardcoreMode', scr: 'scr_hardcore', label: 'Hardcore', type: 'bool' },
   { key: 'friendlyfiretype', scr: 'scr_team_fftype', label: 'Friendly fire', type: 'select', options: [['0', 'Off'], ['1', 'On'], ['2', 'Reflect'], ['3', 'Shared']] },
@@ -343,7 +382,9 @@ const gtsCfgName = (server, gametype) => `hp_${server.id}_${gametype}.cfg`;
 const gtsDir = () => path.join(tools.plutoStorage('t6'), 'gamesettings');
 
 const title = (server) => TITLES[server.cod.title];
-const hasBots = (t) => !!(t.botRepo || t.nativeBots);
+const hasBots = (t) => !!(t.botRepo || t.nativeBots || t.spawnBots);
+// Some games' rank scripts end the match when the XP multiplier is above their own limit.
+const xpScaleFor = (t, c) => Math.min(Number(c.xpScale) || 1, t.maxXpScale || 100);
 const baseMaps = (t) => t.maps.filter((m) => !m[2]).map((m) => m[0]);
 const playlist = (server) => (title(server).playlists || {})[server.cod.playlist];
 const cfgName = (server) => `hp_${server.id}.cfg`;
@@ -461,10 +502,11 @@ function buildConfig(server) {
     // ModStats 0: XP goes to the player's normal CoD4 rank, not a separate one kept for the mod.
     lines.push(`set andromeda_xpscale "${Number(c.xpScale) || 1}"`, `set ModStats "0"`);
   } else {
-    lines.push(`set scr_xpscale "${Number(c.xpScale) || 1}"`);
+    lines.push(`set scr_xpscale "${xpScaleFor(t, c)}"`);
   }
   if (t.weaponXp) lines.push(`set scr_weaponxpscale "${Number(c.weaponXpScale) || 1}"`);
-  lines.push(`set logfile "2"`, `set g_log "hp_${server.id}_games.log"`);
+  // H1-Mod prints its console to the panel (-stdout), and its "logfile" is an on/off setting.
+  if (!t.stdout) lines.push(`set logfile "2"`, `set g_log "hp_${server.id}_games.log"`);
   if (!t.pluto) lines.push(`set sv_allowDownload "1"`);
   const b = c.bots || {};
   if (t.botRepo) {
@@ -484,6 +526,25 @@ function buildConfig(server) {
   const gtsCfg = c.title === 't6' ? gtsCfgName(server, gametype) : null;
   lines.push(`// Map rotation (${list ? list.label : 'selected maps'}${c.shuffle !== false ? ', shuffled' : ''})`, `set sv_mapRotation "${rotationString(t, gametype, maps, gtsCfg)}"`, `set sv_mapRotationCurrent ""`);
   return lines.join('\r\n') + '\r\n';
+}
+
+// H1-Mod has no setting that keeps bots in the match, only the "spawnBot <n>" command. So whenever
+// the panel checks the server and it has fewer bots than asked for, it sends the difference. Bots
+// stay through map changes; they don't leave when people join, so Max players has to cover both.
+const lastBotTopUp = new Map();
+function botsToAdd(c, st) {
+  if (!c.bots || !c.bots.enabled || !st.running) return 0;
+  const want = Math.max(0, Number(c.bots.fill) || 0);
+  const room = (st.maxClients || Number(c.maxClients) || 18) - st.clients;
+  return Math.max(0, Math.min(want - st.bots, room));
+}
+function topUpBots(server, st, now = Date.now()) {
+  const n = botsToAdd(server.cod, st);
+  // Bots take a few seconds to connect and show up in the count.
+  if (!n || now - (lastBotTopUp.get(server.id) || 0) < 20000) return 0;
+  lastBotTopUp.set(server.id, now);
+  q3.rcon('127.0.0.1', server.cod.port, server.cod.rconPassword, `spawnBot ${n}`, { timeout: 1500 }).catch(() => {});
+  return n;
 }
 
 function dvarValue(f, v) {
@@ -554,7 +615,7 @@ function checkGameDir(server) {
   if (!c.gameDir || !path.isAbsolute(c.gameDir)) throw new HttpError(400, `Set the game folder for ${t.label} (e.g. ${t.gameHint})`);
   if (!fs.existsSync(c.gameDir)) throw new HttpError(400, `Game folder not found: ${c.gameDir}`);
   if (t.exes) {
-    if (!findExe(t, c.gameDir)) throw new HttpError(400, `${c.gameDir} doesn't have the ${t.short} client (${t.exes.join(' or ')}). Install it into your game folder with the AlterWare launcher (alterware.dev) first.`);
+    if (!findExe(t, c.gameDir)) throw new HttpError(400, `${c.gameDir} doesn't have the ${t.short} client (${t.exes.join(' or ')}). ${t.clientHelp || 'Install it into your game folder with the AlterWare launcher (alterware.dev) first.'}`);
   } else if (!fs.existsSync(path.join(c.gameDir, t.marker))) {
     throw new HttpError(400, `${c.gameDir} doesn't look like a ${t.label} install (no "${t.marker}" inside).${server.cod.title === 'iw4x' ? ' Install IW4x into your MW2 folder first (iw4x.exe must be there).' : ''}`);
   }
@@ -747,6 +808,13 @@ const cod = {
     if (t.exes) {
       // The game's console log (logfile 2 in the generated config) is followed, since these clients
       // print to their own console window.
+      if (t.stdout) {
+        return {
+          command: findExe(t, c.gameDir),
+          args: ['-dedicated', '-stdout', '+set', 'net_port', port, '+exec', cfgName(server), '+map_rotate'],
+          cwd: c.gameDir,
+        };
+      }
       return {
         command: findExe(t, c.gameDir),
         args: ['-dedicated', '+set', 'net_port', port, '+exec', cfgName(server), '+map_rotate'],
@@ -766,6 +834,7 @@ const cod = {
   },
 
   async probeReady(server) {
+    if ((title(server) || {}).infoQuery) return (await q3.getInfo('127.0.0.1', server.cod.port)).running;
     await q3.getStatus('127.0.0.1', server.cod.port);
     return true;
   },
@@ -789,6 +858,13 @@ const cod = {
   },
 
   async query(server) {
+    const t = title(server) || {};
+    if (t.infoQuery) {
+      const st = await q3.getInfo('127.0.0.1', server.cod.port);
+      if (t.spawnBots) topUpBots(server, st);
+      // getInfo has counts only, so there are no player names to show.
+      return { online: Math.max(0, st.clients - st.bots), max: st.maxClients || server.cod.maxClients, players: [], bots: st.bots, map: st.map };
+    }
     const st = await q3.getStatus('127.0.0.1', server.cod.port);
     // Bots report a ping of 0 (or 999); real players don't.
     const humans = st.players.filter((p) => p.ping > 0 && p.ping < 999);
@@ -840,7 +916,7 @@ const cod = {
       {
         title: 'XP',
         fields: [
-          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : server.cod.title === 'cod4x' ? { hint: 'Needs the bot mod installed (Mods tab), which carries the XP script. The XP pop-ups in game show the multiplied amount.' } : {}) },
+          { key: 'cod.xpScale', label: 'Player XP multiplier', type: 'number', step: 1, ...(t.t7x ? { hint: 'Written as scr_xpscale. Not yet confirmed on T7x servers: check the XP at the end of a match.' } : t.maxXpScale ? { hint: `Up to ${t.maxXpScale}x: the game ends the match on a higher value, so the panel writes ${t.maxXpScale} at most. Depot Credits can't be multiplied: see docs/call-of-duty.md.` } : server.cod.title === 'cod4x' ? { hint: 'Needs the bot mod installed (Mods tab), which carries the XP script. The XP pop-ups in game show the multiplied amount.' } : {}) },
           ...(t.weaponXp ? [{ key: 'cod.weaponXpScale', label: 'Weapon XP multiplier', type: 'number', step: 1 }] : []),
         ],
       },
@@ -855,6 +931,13 @@ const cod = {
             hint: `Black Ops III's own bots, split evenly over the two teams (all of them in ${t.ffa.map((g) => (t.gametypes.find((x) => x[0] === g) || [])[1]).join(' and ')}). Keep Max players above bots + people.`,
           },
           { key: 'cod.bots.skill', label: 'Bot difficulty', type: 'select', options: skillsFor(server.cod.title).options.map(([value, label]) => ({ value, label })) },
+        ],
+      }] : []),
+      ...(t.spawnBots ? [{
+        title: 'Bots',
+        fields: [
+          { key: 'cod.bots.enabled', label: 'Add bots to the match', type: 'bool' },
+          { key: 'cod.bots.fill', label: 'Bots in the match', type: 'number', hint: 'The game\'s own bots. The panel adds them once the first map has loaded and tops them up. They don\'t leave when people join, so keep Max players above bots + people.' },
         ],
       }] : []),
       ...(t.botRepo ? [{
@@ -973,3 +1056,5 @@ module.exports.t7Bots = t7Bots;
 module.exports.buildGtsConfig = buildGtsConfig;
 module.exports.SKILLS = SKILLS;
 module.exports.q3 = q3;
+module.exports.botsToAdd = botsToAdd;
+module.exports.topUpBots = topUpBots;

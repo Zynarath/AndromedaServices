@@ -1,4 +1,4 @@
-# Call of Duty servers (CoD4x, IW4x, Plutonium BO2 / BO1 / MW3, T7x BO3)
+# Call of Duty servers (CoD4x, IW4x, Plutonium BO2 / BO1 / MW3, T7x BO3, H1-Mod MWR)
 
 Andromeda Hosting runs multiplayer servers for these community clients:
 
@@ -10,6 +10,7 @@ Andromeda Hosting runs multiplayer servers for these community clients:
 | Black Ops (Plutonium T5) | BO1 | Plutonium | 28960 |
 | Modern Warfare 3 (Plutonium IW5) | MW3 | Plutonium | 27016 |
 | Black Ops III (T7x) | BO3 | Activision's Unranked Server + [T7x](https://alterware.dev) | 27017 |
+| Modern Warfare Remastered (H1-Mod) | MWR | [H1-Mod](https://github.com/auroramod/h1-mod) | 27016 |
 
 If you run two servers that share a default port (e.g. CoD4x and IW4x), the panel picks the next
 free port for the second one.
@@ -113,6 +114,55 @@ above bots + people, because it isn't confirmed that BO3's bots make room when a
   panel doesn't do it. T7x connects to Activision's official servers, so Cryptokeys from official
   public matches still work as normal.
 
+## Modern Warfare Remastered (H1-Mod)
+
+MWR runs on **H1-Mod**, the community client that adds dedicated servers to the game. You and
+your friends each need your own copy of Modern Warfare Remastered with H1-Mod in it.
+
+**Set up:**
+
+1. Download `h1-mod.exe` from [github.com/auroramod/h1-mod/releases](https://github.com/auroramod/h1-mod/releases)
+   and put it in your Modern Warfare Remastered folder (next to `h1_mp64_ship.exe`). Start it
+   once: it downloads the rest of its files itself.
+2. In the panel, **New server → Modern Warfare Remastered (H1-Mod)**, and set the game folder to
+   that folder.
+3. Forward **UDP 27016** (or whatever port the server shows).
+
+**Your friends** start the game with `h1-mod.exe` too, pick Multiplayer, and join from the
+console: `password <join password>; connect <address>:27016`.
+
+**What the panel does:** it writes `main\hp_<id>.cfg` and starts
+`h1-mod.exe -dedicated -stdout +set net_port <port> +exec hp_<id>.cfg +map_rotate`. The 16 base
+maps are the default rotation; Winter Crash, Beach Bog, Daybreak and the four Variety Map Pack
+maps can be ticked in Settings, but everyone who joins needs them. H1-Mod answers a different
+status query from the other games (`getInfo`), which gives the number of players and bots but
+not their names, so the panel shows counts only.
+
+**Bots:** MWR has bots of its own, and H1-Mod adds them with its `spawnBot` command. There is no
+setting that keeps them in the match, so the panel does it: once a map has loaded it sends
+`spawnBot <n>` for however many are missing, and tops them up when it checks the server. Bots
+don't leave when people join, so keep *Max players* above bots + people. There is no difficulty
+setting.
+
+### XP, Parts and Depot Credits
+
+- **XP and rank** work as in the normal game, and are kept on each player's own PC by H1-Mod
+  (not on Activision's servers). The panel writes `scr_xpscale`, **4x at most**: the game's rank
+  script is expected to end the match on a higher value, like the other games built on this
+  engine, so the panel never writes more than 4.
+- **The Depot** is H1-Mod's own offline one: the real Depot lived on Activision's servers, which
+  a private server can't reach. Each player's Parts, Depot Credits and unlocked items are in
+  `players2\user\depot.json` in their own game folder. At the end of every round H1-Mod gives:
+  - **Parts**: 10% of the score you made that round;
+  - **Depot Credits**: 2 or 3, once you've accepted H1-Mod's notice in the Depot menu.
+- **A server can't multiply Depot Credits.** The amounts above are in H1-Mod's menu scripts on
+  each player's PC, not in anything the server sends. What a server can change is how often a
+  round ends: shorter matches (a lower *Time limit* or *Score limit* under Settings) mean more
+  round ends an hour, so more Depot Credits an hour. Parts follow your score, so they don't
+  change with XP either.
+- H1-Mod's own options menu also has *Unlock all items / classes / loot* switches, for anyone
+  who would rather skip the grind.
+
 ## What you need
 
 **You must own each game.** None of the clients include game files. Andromeda Hosting runs the server
@@ -123,6 +173,7 @@ from your existing install, so set the **game folder** when you create the serve
 | CoD4x | Your CoD4 folder (has `main` and `zone`) | Nothing. Andromeda Hosting downloads the CoD4x server and links the game files into the server folder (hard links: no extra disk space on the same drive) |
 | IW4x | Your MW2 folder **with IW4x installed** (has `iw4x.exe`) | Install IW4x first with the AlterWare launcher |
 | BO3 | The **Black Ops III Unranked Server** folder (Steam → Library → Tools; has `zone`) | Nothing. Andromeda Hosting downloads T7x (`t7x.exe`) into it. Players need T7x too |
+| MWR | Your Modern Warfare Remastered folder with `h1-mod.exe` in it | Download `h1-mod.exe` from [H1-Mod's releases](https://github.com/auroramod/h1-mod/releases) first. Players need it too |
 | BO2 / BO1 / MW3 | Your game folder (has `zone`) | A free **Plutonium server key**: sign in at [platform.plutonium.pw/serverkeys](https://platform.plutonium.pw/serverkeys) and create one. If Plutonium is already installed (`%LOCALAPPDATA%\Plutonium`), Andromeda Hosting uses that install; otherwise it downloads its own copy |
 
 Forward each server's **UDP** port on your router (see the server's Overview), or have your
@@ -235,5 +286,10 @@ what the console says:
   `identities\dedicatedpc`, `t7x`, `logs` and the folder itself), whether `scr_xpscale` changes
   BO3's XP, and whether `-dedicated` is right. One installer uses `-headless`; if the server
   doesn't start, tell me what its window says.
+- **Modern Warfare Remastered (H1-Mod)**: the launch line, the `getInfo` query, `spawnBot`, the
+  rotation format and the Depot rules are read from H1-Mod's source code, but none of it has
+  been run against a real server from here. Unknowns: whether MWR's rank script takes
+  `scr_xpscale` (check the XP after a match), whether bots stay through every map change (the
+  panel adds them again if they don't), and the map names of the bonus and DLC maps.
 - **Plutonium download**: the panel runs Plutonium's updater with `-install-dir … -update-only`,
   but only when you don't already have Plutonium installed.

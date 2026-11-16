@@ -493,6 +493,76 @@ test('BO3 (T7x): config laid out like the T7x server configs, with the game\'s o
   assert.ok(!keys.some((k) => k.startsWith('cod.match.')));
 });
 
+test('MWR (H1-Mod): launch, config, info query and bot top-up', async () => {
+  const t = cod.TITLES.h1;
+  assert.equal(t.maps.filter((m) => !m[2]).length, 16);
+  const s = server('h1');
+  assert.equal(s.cod.bots.enabled, true, 'the game has its own bots');
+  fs.mkdirSync(s.cod.gameDir, { recursive: true });
+  await assert.rejects(cod.buildLaunch(s), /h1-mod\.exe from github\.com\/auroramod\/h1-mod/, 'says where to get H1-Mod');
+  fs.writeFileSync(path.join(s.cod.gameDir, 'h1-mod.exe'), '');
+  const l = await cod.buildLaunch(s);
+  assert.equal(path.basename(l.command), 'h1-mod.exe');
+  // -stdout: the console goes to the panel, so there is no log file to follow.
+  assert.deepEqual(l.args, ['-dedicated', '-stdout', '+set', 'net_port', String(s.cod.port), '+exec', 'hp_abc123.cfg', '+map_rotate']);
+  assert.equal(l.logFile, undefined);
+  assert.ok(fs.existsSync(path.join(s.cod.gameDir, 'main', 'hp_abc123.cfg')));
+
+  let cfg = cod.buildConfig(s);
+  assert.match(cfg, /set scr_xpscale "4"\r\n/);
+  assert.match(cfg, /set sv_mapRotation "gametype dom( map mp_\w+){16}"/);
+  assert.doesNotMatch(cfg, /logfile|bots_|mp_killhouse/, 'H1-Mod logfile is on/off; no Bot Warfare; DLC stays out of the default rotation');
+  // MWR ends the match on a multiplier above 4.
+  cod.writeSettings(s, { 'cod.xpScale': 10, 'cod.mode.dom.timeLimit': 5 });
+  cfg = cod.buildConfig(s);
+  assert.match(cfg, /set scr_xpscale "4"\r\n/);
+  assert.match(cfg, /set scr_dom_timelimit "5"/);
+
+  const sections = cod.settingsSchema(s).sections;
+  const bots = sections.find((x) => x.title === 'Bots');
+  assert.deepEqual(bots.fields.map((f) => f.key), ['cod.bots.enabled', 'cod.bots.fill']);
+  assert.match(sections.flatMap((x) => x.fields).find((f) => f.key === 'cod.xpScale').hint, /Up to 4x/);
+
+  // Bots are topped up with "spawnBot <n>": only on a loaded map, never past Max players.
+  s.cod.bots.fill = 10;
+  s.cod.maxClients = 18;
+  const st = (o) => ({ running: true, clients: 0, bots: 0, maxClients: 18, ...o });
+  assert.equal(cod.botsToAdd(s.cod, st({})), 10);
+  assert.equal(cod.botsToAdd(s.cod, st({ clients: 9, bots: 7 })), 3);
+  assert.equal(cod.botsToAdd(s.cod, st({ clients: 12, bots: 10 })), 0);
+  assert.equal(cod.botsToAdd(s.cod, st({ clients: 16, bots: 4 })), 2, 'only the free slots');
+  assert.equal(cod.botsToAdd(s.cod, st({ running: false })), 0, 'not before a map is loaded');
+  s.cod.bots.enabled = false;
+  assert.equal(cod.botsToAdd(s.cod, st({})), 0);
+
+  // The server answers getInfo with one line of \\key\\value pairs; the panel sends spawnBot over RCON.
+  const dgram = require('dgram');
+  const sock = dgram.createSocket('udp4');
+  const got = [];
+  sock.on('message', (msg, r) => {
+    const text = msg.subarray(4).toString('latin1');
+    got.push(text);
+    const head = Buffer.from([0xff, 0xff, 0xff, 0xff]);
+    if (text.startsWith('getInfo ')) sock.send(Buffer.concat([head, Buffer.from(`infoResponse\n\\challenge\\${text.slice(8)}\\gamename\\H1\\mapname\\mp_crash\\clients\\5\\bots\\4\\sv_maxclients\\18\\sv_running\\1\n`)]), r.port, r.address);
+    else sock.send(Buffer.concat([head, Buffer.from('print\n')]), r.port, r.address);
+  });
+  await new Promise((res) => sock.bind(0, '127.0.0.1', res));
+  try {
+    s.cod.port = sock.address().port;
+    s.cod.bots.enabled = true;
+    assert.equal(await cod.probeReady(s), true);
+    assert.deepEqual(await cod.query(s), { online: 1, max: 18, players: [], bots: 4, map: 'mp_crash' });
+    await new Promise((res) => setTimeout(res, 100));
+    assert.ok(got.includes(`rcon ${s.cod.rconPassword} spawnBot 6`), 'tops the bots up to 10');
+    // Not again straight away: the new bots take a few seconds to show up in the count.
+    await cod.query(s);
+    await new Promise((res) => setTimeout(res, 100));
+    assert.equal(got.filter((g) => g.includes('spawnBot')).length, 1);
+  } finally {
+    sock.close();
+  }
+});
+
 test('BO3 (T7x) launches t7x.exe from the Unranked Server folder with the config in zone', async () => {
   const s = server('t7');
   fs.mkdirSync(path.join(s.cod.gameDir, 'zone'), { recursive: true });
