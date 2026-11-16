@@ -6,11 +6,11 @@ three programs, the Windows app that runs them and an Android app to use them fr
 
 | Folder | Version | What it is |
 |---|---|---|
-| [`Andromeda Hosting/`](Andromeda%20Hosting/) | 2.4.0 | The game server control panel: ARK, Minecraft (CurseForge modpacks), Call of Duty (including Black Ops III with bots), Satisfactory, 7 Days to Die, Valheim, Rust with uMod, and World of Warcraft: WotLK with bots. See its [README](Andromeda%20Hosting/README.md). |
+| [`Andromeda Hosting/`](Andromeda%20Hosting/) | 2.5.0 | The game server control panel: ARK, Minecraft (CurseForge modpacks), Call of Duty (including Black Ops III with bots), Satisfactory, 7 Days to Die, Valheim, Rust with uMod, and World of Warcraft: WotLK with bots. See its [README](Andromeda%20Hosting/README.md). |
 | [`Andromeda WotLK Website/`](Andromeda%20WotLK%20Website/) | 1.0.0 | The WotLK website for your realm: news, armory, realm status, who's online, honor, auction house and invite-only sign-up. See its [README](Andromeda%20WotLK%20Website/README.md). |
 | [`Andromeda Services Website/`](Andromeda%20Services%20Website/) | 1.0.2 | The public website for Andromeda game server hosting: supported games, the control panel, FAQ and a launch waitlist. Runs on this PC for now, at <http://localhost:8092>. See its [README](Andromeda%20Services%20Website/README.md). |
-| [`services/`](services/) | 1.3.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |
-| [`Andromeda App/`](Andromeda%20App/) | 2.0.1 | The Android app: the panel's dashboard and server pages and the Andromeda Services cards, as a native app (no browser). Install [`Andromeda.apk`](Andromeda%20App/Andromeda.apk); see its [README](Andromeda%20App/README.md). |
+| [`services/`](services/) | 1.4.0 | **Andromeda Services**, the Windows app that starts, stops and updates all three, and `install.exe`'s source. |
+| [`Andromeda App/`](Andromeda%20App/) | 2.1.0 | The Android app: the panel's dashboard and server pages, a Security tab and the Andromeda Services cards, as a native app (no browser). Install [`Andromeda.apk`](Andromeda%20App/Andromeda.apk); see its [README](Andromeda%20App/README.md). |
 
 ## Install (Windows)
 
@@ -42,6 +42,12 @@ A Windows app that runs everything without console windows:
   add lines like `open.panel=https://panel.example.com` to `Andromeda Hosting\data\services.ini`
   (`open.panel`, `open.site`, `open.web`; nothing after the `=` means this PC).
 - Each card shows its program's version, read again after every update.
+- **Security** (a tab next to the logs) shows who is connecting to Andromeda Hosting and who is
+  trying things they shouldn't: how things look right now, the last 24 hours in numbers (addresses,
+  failed sign-ins, lock-outs, probes), then every attempt with its address and country, who is
+  signed in, and the addresses that connected, the troublesome ones first. The tab shows how many
+  attempts there were today, and the tray warns about a new one. The panel keeps the record (see
+  *Security record* in its README); the phone app has the same in its **Security** tab.
 - The same cards are in the phone app's **Services** tab, with Start / Stop / Restart. The Windows
   app writes how each program is doing to `services-status.json` in Andromeda Hosting's data folder
   and runs the requests the panel leaves in `services-commands\` (admins only, through the panel's

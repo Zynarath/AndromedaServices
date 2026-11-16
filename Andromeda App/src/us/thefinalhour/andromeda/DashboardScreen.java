@@ -91,10 +91,10 @@ final class DashboardScreen extends Screen {
             double total = system.optDouble("memTotal", 0), free = system.optDouble("memFree", 0);
             JSONObject disk = system.optJSONObject("disk");
             LinearLayout a = Ui.row(app), b = Ui.row(app);
-            a.addView(tile("Host CPU", Math.round(system.optDouble("cpu", 0)) + "%", system.optInt("cores") + " threads", system.optDouble("cpu", 0) / 100), tileSize(true));
-            a.addView(tile("Host memory", Ui.bytes(total - free), "of " + Ui.bytes(total), total > 0 ? (total - free) / total : -1), tileSize(false));
-            b.addView(tile("Server drive", disk == null ? "—" : Ui.bytes(disk.optDouble("free")), disk == null ? "unknown" : "free of " + Ui.bytes(disk.optDouble("total")), disk == null || disk.optDouble("total") <= 0 ? -1 : 1 - disk.optDouble("free") / disk.optDouble("total")), tileSize(true));
-            b.addView(tile("Servers online", online + " / " + servers.length(), "", -1), tileSize(false));
+            a.addView(tile(R.drawable.ic_cpu, "Host CPU", Math.round(system.optDouble("cpu", 0)) + "%", system.optInt("cores") + " threads", system.optDouble("cpu", 0) / 100), tileSize(true));
+            a.addView(tile(R.drawable.ic_memory, "Host memory", Ui.bytes(total - free), "of " + Ui.bytes(total), total > 0 ? (total - free) / total : -1), tileSize(false));
+            b.addView(tile(R.drawable.ic_archive, "Server drive", disk == null ? "—" : Ui.bytes(disk.optDouble("free")), disk == null ? "unknown" : "free of " + Ui.bytes(disk.optDouble("total")), disk == null || disk.optDouble("total") <= 0 ? -1 : 1 - disk.optDouble("free") / disk.optDouble("total")), tileSize(true));
+            b.addView(tile(R.drawable.ic_server, "Servers online", online + " / " + servers.length(), "", -1), tileSize(false));
             page.addView(a);
             page.addView(b, Ui.margins(app, Ui.lp(Ui.MATCH, Ui.WRAP), 0, 10, 0, 0));
         }
@@ -116,11 +116,14 @@ final class DashboardScreen extends Screen {
     }
 
     /** A number with its name, like the tiles on the panel's dashboard. meter: 0..1, or below 0 for none. */
-    private View tile(String label, String value, String note, double meter) {
+    private View tile(int icon, String label, String value, String note, double meter) {
         LinearLayout t = Ui.card(app);
         int p = Ui.dp(app, 14);
         t.setPadding(p, p, p, p);
-        t.addView(Ui.text(app, label, 12.5f, Ui.MUTED, true));
+        LinearLayout head = Ui.row(app);
+        head.addView(Ui.icon(app, icon, Ui.MUTED, 15));
+        head.addView(Ui.text(app, label, 12.5f, Ui.MUTED, true), Ui.margins(app, Ui.lp(Ui.WRAP, Ui.WRAP), 6, 0, 0, 0));
+        t.addView(head);
         t.addView(Ui.text(app, value, 24, Ui.TEXT, true));
         if (!note.isEmpty()) t.addView(Ui.text(app, note, 12.5f, Ui.MUTED, false));
         if (meter >= 0) {
@@ -175,7 +178,7 @@ final class DashboardScreen extends Screen {
         boolean jobRunning = job != null && "running".equals(job.optString("status"));
 
         LinearLayout card = Ui.column(app);
-        card.setBackground(Ui.pressable(app, Ui.BG, Ui.BORDER, 16));
+        card.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x22FFFFFF), new PanelDrawable(app, Ui.BG, Ui.BORDER, 16), Ui.box(app, 0xFFFFFFFF, 0, 16)));
         card.setClipToOutline(true);
         card.setOnClickListener(v -> app.openServer(id, name));
         if (!online) card.setAlpha(0.9f);

@@ -5,6 +5,7 @@ const auth = require('../auth');
 const { totp } = auth;
 const { HttpError } = require('../util/misc');
 const { isThisPc, unencryptedFromInternet } = require('../util/netaccess');
+const security = require('../services/security');
 
 const router = express.Router();
 
@@ -53,17 +54,20 @@ router.post('/auth/login', (req, res) => {
   if (!user || user.disabled || !auth.verifyPassword(password || '', user.passwordHash)) {
     auth.recordFailure(key);
     auth.recordFailure(req.ip);
+    security.record('signin-failed', req, { user: String(username || '').slice(0, 64), detail: !user ? 'No such account' : user.disabled ? 'This account is turned off' : 'Wrong password' });
     throw new HttpError(401, 'Wrong username or password');
   }
   if (user.totpEnabled) {
     if (!code) return res.json({ totpRequired: true });
     if (!totp.verify(user.totpSecret, code)) {
       auth.recordFailure(key);
+      security.record('2fa-failed', req, { user: user.username, detail: 'Right password, wrong 2FA code' });
       throw new HttpError(401, 'Wrong 2FA code');
     }
   }
   auth.clearFailures(key);
   auth.setSessionCookie(req, res, auth.createSession(user, req));
+  security.record('signin', req, { user: user.username, detail: user.role === 'admin' ? 'Admin' : '' });
   res.json({ user: auth.publicUser(user) });
 });
 
@@ -72,6 +76,7 @@ router.post('/auth/logout', (req, res) => {
   if (s) {
     db.data.sessions = db.data.sessions.filter((x) => x !== s.session);
     db.save();
+    security.record('signout', req, { user: s.user.username });
   }
   auth.clearSessionCookie(res);
   res.json({ ok: true });

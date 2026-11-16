@@ -207,9 +207,12 @@ function requireAdmin(req, _res, next) {
 
 // Browsers can't add custom headers to cross-site requests without CORS (which we never allow),
 // so requiring one on every state-changing request blocks CSRF.
-function csrfGuard(req, _res, next) {
+function csrfGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  if (req.headers['x-requested-with'] !== 'AndromedaHosting') return next(new HttpError(403, 'Missing request header'));
+  if (req.headers['x-requested-with'] !== 'AndromedaHosting') {
+    res.locals.forged = true; // noted in the security record
+    return next(new HttpError(403, 'Missing request header'));
+  }
   next();
 }
 

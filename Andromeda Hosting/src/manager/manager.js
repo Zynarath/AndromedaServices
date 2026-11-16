@@ -17,6 +17,7 @@ const logger = require('../util/log');
 const log = logger('manager');
 
 // How long a running server may stay empty before the panel stops it.
+const security = require('../services/security');
 const EMPTY_STOP_MS = 10 * 60e3;
 
 class Manager extends EventEmitter {
@@ -83,6 +84,7 @@ class Manager extends EventEmitter {
       if (!inst.child || !['running', 'starting'].includes(inst.status) || !inst.game.query) continue;
       try {
         const players = await inst.game.query(inst.server);
+        if (inst.status === 'running' && inst.players) security.players(inst.server.name, inst.players.players, players.players);
         if (inst.status === 'starting' && inst.server.game === 'minecraft') inst.setStatus('running');
         const stopping = this.checkEmpty(inst, players);
         inst.players = { ...players, stopsIn: this.emptyStopsIn(inst) };

@@ -25,7 +25,7 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("Andromeda Services")]
 [assembly: AssemblyProduct("Andromeda Services")]
 [assembly: AssemblyDescription("Starts and stops Andromeda Hosting and the websites")]
-[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
 #endif
 
 namespace Andromeda
@@ -584,6 +584,15 @@ namespace Andromeda
         readonly Dictionary<Service, LinkLabel> localLabels = new Dictionary<Service, LinkLabel>();
         readonly Dictionary<Service, ModernButton[]> buttons = new Dictionary<Service, ModernButton[]>();
         readonly Dictionary<Service, ModernButton> logTabs = new Dictionary<Service, ModernButton>();
+        // Security dashboard (shown in place of the log)
+        ModernButton securityTab;
+        Panel logFrameView, securityView;
+        RichTextBox securityBox;
+        readonly Dictionary<string, Label> securityTiles = new Dictionary<string, Label>();
+        bool showingSecurity;
+        string securityShown = "";
+        long securityNewest = -1;
+        DateTime securityNotified = DateTime.MinValue;
         readonly ModernButton updateButton;
         readonly Label versionLabel;
         readonly Panel bannerWrap;
@@ -717,6 +726,9 @@ namespace Andromeda
                 tabs.Controls.Add(tab);
                 logTabs[s] = tab;
             }
+            securityTab = new ModernButton("Security", ButtonKind.Ghost) { Height = 32 };
+            securityTab.Click += (o, e) => ShowSecurity();
+            tabs.Controls.Add(securityTab);
             var openLogs = new ModernButton("Log files", ButtonKind.Ghost) { Height = 32 };
             openLogs.Click += (o, e) => { try { Process.Start("explorer.exe", "\"" + Path.Combine(DataDir(), "logs") + "\""); } catch { } };
             var clear = new ModernButton("Clear", ButtonKind.Ghost) { Height = 32 };
@@ -735,6 +747,9 @@ namespace Andromeda
                 Font = new Font("Consolas", 9.25f),
             };
             logFrame.Controls.Add(logBox);
+            logFrameView = logFrame;
+            securityView = BuildSecurityView();
+            logCard.Controls.Add(securityView);
             logCard.Controls.Add(logFrame);
             logCard.Controls.Add(logHead);
             var logWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(28, 14, 28, 4), BackColor = Theme.Bg };
@@ -923,6 +938,11 @@ namespace Andromeda
 
         void ShowLog(Service s)
         {
+            showingSecurity = false;
+            securityView.Visible = false;
+            logFrameView.Visible = true;
+            securityTab.Kind = ButtonKind.Ghost;
+            securityTab.Invalidate();
             shownLog = s;
             foreach (var kv in logTabs)
             {
@@ -1444,6 +1464,7 @@ namespace Andromeda
             if (exiting) return;
             try { RunRemoteCommands(); } catch { }
             try { WriteRemoteStatus(); } catch { }
+            try { RefreshSecurity(); } catch { }
         }
 
         void RunRemoteCommands()
@@ -1502,6 +1523,216 @@ namespace Andromeda
             File.WriteAllText(temp, json, new UTF8Encoding(false));
             if (File.Exists(RemoteStatusFile)) File.Replace(temp, RemoteStatusFile, null);
             else File.Move(temp, RemoteStatusFile);
+        }
+
+        // ---------- security dashboard ----------
+        // Who is connecting to Andromeda Hosting and who is trying things they shouldn't: sign-ins,
+        // failed sign-ins, lock-outs, probes for known weak spots, refused requests, players joining.
+        // The panel keeps the record and writes a summary to security-status.json in its data folder;
+        // this shows it (the Security tab next to the logs) and warns from the tray about new attempts.
+        static string SecurityFile { get { return Path.Combine(DataDir(), "security-status.json"); } }
+        static readonly string[][] SecurityTileNames = {
+            new[] { "level", "Right now" }, new[] { "addresses", "Addresses, 24 h" }, new[] { "outside", "From outside" },
+            new[] { "failed", "Failed sign-ins" }, new[] { "lockouts", "Lock-outs" }, new[] { "probes", "Probes" }, new[] { "sessions", "Signed in now" },
+        };
+
+        Panel BuildSecurityView()
+        {
+            var view = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Visible = false };
+            var tiles = new TableLayoutPanel { Dock = DockStyle.Top, Height = 70, ColumnCount = SecurityTileNames.Length, RowCount = 1, BackColor = Theme.Card, Padding = new Padding(0, 0, 0, 8) };
+            tiles.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            foreach (var t in SecurityTileNames)
+            {
+                tiles.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / SecurityTileNames.Length));
+                var tile = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Margin = new Padding(0, 0, 8, 0) };
+                var value = new Label { Text = "—", AutoSize = true, Location = new Point(0, 0), Font = Theme.Bold(15f), ForeColor = Theme.Text, BackColor = Theme.Card };
+                var name = new Label { Text = t[1], AutoSize = true, Location = new Point(2, 34), Font = Theme.UI(8.5f), ForeColor = Theme.Muted, BackColor = Theme.Card };
+                tile.Controls.Add(value);
+                tile.Controls.Add(name);
+                tiles.Controls.Add(tile);
+                securityTiles[t[0]] = value;
+            }
+            var frame = new Panel { Dock = DockStyle.Fill, BackColor = Theme.LogBg, Padding = new Padding(12, 10, 4, 10) };
+            securityBox = new RichTextBox
+            {
+                ReadOnly = true, Dock = DockStyle.Fill, WordWrap = false, DetectUrls = false, ScrollBars = RichTextBoxScrollBars.Both,
+                BackColor = Theme.LogBg, ForeColor = Color.FromArgb(200, 206, 218), BorderStyle = BorderStyle.None, Font = new Font("Consolas", 9.25f),
+            };
+            frame.Controls.Add(securityBox);
+            view.Controls.Add(frame);
+            view.Controls.Add(tiles);
+            return view;
+        }
+
+        void ShowSecurity()
+        {
+            showingSecurity = true;
+            foreach (var kv in logTabs) { kv.Value.Kind = ButtonKind.Ghost; kv.Value.Invalidate(); }
+            securityTab.Kind = ButtonKind.Secondary;
+            securityTab.Invalidate();
+            logFrameView.Visible = false;
+            securityView.Visible = true;
+            securityShown = "";
+            try { RefreshSecurity(); } catch { }
+        }
+
+        static string Str(Dictionary<string, object> d, string key)
+        {
+            object v;
+            return d != null && d.TryGetValue(key, out v) && v != null ? Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture) : "";
+        }
+
+        static long Num(Dictionary<string, object> d, string key)
+        {
+            object v;
+            if (d == null || !d.TryGetValue(key, out v) || v == null) return 0;
+            try { return Convert.ToInt64(Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture)); } catch { return 0; }
+        }
+
+        static List<Dictionary<string, object>> Rows(Dictionary<string, object> d, string key)
+        {
+            var rows = new List<Dictionary<string, object>>();
+            object v;
+            if (d == null || !d.TryGetValue(key, out v)) return rows;
+            var list = v as System.Collections.IEnumerable;
+            if (list == null || v is string) return rows;
+            foreach (var item in list)
+            {
+                var row = item as Dictionary<string, object>;
+                if (row != null) rows.Add(row);
+            }
+            return rows;
+        }
+
+        static string Clock(long unixMs)
+        {
+            if (unixMs <= 0) return "";
+            var t = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(unixMs).ToLocalTime();
+            return t.Date == DateTime.Now.Date ? t.ToString("HH:mm:ss") : t.ToString("MMM d HH:mm");
+        }
+
+        static string Fit(string text, int width)
+        {
+            text = text ?? "";
+            return text.Length > width ? text.Substring(0, width - 1) + "…" : text.PadRight(width);
+        }
+
+        void SecurityLine(string text, Color color)
+        {
+            securityBox.SelectionStart = securityBox.TextLength;
+            securityBox.SelectionLength = 0;
+            securityBox.SelectionColor = color;
+            securityBox.AppendText(text + "\n");
+        }
+
+        // One event: when, how serious, what, from where, and the detail.
+        void SecurityEvent(Dictionary<string, object> e)
+        {
+            var severity = Str(e, "severity");
+            var color = severity == "threat" ? Theme.Red : severity == "warn" ? Theme.Amber : Color.FromArgb(200, 206, 218);
+            var from = Str(e, "ip");
+            if (Str(e, "country").Length > 0) from += " " + Str(e, "country");
+            if (Str(e, "local").Length > 0) from += " (" + Str(e, "local") + ")";
+            if (from.Length == 0) from = Str(e, "where");
+            var count = Num(e, "count");
+            var who = Str(e, "user");
+            SecurityLine(Fit(Clock(Num(e, "t")), 13) + Fit(severity == "threat" ? "ATTEMPT" : severity == "warn" ? "WARNING" : "", 9) + Fit(Str(e, "title"), 43) + Fit(from, 34)
+                + (who.Length > 0 ? who + "  " : "") + Str(e, "detail") + (count > 1 ? "  ×" + count : ""), color);
+        }
+
+        void RefreshSecurity()
+        {
+            if (securityBox == null) return;
+            string text = "";
+            bool fresh = false;
+            try
+            {
+                fresh = File.Exists(SecurityFile) && (DateTime.UtcNow - File.GetLastWriteTimeUtc(SecurityFile)).TotalSeconds < 90;
+                if (fresh) text = File.ReadAllText(SecurityFile);
+            }
+            catch { fresh = false; }
+            Dictionary<string, object> data = null;
+            if (fresh)
+            {
+                try { data = new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 }.Deserialize<Dictionary<string, object>>(text); } catch { data = null; }
+            }
+            object summaryObject = null;
+            if (data != null) data.TryGetValue("summary", out summaryObject);
+            var summary = summaryObject as Dictionary<string, object>;
+            var events = Rows(data, "events");
+
+            // The tab says how many attempts there were today, and the tray warns about new ones.
+            long attempts = Num(summary, "threats") + Num(summary, "failed");
+            var label = attempts > 0 ? "Security (" + attempts + ")" : "Security";
+            if (securityTab.Text != label) { securityTab.Text = label; securityTab.Invalidate(); }
+            long newest = events.Count > 0 ? Num(events[0], "id") : 0;
+            if (securityNewest >= 0 && newest > securityNewest && (DateTime.UtcNow - securityNotified).TotalSeconds > 60)
+            {
+                var worst = events.FirstOrDefault(e => Num(e, "id") > securityNewest && Str(e, "severity") == "threat");
+                if (worst != null && tray != null)
+                {
+                    securityNotified = DateTime.UtcNow;
+                    tray.ShowBalloonTip(6000, "Security: " + Str(worst, "title"), (Str(worst, "ip") + " " + Str(worst, "country")).Trim() + " — " + Str(worst, "detail"), ToolTipIcon.Warning);
+                }
+            }
+            if (data != null) securityNewest = newest;
+
+            if (!showingSecurity) return;
+            var shown = data == null ? "none" : System.Text.RegularExpressions.Regex.Replace(text, "\"(t|last|since)\":\\d+", "");
+            if (shown == securityShown) return; // nothing new: leave the list (and where it is scrolled to) alone
+            securityShown = shown;
+
+            if (data == null || summary == null)
+            {
+                foreach (var tile in securityTiles.Values) { tile.Text = "—"; tile.ForeColor = Theme.Muted; }
+                securityBox.Clear();
+                SecurityLine("Nothing to show yet.", Theme.Muted);
+                SecurityLine("The record is kept by Andromeda Hosting 2.5.0 or newer while it runs. Start it above; this fills in within a few seconds.", Theme.Muted);
+                return;
+            }
+            var level = Str(summary, "level");
+            securityTiles["level"].Text = level == "alert" ? "Alert" : level == "watch" ? "Watch" : "Quiet";
+            securityTiles["level"].ForeColor = level == "alert" ? Theme.Red : level == "watch" ? Theme.Amber : Theme.Green;
+            foreach (var key in new[] { "addresses", "outside", "failed", "lockouts", "probes" })
+            {
+                var n = Num(summary, key);
+                securityTiles[key].Text = n.ToString();
+                securityTiles[key].ForeColor = n == 0 || key == "addresses" || key == "outside" ? Theme.Text : key == "failed" ? Theme.Amber : Theme.Red;
+            }
+            var sessions = Rows(data, "sessions");
+            securityTiles["sessions"].Text = sessions.Count.ToString();
+            securityTiles["sessions"].ForeColor = Theme.Text;
+
+            securityBox.SuspendLayout();
+            securityBox.Clear();
+            var threats = Rows(data, "threats");
+            SecurityLine("ATTEMPTS AND WARNINGS  ·  last 24 hours: " + Num(summary, "failed") + " failed sign-ins, " + Num(summary, "lockouts") + " lock-outs, " + Num(summary, "probes") + " probes, " + Num(summary, "refused") + " refused requests", Theme.Accent);
+            if (threats.Count == 0) SecurityLine("  None. Nobody has tried anything.", Theme.Green);
+            foreach (var e in threats.Take(40)) SecurityEvent(e);
+            SecurityLine("", Theme.Muted);
+
+            SecurityLine("SIGNED IN NOW", Theme.Accent);
+            if (sessions.Count == 0) SecurityLine("  Nobody.", Theme.Muted);
+            foreach (var x in sessions.Take(20))
+                SecurityLine(Fit(Str(x, "user") + (Str(x, "role") == "admin" ? " (admin)" : ""), 26) + Fit(Str(x, "ip"), 34) + "last seen " + Clock(Num(x, "last")) + "   " + Fit(Str(x, "ua"), 70).TrimEnd(), Color.FromArgb(200, 206, 218));
+            SecurityLine("", Theme.Muted);
+
+            SecurityLine("ADDRESSES  ·  " + Num(summary, "addresses") + " in the last 24 hours, " + Num(summary, "outside") + " from outside your network  (most trouble first)", Theme.Accent);
+            SecurityLine("  " + Fit("Address", 34) + Fit("Requests", 10) + Fit("Failed", 8) + Fit("Attempts", 10) + Fit("Last seen", 14) + "Signed in as / program", Theme.Muted);
+            foreach (var c in Rows(data, "addresses").Take(40))
+            {
+                var where = Str(c, "ip") + (Str(c, "country").Length > 0 ? " " + Str(c, "country") : "") + (Str(c, "local").Length > 0 ? " (" + Str(c, "local") + ")" : "");
+                var color = Num(c, "threats") > 0 ? Theme.Red : Num(c, "failures") > 0 ? Theme.Amber : Color.FromArgb(200, 206, 218);
+                SecurityLine("  " + Fit(where, 34) + Fit(Num(c, "requests").ToString(), 10) + Fit(Num(c, "failures").ToString(), 8) + Fit(Num(c, "threats").ToString(), 10) + Fit(Clock(Num(c, "last")), 14)
+                    + (Str(c, "user").Length > 0 ? Str(c, "user") + "  " : "") + Fit(Str(c, "ua"), 60).TrimEnd(), color);
+            }
+            SecurityLine("", Theme.Muted);
+
+            SecurityLine("EVERYTHING, NEWEST FIRST", Theme.Accent);
+            foreach (var e in events.Take(80)) SecurityEvent(e);
+            securityBox.SelectionStart = 0;
+            securityBox.ScrollToCaret();
+            securityBox.ResumeLayout();
         }
 
         void PollPorts()

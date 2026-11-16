@@ -1,6 +1,6 @@
 # Andromeda Hosting
 
-Version 2.4.0 · part of [Andromeda Services](../README.md)
+Version 2.5.0 · part of [Andromeda Services](../README.md)
 
 A self-hosted game server control panel, like G-Portal or Nitrado, that runs on **your own PC**.
 You and your friends sign in from a browser, start and stop servers, change settings, install and
@@ -98,6 +98,31 @@ while the clock runs, and the Console says why it stopped.
   a backup or update.
 - A stopped server has to be started again from the panel before anyone can join. To keep a server
   up around the clock, turn off **Stop when nobody has been on for 10 minutes** on its Overview tab.
+
+### Security record
+
+The panel keeps a record of who connects to it and who tries things they shouldn't. Admins see it
+in the **Security** tab of Andromeda Services (the Windows app) and of the phone app.
+
+| What is recorded | Counts as |
+|---|---|
+| Signing in and out; players joining and leaving a game server | ordinary |
+| A failed sign-in (wrong password, no such account), a wrong 2FA code, a request that account isn't allowed to make | a warning |
+| An address locked out after 8 failed sign-ins (for 15 minutes) | an attempt |
+| A probe: a request for something scanners look for on every site (`/.env`, `/wp-login.php`, `/.git/`, `phpmyadmin`, `../` paths…) | an attempt |
+| A forged request (a change sent without the panel's own request header) or a live connection opened from another site | an attempt |
+
+- Each entry has the time, the address it came from (the visitor's real one behind a Cloudflare
+  Tunnel), its country when Cloudflare says, the account involved and the detail. The same thing
+  from the same address within a minute is one entry with a count.
+- Every address that connected is listed with its number of requests, failed sign-ins and attempts,
+  when it was last seen and who signed in from it.
+- *Right now* is **Quiet** (nothing), **Watch** (failed sign-ins or probes in the last 24 hours) or
+  **Alert** (someone was locked out, or 20 or more attempts in the last hour).
+- The record is the last 2000 entries and 500 addresses, kept in `security.json` in the data
+  folder. It only covers Andromeda Hosting: the two websites and the game servers' own ports are
+  not watched (players are noted when the panel sees them join).
+- Nothing is blocked by this. Sign-in attempts were already limited; this shows who ran into that.
 
 ### Changing settings
 

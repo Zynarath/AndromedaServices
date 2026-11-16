@@ -33,6 +33,7 @@ import java.util.Locale;
 final class ServerScreen extends Screen {
     private static final String[] TABS = { "Overview", "Console", "Settings", "Backups" };
     private static final String[] TAB_PERM = { null, "console", "settings", "backups" };
+    private static final int[] TAB_ICON = { R.drawable.ic_activity, R.drawable.ic_terminal, R.drawable.ic_sliders, R.drawable.ic_archive };
 
     private final String id;
     private JSONObject s;                 // the server as the panel describes it
@@ -40,6 +41,8 @@ final class ServerScreen extends Screen {
     private final LinearLayout power, tabStrip;
     private final FrameLayout body;
     private final List<TextView> tabButtons = new ArrayList<>();
+    private final List<android.widget.ImageView> tabIcons = new ArrayList<>();
+    private final List<View> tabBars = new ArrayList<>();
     private int tab = 0;
     private String drawnOverview = "", drawnTabs = "", drawnPower = "";
 
@@ -61,12 +64,11 @@ final class ServerScreen extends Screen {
         super(app);
         this.id = id;
         LinearLayout root = Ui.column(app);
-        root.setBackgroundColor(Ui.BG);
 
         LinearLayout top = Ui.row(app);
         top.setPadding(Ui.dp(app, 6), Ui.dp(app, 8), Ui.dp(app, 14), Ui.dp(app, 6));
-        TextView backButton = Ui.text(app, "←", 22, Ui.TEXT, false);
-        backButton.setGravity(Gravity.CENTER);
+        FrameLayout backButton = new FrameLayout(app);
+        backButton.addView(Ui.icon(app, R.drawable.ic_back, Ui.TEXT, 22), new FrameLayout.LayoutParams(Ui.dp(app, 22), Ui.dp(app, 22), Gravity.CENTER));
         backButton.setBackground(Ui.pressable(app, 0, 0, 99));
         backButton.setOnClickListener(v -> app.setOver(null));
         top.addView(backButton, Ui.lp(Ui.dp(app, 44), Ui.dp(app, 44)));
@@ -186,15 +188,29 @@ final class ServerScreen extends Screen {
         drawnTabs = allowed.toString();
         tabStrip.removeAllViews();
         tabButtons.clear();
+        tabIcons.clear();
+        tabBars.clear();
         for (int i = 0; i < TABS.length; i++) {
             final int index = i;
+            // Like the website's tabs: an icon and a name, with a blue bar under the open one.
+            LinearLayout tabView = Ui.column(app);
+            tabView.setOnClickListener(v -> open(index));
+            tabView.setVisibility(drawnTabs.indexOf(String.valueOf(i)) >= 0 ? View.VISIBLE : View.GONE);
+            LinearLayout line = Ui.row(app);
+            line.setGravity(Gravity.CENTER);
+            line.setPadding(Ui.dp(app, 14), 0, Ui.dp(app, 14), 0);
+            android.widget.ImageView icon = Ui.icon(app, TAB_ICON[i], Ui.TEXT_2, 16);
+            line.addView(icon);
             TextView b = Ui.text(app, TABS[i], 14, Ui.TEXT_2, false);
-            b.setGravity(Gravity.CENTER);
-            b.setPadding(Ui.dp(app, 14), 0, Ui.dp(app, 14), 0);
-            b.setOnClickListener(v -> open(index));
-            b.setVisibility(drawnTabs.indexOf(String.valueOf(i)) >= 0 ? View.VISIBLE : View.GONE);
+            line.addView(b, Ui.margins(app, Ui.lp(Ui.WRAP, Ui.WRAP), 7, 0, 0, 0));
+            tabView.addView(line, Ui.lp(Ui.WRAP, Ui.dp(app, 41)));
+            View bar = new View(app);
+            bar.setBackground(Ui.box(app, Ui.ACCENT, 0, 99));
+            tabView.addView(bar, Ui.margins(app, Ui.lp(Ui.MATCH, Ui.dp(app, 3)), 14, 0, 14, 0));
             tabButtons.add(b);
-            tabStrip.addView(b, Ui.lp(Ui.WRAP, Ui.dp(app, 44)));
+            tabIcons.add(icon);
+            tabBars.add(bar);
+            tabStrip.addView(tabView, Ui.lp(Ui.WRAP, Ui.WRAP));
         }
         markTab();
     }
@@ -205,7 +221,8 @@ final class ServerScreen extends Screen {
             TextView b = tabButtons.get(i);
             b.setTextColor(on ? Ui.TEXT : Ui.TEXT_2);
             b.setTypeface(Typeface.DEFAULT, on ? Typeface.BOLD : Typeface.NORMAL);
-            b.setBackground(on ? new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP, new int[] { Ui.alpha(Ui.ACCENT, 0x66), 0 }) : null);
+            tabIcons.get(i).setImageTintList(android.content.res.ColorStateList.valueOf(on ? Ui.ACCENT : Ui.TEXT_2));
+            tabBars.get(i).setVisibility(on ? View.VISIBLE : View.INVISIBLE);
         }
     }
 

@@ -45,8 +45,7 @@ abstract class Screen {
     /** A page that scrolls, with the app's margins. Put the content in the returned column. */
     LinearLayout scrollingPage() {
         ScrollView scroll = new ScrollView(app);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Ui.BG);
+        scroll.setFillViewport(true); // no background of its own: the backdrop shows between the panels
         LinearLayout column = Ui.column(app);
         int p = Ui.dp(app, 16);
         column.setPadding(p, p, p, Ui.dp(app, 28));
@@ -81,7 +80,6 @@ final class MessageScreen extends Screen {
         super(app);
         LinearLayout box = Ui.column(app);
         box.setGravity(Gravity.CENTER);
-        box.setBackgroundColor(Ui.BG);
         ImageView logo = new ImageView(app);
         logo.setImageResource(R.drawable.ic_launcher_foreground);
         box.addView(logo, Ui.lp(Ui.dp(app, 110), Ui.dp(app, 110)));

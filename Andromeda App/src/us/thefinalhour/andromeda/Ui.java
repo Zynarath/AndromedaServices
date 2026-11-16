@@ -76,7 +76,18 @@ final class Ui {
     }
 
     static TextView title(Context c, CharSequence s) {
-        return text(c, s, 24, TEXT, true);
+        TextView t = text(c, s, 26, TEXT, true);
+        t.setLetterSpacing(-0.02f);
+        return t;
+    }
+
+    /** One of the app's line icons (R.drawable.ic_*), in the given colour and size. */
+    static android.widget.ImageView icon(Context c, int drawable, int color, float sizeDp) {
+        android.widget.ImageView v = new android.widget.ImageView(c);
+        v.setImageResource(drawable);
+        v.setImageTintList(ColorStateList.valueOf(color));
+        v.setLayoutParams(lp(dp(c, sizeDp), dp(c, sizeDp)));
+        return v;
     }
 
     static TextView heading(Context c, CharSequence s) {
@@ -182,10 +193,10 @@ final class Ui {
         return l;
     }
 
-    /** A panel: black, hairline border, rounded corners. */
+    /** A panel: black, hairline border, rounded corners, corner ticks. */
     static LinearLayout card(Context c) {
         LinearLayout l = column(c);
-        l.setBackground(box(c, BG, BORDER, 16));
+        l.setBackground(new PanelDrawable(c, BG, BORDER, 16));
         int p = dp(c, 16);
         l.setPadding(p, p, p, p);
         return l;

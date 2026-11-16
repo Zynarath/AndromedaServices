@@ -12,11 +12,12 @@ const ddns = require('../services/ddns');
 const discord = require('../services/discord');
 const hoststats = require('../services/hoststats');
 const appcontrol = require('../services/appcontrol');
+const security = require('../services/security');
 const log = require('../util/log')('services');
 const { HttpError } = require('../util/misc');
 
 const router = express.Router();
-router.use(['/system', '/settings', '/curseforge', '/minecraft', '/services'], auth.requireAuth);
+router.use(['/system', '/settings', '/curseforge', '/minecraft', '/services', '/security'], auth.requireAuth);
 
 function disk(p) {
   try {
@@ -48,6 +49,11 @@ router.get('/system', (_req, res) => {
     history: hoststats.history(), // [{ t, cpu, mem }] every 5 s, last hour
     historyStep: hoststats.EVERY_MS / 1000,
   });
+});
+
+// ---- security: who is connecting, and who is trying things they shouldn't ----
+router.get('/security', auth.requireAdmin, (req, res) => {
+  res.json(security.overview({ limit: Math.max(20, Math.min(500, Number(req.query.limit) || 200)) }));
 });
 
 // ---- what Andromeda Services (the Windows app) runs: the panel itself and the websites ----

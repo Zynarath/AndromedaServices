@@ -10,6 +10,7 @@ const config = require('./config');
 const db = require('./db');
 const auth = require('./auth');
 const manager = require('./manager/manager');
+const security = require('./services/security');
 const logger = require('./util/log');
 
 const log = logger('panel');
@@ -17,6 +18,7 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', config.trustProxy ? true : 'loopback');
 
+app.use(security.watch); // first: every request is counted, probes and refusals are noted
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -70,7 +72,10 @@ server.on('upgrade', (req, socket, head) => {
   const origin = req.headers.origin;
   if (origin) {
     try {
-      if (new URL(origin).host !== req.headers.host) return socket.destroy();
+      if (new URL(origin).host !== req.headers.host) {
+        security.record('socket', req, { detail: `Opened from another site (${String(origin).slice(0, 80)})` });
+        return socket.destroy();
+      }
     } catch {
       return socket.destroy();
     }
@@ -160,6 +165,7 @@ manager.on('removed', (id) => {
 });
 
 // ---- start ----
+security.start();
 manager.init();
 require('./services/hoststats').start();
 require('./services/ddns').start();

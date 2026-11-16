@@ -1,10 +1,12 @@
 # Andromeda App
 
-Version 2.0.1 · part of [Andromeda Services](../README.md)
+Version 2.1.0 · part of [Andromeda Services](../README.md)
 
 Andromeda Services on an Android phone, as an app of its own: the dashboard and server pages of
 **Andromeda Hosting** and the service cards of the **Andromeda Services** window, drawn by the app
-itself in the same black-and-blue look. It talks to your panel directly (the same way the panel's
+itself in the website's look: the starfield backdrop, the same panels, line icons and pill buttons,
+and a floating bar along the bottom for Servers, Security, Services and Account. It talks to your
+panel directly (the same way the panel's
 own pages do) and opens no browser.
 
 ## What is in it
@@ -25,6 +27,20 @@ own pages do) and opens no browser.
     slider or list of choices; the settings people change most first, **Show more** for the rest,
     WoW's one-tap choices and *All options*. Nothing is sent until **Save game settings**.
   - **Backups**: back up now, restore, delete.
+
+**Security** (admins only)
+
+- How things look right now (**All quiet**, **Worth a look** or **Alert**), and the last 24 hours in
+  numbers: addresses that connected and how many from outside your network, failed sign-ins and
+  lock-outs, probes and refused requests, who is signed in, players who joined.
+- The last 24 hours hour by hour; an hour is red when something was attempted in it.
+- Four lists: **Attempts** (failed sign-ins, lock-outs, probes, forged requests, each with the
+  address, country and detail), **Signed in**, **Addresses** (the troublesome ones first) and
+  **Everything**.
+- The shield in the bottom bar gets a red dot while there is something to look at. The app only
+  checks while it is open: it does not send notifications when it is closed.
+- Needs **Andromeda Hosting 2.5.0 or newer**; see *Security record* in its README for what is
+  recorded.
 
 **Services** (the Andromeda Services window; admins only)
 

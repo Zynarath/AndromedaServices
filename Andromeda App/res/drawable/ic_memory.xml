@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The same line icon the panel's website uses ("memory"). Drawn white; the app tints it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M4,7h16a2,2 0 0 1 2,2v6a2,2 0 0 1 -2,2h-16a2,2 0 0 1 -2,-2v-6a2,2 0 0 1 2,-2z" android:strokeColor="#FFFFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M6,17v3M10,17v3M14,17v3M18,17v3M6,11h2M11,11h2M16,11h2" android:strokeColor="#FFFFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

@@ -708,3 +708,55 @@ test('Andromeda Services from the panel: its status file is read, requests are l
   fs.rmSync(control.STATUS_FILE, { force: true });
   fs.rmSync(control.COMMANDS_DIR, { recursive: true, force: true });
 });
+
+test('Security record: sign-ins, failed attempts, lock-outs, probes and who is connecting', () => {
+  const security = require('../src/services/security');
+  security.reset();
+  const t0 = Date.UTC(2026, 0, 1, 12, 30);
+  const visitor = (ip, extra = {}) => ({ socket: { remoteAddress: '127.0.0.1' }, headers: { 'cf-connecting-ip': ip, 'cf-ipcountry': 'DE', 'user-agent': 'curl/8', ...extra } });
+  const home = { socket: { remoteAddress: '192.168.1.20' }, headers: {} };
+  // The middleware counts every request and spots the addresses scanners ask for.
+  const pass = (req, url, method = 'GET') => {
+    const res = { locals: {}, statusCode: 200, on: (_e, fn) => (res.done = fn) };
+    security.watch({ ...req, originalUrl: url, method }, res, () => {});
+    return res;
+  };
+  for (const url of ['/.env', '/wp-login.php', '/api/../../etc/passwd', '/phpmyadmin/', '/cgi-bin/luci', '/%2e%2e/%2e%2e/windows/win.ini', '/.git/config']) assert.ok(security.PROBE.test(url) || security.PROBE.test(decodeURIComponent(url)), url);
+  for (const url of ['/', '/api/servers', '/js/app.js', '/api/servers/ab12/settings', '/img/icon.svg', '/api/servers/x/files?path=config/server.properties']) assert.ok(!security.PROBE.test(url), url);
+  pass(visitor('203.0.113.9'), '/.env');
+  pass(visitor('203.0.113.9'), '/.env');
+  pass(home, '/api/servers');
+  let o = security.overview({ now: Date.now() });
+  assert.deepEqual([o.events[0].kind, o.events[0].severity, o.events[0].count, o.events[0].ip, o.events[0].country, o.events[0].title], ['probe', 'threat', 2, '203.0.113.9', 'DE', 'Probe for a known weak spot'], 'the same probe twice is one entry, counted');
+  assert.deepEqual([o.summary.addresses, o.summary.outside, o.summary.requests, o.summary.probes, o.summary.level], [2, 1, 3, 2, 'watch']);
+  assert.equal(o.addresses[0].ip, '203.0.113.9', 'the address causing trouble is listed first');
+  assert.equal(o.addresses.find((c) => c.ip === '192.168.1.20').local, 'home network');
+  // What the sign-in routes report, and what refused requests turn into.
+  security.record('signin-failed', visitor('203.0.113.9'), { user: 'admin', detail: 'Wrong password' });
+  security.record('signin', home, { user: 'zyn' });
+  const refused = pass(visitor('203.0.113.9'), '/api/auth/login', 'POST');
+  refused.statusCode = 429;
+  refused.done();
+  const forged = pass(visitor('198.51.100.4'), '/api/servers/x/power', 'POST');
+  forged.statusCode = 403;
+  forged.locals.forged = true;
+  forged.done();
+  o = security.overview();
+  assert.deepEqual([o.summary.failed, o.summary.signins, o.summary.lockouts, o.summary.refused, o.summary.level], [1, 1, 1, 1, 'alert'], 'a lock-out raises the alarm');
+  assert.deepEqual(o.threats.map((e) => e.kind), ['forged', 'locked-out', 'signin-failed', 'probe'], 'newest first, ordinary events left out');
+  assert.equal(o.addresses[0].failures, 1);
+  assert.equal(o.addresses.find((c) => c.ip === '192.168.1.20').user, 'zyn');
+  // Players joining and leaving a game server; a level-up is not a new player.
+  security.players('Realm', ['Arthas (79)'], ['Arthas (80)', 'Jaina (74)']);
+  security.players('Realm', ['Arthas (80)', 'Jaina (74)'], ['Jaina (74)']);
+  o = security.overview();
+  assert.deepEqual(o.events.slice(0, 2).map((e) => [e.kind, e.user, e.where]), [['left', 'Arthas', 'Realm'], ['joined', 'Jaina', 'Realm']]);
+  assert.equal(o.summary.hourly.length, 24);
+  // Old events fall out of the 24-hour numbers; unknown kinds are refused.
+  security.reset();
+  security.record('probe', visitor('203.0.113.9'), { detail: 'GET /.env', now: t0 });
+  assert.equal(security.summary(t0 + 25 * 3600e3).probes, 0);
+  assert.equal(security.summary(t0 + 3600e3).probes, 1);
+  assert.equal(security.record('made-up', home), null);
+  security.reset();
+});
