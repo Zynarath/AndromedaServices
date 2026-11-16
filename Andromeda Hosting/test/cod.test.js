@@ -272,8 +272,8 @@ test('CoD4x bots: waypoints go next to the server, and the XP script is started 
   const names = await listZip(iwd);
   assert.ok(names.includes('maps/mp/bots/_bot.gsc'));
   assert.ok(!names.some((n) => n.startsWith('scriptdata')), 'CoD4x scripts cannot read files inside an iwd');
-  assert.equal(fs.readFileSync(path.join(base, 'scriptdata/waypoints/mp_crash_wp.csv'), 'utf8'), '1');
-  assert.ok(fs.existsSync(path.join(base, 'scriptdata/botnames.txt')));
+  assert.equal(fs.readFileSync(path.join(base, 'mods/mp_bots/scriptdata/waypoints/mp_crash_wp.csv'), 'utf8'), '1');
+  assert.ok(fs.existsSync(path.join(base, 'mods/mp_bots/scriptdata/botnames.txt')));
   // The XP script is in the mod, and started right after the game mode has set level.rankedMatch.
   const { readEntry } = require('../src/util/zip');
   assert.equal((await readEntry(iwd, 'scripts/mp/andromeda_xp.gsc')).data.toString(), tools.COD4X_XP_SCRIPT);
@@ -294,7 +294,14 @@ test('CoD4x bots: waypoints go next to the server, and the XP script is started 
   fs.writeFileSync(path.join(src, 'maps/mp/gametypes/_callbacksetup.gsx'), gsx);
   await createZip(src, path.join(old, 'mods/mp_bots/z_svr_bots.iwd'), { globs: ['maps/**', 'scripts/**', 'scriptdata/**'] });
   assert.equal(await tools.repairCod4xBots(old, log), true);
-  assert.ok(fs.existsSync(path.join(old, 'scriptdata/waypoints/mp_crash_wp.csv')));
+  assert.ok(fs.existsSync(path.join(old, 'mods/mp_bots/scriptdata/waypoints/mp_crash_wp.csv')));
+  assert.ok(!fs.existsSync(path.join(old, 'scriptdata')));
+  // 2.5.1 and 2.5.2 put the waypoints in <server>/scriptdata, which the server doesn't read: moved.
+  fs.renameSync(path.join(old, 'mods/mp_bots/scriptdata'), path.join(old, 'scriptdata'));
+  assert.equal(await tools.repairCod4xBots(old, log), true);
+  assert.ok(fs.existsSync(path.join(old, 'mods/mp_bots/scriptdata/waypoints/mp_crash_wp.csv')));
+  assert.ok(fs.existsSync(path.join(old, 'mods/mp_bots/scriptdata/botnames.txt')));
+  assert.ok(!fs.existsSync(path.join(old, 'scriptdata')));
   const fixed = await listZip(path.join(old, 'mods/mp_bots/z_svr_bots.iwd'));
   assert.ok(fixed.includes('scripts/mp/andromeda_xp.gsc') && !fixed.some((n) => n.startsWith('scriptdata')));
   assert.equal(await tools.repairCod4xBots(old, log), false, 'only once');

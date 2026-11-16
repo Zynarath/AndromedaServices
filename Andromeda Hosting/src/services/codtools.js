@@ -164,7 +164,7 @@ function plutoStorage(game) {
 // Built from each repo's source (the layout the READMEs describe), so it doesn't depend on how a
 // release archive happens to be packaged and doesn't use the rate-limited GitHub API.
 //  - IW4x / CoD4x: mods/mp_bots/z_svr_bots.iwd ("svr" iwds stay on the server; players download nothing).
-//    CoD4x also gets scriptdata/ (waypoints, bot names) next to the server, where its scripts read files
+//    CoD4x also gets mods/mp_bots/scriptdata/ (waypoints, bot names), where its scripts read files
 //  - Plutonium T6: scripts/ into Plutonium's storage/t6
 //  - Plutonium IW5 / T5: maps/, scripts/, scriptdata/ (+ mp/ for T5) into storage/<game>
 async function installBotWarfare({ repo, title, modBase, storage }, log) {
@@ -281,22 +281,25 @@ function addCod4xXpScript(tree, log) {
   return true;
 }
 
+const cod4xScriptdata = (serverDir) => path.join(serverDir, 'mods', 'mp_bots', 'scriptdata');
+
 // Put an extracted Bot Warfare source tree where each game loads it from.
 async function packBotWarfare(tmp, { title, modBase, storage }, log) {
   {
     const has = (d) => fs.existsSync(path.join(tmp, d));
     if (!has('maps') && !has('scripts')) throw new Error("The Bot Warfare download doesn't contain the expected maps/ or scripts/ folders");
     if (title === 'cod4x') {
-      // CoD4x scripts open files straight from the server folder (fs_homepath), never from inside an
-      // iwd, and Bot Warfare reads scriptdata/waypoints/<map>_wp.csv and scriptdata/botnames.txt
-      // that way. So scriptdata goes next to the server, and only the scripts go in the iwd.
+      // CoD4x scripts open plain files under <fs_homepath>/<fs_game>/ (FS_BuildOSPath with no game
+      // folder given uses the current one), never from inside an iwd, and Bot Warfare reads
+      // scriptdata/waypoints/<map>_wp.csv and scriptdata/botnames.txt that way. So scriptdata goes
+      // in the mod folder next to the iwd, and only the scripts go in the iwd.
       addCod4xXpScript(tmp, log);
       const out = path.join(modBase, 'mods', 'mp_bots', 'z_svr_bots.iwd');
       await createZip(tmp, out, { globs: ['maps/**', 'scripts/**'] });
       log.info(`Bot Warfare packed into ${out}`);
       if (has('scriptdata')) {
-        copyDir(path.join(tmp, 'scriptdata'), path.join(modBase, 'scriptdata'));
-        log.info(`Bot waypoints copied into ${path.join(modBase, 'scriptdata')}`);
+        copyDir(path.join(tmp, 'scriptdata'), cod4xScriptdata(modBase));
+        log.info(`Bot waypoints copied into ${cod4xScriptdata(modBase)}`);
       } else {
         log.warn("The Bot Warfare download has no scriptdata folder, so the bots have no waypoints and won't find their way around.");
       }
@@ -313,27 +316,36 @@ async function packBotWarfare(tmp, { title, modBase, storage }, log) {
   }
 }
 
-// A CoD4x bot mod packed by an older panel has the waypoints inside the iwd (where the server can't
-// read them) and no XP script. Everything needed is in that iwd, so it's repacked without a download.
+// A CoD4x bot mod packed by an older panel has the waypoints inside the iwd (up to 2.5.0) or in
+// <server>/scriptdata (2.5.1 and 2.5.2), neither of which the server reads, and no XP script.
+// Everything needed is already on disk, so it's put right without a download.
 // Returns true when it changed something.
 async function repairCod4xBots(serverDir, log) {
   const iwd = path.join(serverDir, 'mods', 'mp_bots', 'z_svr_bots.iwd');
   if (!fs.existsSync(iwd) || !fs.statSync(iwd).size) return false;
+  let moved = false;
+  const misplaced = path.join(serverDir, 'scriptdata');
+  if (fs.existsSync(path.join(misplaced, 'waypoints')) && !fs.existsSync(path.join(cod4xScriptdata(serverDir), 'waypoints'))) {
+    copyDir(misplaced, cod4xScriptdata(serverDir));
+    fs.rmSync(misplaced, { recursive: true, force: true });
+    log.info(`CoD4x bot waypoints moved to ${cod4xScriptdata(serverDir)}, where the server reads them.`);
+    moved = true;
+  }
   const names = await listZip(iwd);
   const xp = names.includes(COD4X_XP_PATH) ? await readEntry(iwd, COD4X_XP_PATH) : null;
   const xpCurrent = !!xp && xp.data.toString('utf8') === COD4X_XP_SCRIPT;
   const waypointsPacked = names.some((n) => n.startsWith('scriptdata/'));
-  const waypointsMissing = !fs.existsSync(path.join(serverDir, 'scriptdata', 'waypoints'));
+  const waypointsMissing = !fs.existsSync(path.join(cod4xScriptdata(serverDir), 'waypoints'));
   // Without Bot Warfare's _callbacksetup.gsx the XP script can't be added, so don't retry every start.
   const xpPossible = names.includes(COD4X_CALLBACKS);
-  if ((xpCurrent || !xpPossible) && !(waypointsPacked && waypointsMissing)) return false;
+  if ((xpCurrent || !xpPossible) && !(waypointsPacked && waypointsMissing)) return moved;
   const tmp = path.join(config.cacheDir, `bw-repair-${Date.now()}`);
   try {
     await extractZip(iwd, tmp);
     // Waypoints already next to the server may have been edited there: keep those.
     if (!waypointsMissing) fs.rmSync(path.join(tmp, 'scriptdata'), { recursive: true, force: true });
     await packBotWarfare(tmp, { title: 'cod4x', modBase: serverDir }, { info() {}, warn: log.warn });
-    log.info('CoD4x bot mod updated: bot waypoints moved next to the server, XP script added.');
+    log.info('CoD4x bot mod updated: bot waypoints put in the mod folder, XP script up to date.');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

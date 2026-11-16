@@ -146,7 +146,7 @@ game loads it, following each mod's README:
 
 | Game | Where | Players need it? |
 |---|---|---|
-| IW4x, CoD4x | `mods/mp_bots/z_svr_bots.iwd` (+ `fs_game mods/mp_bots`). On CoD4x, the `scriptdata` folder (waypoints, bot names) also goes into the server folder | No. `z_svr_` iwds stay on the server |
+| IW4x, CoD4x | `mods/mp_bots/z_svr_bots.iwd` (+ `fs_game mods/mp_bots`). On CoD4x, the `scriptdata` folder (waypoints, bot names) also goes into `mods/mp_bots` | No. `z_svr_` iwds stay on the server |
 | BO2 | `Plutonium\storage\t6\scripts` | No |
 | MW3 | `Plutonium\storage\iw5\` (maps, scripts, scriptdata) | No |
 | BO1 | `Plutonium\storage\t5\` (maps, scripts, mp) | No |
@@ -160,11 +160,12 @@ Bot difficulty uses each mod's own scale. Andromeda Hosting shows the right choi
 Update the bots from the server's **Mods** tab.
 
 **CoD4x waypoints:** the bots find their way with a waypoint file per map,
-`scriptdata\waypoints\<map>_wp.csv` in the server folder. CoD4x scripts open files straight from
-the server folder and can't read inside an `.iwd`, so that's where the panel puts them. Without
+`mods\mp_bots\scriptdata\waypoints\<map>_wp.csv` in the server folder. CoD4x scripts open plain
+files from the mod's folder and can't read inside an `.iwd`, so that's where the panel puts them. Without
 its waypoint file a bot only walks straight at things: it gets stuck on walls and stops after
-the first flag. Up to 2.5.0 the panel packed the waypoints into the `.iwd`; a server set up then
-is fixed the next time it starts (the console says *CoD4x bot mod updated*). When a map loads,
+the first flag. Up to 2.5.0 the panel packed the waypoints into the `.iwd`, and 2.5.1 and 2.5.2
+put them in the server folder's own `scriptdata`, which the server doesn't read either; a server
+set up then is fixed the next time it starts (the console says the waypoints were moved). When a map loads,
 the server console should say `Loaded <n> waypoints from file.` A custom map with no waypoint
 file in Bot Warfare has none, and bots stay dumb on it.
 
