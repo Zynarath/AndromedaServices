@@ -5,6 +5,7 @@
 // They all run on your own game install; Andromeda Hosting writes the server config (game mode, shuffled
 // map rotation, XP rates, bots) right before every start.
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const dgram = require('dgram');
 const tools = require('../services/codtools');
@@ -292,6 +293,9 @@ const TITLES = {
     weaponXp: false,
     gameHint: 'Your Modern Warfare Remastered folder with H1-Mod in it (contains h1-mod.exe)',
     exes: ['h1-mod.exe'],
+    // H1-Mod's own start-up check (system_check.cpp): the MD5 of this file must be this value, or
+    // it shows "Your game files are outdated or unsupported" and waits for OK.
+    zoneCheck: { file: 'patch_ui_mp.ff', md5: 'A308EE76F49E7FF6B30B33CB37D77282' },
     clientHelp: 'Download h1-mod.exe from github.com/auroramod/h1-mod/releases and put it in your Modern Warfare Remastered folder first.',
     gametypes: [['dom', 'Domination'], ['war', 'Team Deathmatch'], ['dm', 'Free-for-all'], ['conf', 'Kill Confirmed'], ['sd', 'Search & Destroy'], ['sab', 'Sabotage'], ['koth', 'Headquarters'], ['hp', 'Hardpoint'], ['ctf', 'Capture the Flag'], ['gun', 'Gun Game']],
     maps: [
@@ -547,6 +551,22 @@ function topUpBots(server, st, now = Date.now()) {
   return n;
 }
 
+// H1-Mod compares one game file with the copy it was built for. When it differs it opens a message
+// box and waits for OK; started by the panel that window can't be seen, so the server would sit on
+// "Starting" with nothing in the console. Say so before the start. Returns the message, or null.
+async function zoneCheckProblem(server) {
+  const t = title(server);
+  if (!t || !t.zoneCheck) return null;
+  const { file, md5 } = t.zoneCheck;
+  const found = [path.join(server.cod.gameDir, file), path.join(server.cod.gameDir, 'zone', file)].find((p) => fs.existsSync(p));
+  const fix = `In Steam, right-click the game → Properties → Installed Files → Verify integrity of game files, then start the server again. If the server stays on "Starting", ${t.short} is waiting on that hidden message: stop it and fix the files first.`;
+  if (!found) return `${file} isn't in ${server.cod.gameDir} or its zone folder, so ${t.short} will say "Your game files are outdated or unsupported". Check that the game folder is the one with the zone folder in it, and that multiplayer is installed. ${fix}`;
+  const hash = crypto.createHash('md5');
+  for await (const chunk of fs.createReadStream(found)) hash.update(chunk);
+  if (hash.digest('hex').toUpperCase() === md5) return null;
+  return `${found} isn't the version ${t.short} supports, so it will say "Your game files are outdated or unsupported". ${fix}`;
+}
+
 function dvarValue(f, v) {
   if (f.type === 'bool') return v ? 1 : 0;
   return clean(v);
@@ -754,8 +774,10 @@ const cod = {
   // A CoD4x bot mod packed by an older panel has its waypoints where the server can't read them
   // and no XP script: fix it up before the start.
   async preStart(instance) {
-    if (instance.server.cod.title !== 'cod4x') return;
     const say = (m) => instance.appendConsole(`[panel] ${m}`);
+    const problem = await zoneCheckProblem(instance.server).catch(() => null);
+    if (problem) say(problem);
+    if (instance.server.cod.title !== 'cod4x') return;
     try {
       await tools.repairCod4xBots(instance.server.dir, { info: say, warn: say });
     } catch (err) {
@@ -1058,3 +1080,4 @@ module.exports.SKILLS = SKILLS;
 module.exports.q3 = q3;
 module.exports.botsToAdd = botsToAdd;
 module.exports.topUpBots = topUpBots;
+module.exports.zoneCheckProblem = zoneCheckProblem;

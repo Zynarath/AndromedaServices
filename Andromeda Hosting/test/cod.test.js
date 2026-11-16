@@ -518,6 +518,16 @@ test('MWR (H1-Mod): launch, config, info query and bot top-up', async () => {
   assert.match(cfg, /set scr_xpscale "4"\r\n/);
   assert.match(cfg, /set scr_dom_timelimit "5"/);
 
+  // H1-Mod checks zone/patch_ui_mp.ff itself and waits on a message box when it's wrong: the panel says so first.
+  assert.match(await cod.zoneCheckProblem(s), /patch_ui_mp\.ff isn't in .*Verify integrity/);
+  fs.mkdirSync(path.join(s.cod.gameDir, 'zone'), { recursive: true });
+  fs.writeFileSync(path.join(s.cod.gameDir, 'zone', 'patch_ui_mp.ff'), 'some other build');
+  assert.match(await cod.zoneCheckProblem(s), /isn't the version H1-Mod supports/);
+  t.zoneCheck.md5 = require('crypto').createHash('md5').update('some other build').digest('hex').toUpperCase();
+  assert.equal(await cod.zoneCheckProblem(s), null);
+  t.zoneCheck.md5 = 'A308EE76F49E7FF6B30B33CB37D77282';
+  assert.equal(await cod.zoneCheckProblem(server('iw4x')), null, 'only H1-Mod has this check');
+
   const sections = cod.settingsSchema(s).sections;
   const bots = sections.find((x) => x.title === 'Bots');
   assert.deepEqual(bots.fields.map((f) => f.key), ['cod.bots.enabled', 'cod.bots.fill']);

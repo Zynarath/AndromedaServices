@@ -144,6 +144,23 @@ setting that keeps them in the match, so the panel does it: once a map has loade
 don't leave when people join, so keep *Max players* above bots + people. There is no difficulty
 setting.
 
+### Messages when H1-Mod starts
+
+- **"Your game files are outdated or unsupported"** is H1-Mod's own check. It compares
+  `zone\patch_ui_mp.ff` (and, when you start the game yourself rather than a server,
+  `zone\patch_icbm.ff` from the campaign) with the copies it was built for. It's a warning: press
+  OK and the game carries on, though H1-Mod says to expect crashes. It appears when `h1-mod.exe`
+  isn't in the game folder itself, when the campaign or multiplayer part isn't installed, or when
+  the copy of the game isn't the Steam build H1-Mod supports. Start with Steam's *Verify
+  integrity of game files*.
+- **On a server this matters more:** the message is a window that waits for OK, and a server
+  started by the panel has no window you can see, so it would stay on *Starting*. The panel
+  checks the same file before every start and says so in the console if it doesn't match.
+- **A message about an out-of-date AMD graphics driver** isn't from H1-Mod (there is no such
+  message in its code). It is the game's own start-up check, which knows the driver versions
+  from when the game came out and doesn't understand newer ones. With a current driver it can be
+  dismissed. It never appears on a server, which doesn't use the graphics card.
+
 ### XP, Parts and Depot Credits
 
 - **XP and rank** work as in the normal game, and are kept on each player's own PC by H1-Mod
