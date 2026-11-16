@@ -28,3 +28,7 @@ Where each version lives (change all of them together):
 - Andromeda Hosting: `cd "Andromeda Hosting" && npm test`
 - Andromeda WotLK Website: `cd "Andromeda WotLK Website" && npm test`
 - Andromeda Services Website: `cd "Andromeda Services Website" && npm test`
+
+## Pushing
+
+Always push finished work to `main` (the owner's standing instruction). No need to ask first.
